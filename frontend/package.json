@@ -1,0 +1,28 @@
+{
+  "name": "@hulao/frontend",
+  "private": true,
+  "packageManager": "pnpm@9.15.5",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "dev:admin": "pnpm --filter @hulao/admin-web dev",
+    "dev:mobile": "pnpm --filter @hulao/mobile dev",
+    "build": "pnpm --filter @hulao/admin-web build && pnpm --filter @hulao/mobile build",
+    "lint": "pnpm --filter @hulao/admin-web lint && pnpm --filter @hulao/mobile lint",
+    "test": "pnpm --filter @hulao/admin-web test && pnpm --filter @hulao/mobile test",
+    "typecheck": "pnpm --filter @hulao/admin-web typecheck && pnpm --filter @hulao/mobile typecheck",
+    "cap:sync": "pnpm --filter @hulao/mobile exec cap sync android",
+    "cap:android": "pnpm --filter @hulao/mobile exec cap open android"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "eslint": "^9.0.0",
+    "eslint-plugin-vue": "^10.0.0",
+    "prettier": "^3.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^3.0.0"
+  }
+}
