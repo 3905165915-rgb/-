@@ -1,0 +1,9 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+.env
+data/store.json
+data/store.lock
+data/backups/
+*.log
