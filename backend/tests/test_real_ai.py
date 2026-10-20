@@ -54,6 +54,14 @@ def real_ai(api, monkeypatch, request):
                 body = response.json()
                 metadata['returned_model'] = body.get('model')
                 metadata['tokens'] = {key: body.get('usage', {}).get(key) for key in ('prompt_tokens', 'completion_tokens', 'total_tokens')}
+                choices = body.get('choices')
+                if isinstance(choices, list) and choices and isinstance(choices[0], dict):
+                    message = choices[0].get('message')
+                    if isinstance(message, dict) and isinstance(message.get('content'), str):
+                        # Synthetic opt-in inputs only. Capture rejected output too;
+                        # no request headers, keys or live elder records are logged.
+                        name = hashlib.sha256(request.node.nodeid.encode()).hexdigest()[:12]
+                        evidence('provider-output-' + name, {'test': request.node.name, 'content': message['content']})
             except (ValueError, AttributeError):
                 pass
             return response

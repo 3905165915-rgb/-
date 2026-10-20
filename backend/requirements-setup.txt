@@ -1,0 +1,2 @@
+# Optional: unlock the team's encrypted AI test configuration.
+cryptography>=46,<51

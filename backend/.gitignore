@@ -4,6 +4,8 @@ __pycache__/
 .test-runs/
 .venv/
 .env
+.env.*
+!.env.example
 data/store.json
 data/store.lock
 data/backups/

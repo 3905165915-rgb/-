@@ -37,6 +37,8 @@ AI_FALLBACK_MOCK=false
 
 真实API不可用时，接口返回503，前端应保留人工录入入口；不要把AI错误伪装成成功结果。
 
+搭档电脑可使用仓库中的加密AI配置：安装`requirements-setup.txt`后运行`python backend/scripts/setup_ai_test.py`，输入单独提供的口令生成私有`.env`。具体步骤见[AI_TEST_SETUP.md](AI_TEST_SETUP.md)；口令与解密后的文件不提交Git。
+
 ## 数据安全约束
 
 - `backend/data/` 不提交到Git；使用 `seed_demo.py` 生成虚构数据。

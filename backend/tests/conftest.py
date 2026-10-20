@@ -5,15 +5,16 @@ from fastapi.testclient import TestClient
 
 from app.core import config, security
 from app import main
-from app.services import store_service
+from app.services import ai_service, speech_service, store_service
 from app.services.passwords import hash_password
 from app.storage.json_store import JsonStore
 
 
 @pytest.fixture
 def api(tmp_path, monkeypatch):
-    settings = replace(config.settings, data_dir=tmp_path / 'data', ai_provider='mock', ai_fallback_mock=False)
-    for module in (config, security, main, store_service):
+    settings = replace(config.settings, data_dir=tmp_path / 'data', ai_provider='mock', ai_fallback_mock=False,
+                       deepseek_api_key='', siliconflow_api_key='')
+    for module in (config, security, main, store_service, ai_service, speech_service):
         monkeypatch.setattr(module, 'settings', settings)
     store = JsonStore(settings.data_dir)
     store.ensure()
