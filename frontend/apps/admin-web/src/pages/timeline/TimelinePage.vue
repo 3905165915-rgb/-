@@ -1,9 +1,103 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useRoute } from 'vue-router'
-import { readDemoState } from '@hulao/shared'
-import DemoBanner from '../../components/DemoBanner.vue'
-const route = useRoute(); const state = readDemoState(); const elder = computed(() => state.elders.find((item) => item.id === route.params.id) ?? state.elders[0])
+import { useRoute, useRouter } from 'vue-router'
+import { useTasks, useTimeline } from '../../services/data'
+import QueryFeedback from '../../components/QueryFeedback.vue'
+const route = useRoute()
+const router = useRouter()
+const tasks = useTasks()
+const itemId = computed(() =>
+  typeof route.params.id === 'string' ? route.params.id : '',
+)
+const items = computed(() => [
+  ...new Map(
+    (tasks.data.value ?? [])
+      .filter((task) => task.itemId)
+      .map((task) => [task.itemId!, { id: task.itemId!, title: task.title }]),
+  ).values(),
+])
+const timeline = useTimeline(() => itemId.value)
+function select(value: string) {
+  void router.push(
+    value ? '/timeline/' + encodeURIComponent(value) : '/timeline',
+  )
+}
 </script>
-
-<template><section><DemoBanner /><h1>过程回放 · {{ elder?.name }}</h1><el-alert title="时间线区分发生时间与录入时间" type="info" show-icon :closable="false" class="section-card" /><el-card shadow="never" class="section-card"><el-timeline><el-timeline-item v-for="event in state.timeline" :key="event.id" :timestamp="`${event.happenedAt} · 录入 ${event.enteredAt}`" placement="top"><el-card shadow="never"><h3>{{ event.label }}</h3><p>{{ event.detail }}</p><span class="muted">操作者：{{ event.actor }}</span></el-card></el-timeline-item></el-timeline></el-card></section></template>
+<template>
+  <section>
+    <h1>过程回放</h1>
+    <div class="data-section timeline-content">
+      <el-form
+        label-position="top"
+        class="timeline-filter"
+      >
+        <el-form-item label="事项">
+          <el-select
+            :model-value="itemId"
+            clearable
+            placeholder="请选择事项"
+            @change="select"
+          >
+            <el-option
+              v-if="itemId && !items.some((item) => item.id === itemId)"
+              :label="itemId"
+              :value="itemId"
+            /><el-option
+              v-for="item in items"
+              :key="item.id"
+              :value="item.id"
+              :label="item.title + ' · ' + item.id"
+            />
+          </el-select>
+        </el-form-item>
+      </el-form><QueryFeedback
+        :loading="tasks.isPending.value"
+        :error="tasks.error.value"
+        @retry="tasks.refetch()"
+      /><el-empty
+        v-if="!itemId && !tasks.isPending.value && !tasks.error.value"
+        description="请选择有事项编号的任务"
+      /><template v-if="itemId">
+        <p class="muted">
+          事项编号：{{ itemId }}
+        </p>
+        <QueryFeedback
+          :loading="timeline.isPending.value"
+          :error="timeline.error.value"
+          :empty="
+            !timeline.isPending.value &&
+              !timeline.error.value &&
+              !timeline.data.value?.length
+          "
+          @retry="timeline.refetch()"
+        /><el-timeline
+          v-if="!timeline.isPending.value && !timeline.error.value"
+        >
+          <el-timeline-item
+            v-for="event in timeline.data.value"
+            :key="event.id"
+            :timestamp="
+              '发生：' +
+                (event.happenedAt || '未提供') +
+                ' · 录入：' +
+                (event.enteredAt || '未提供')
+            "
+          >
+            <h3>{{ event.label }}</h3>
+            <p>{{ event.detail }}</p>
+            <p class="muted">
+              {{ event.actor || '操作者未提供' }}
+              <el-tag
+                v-if="event.source === 'demo'"
+                type="warning"
+                size="small"
+              >
+                演示
+              </el-tag>
+            </p>
+          </el-timeline-item>
+        </el-timeline>
+      </template>
+    </div>
+  </section>
+</template>

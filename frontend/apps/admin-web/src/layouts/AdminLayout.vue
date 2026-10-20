@@ -1,38 +1,303 @@
-<template>
-  <el-container class="admin-layout">
-    <el-aside width="220px">
-      <div class="brand">护老智交</div>
-      <el-menu :default-active="$route.path" router class="side-menu">
-        <el-menu-item index="/dashboard">工作台</el-menu-item>
-        <el-menu-item index="/elders">老人档案</el-menu-item>
-        <el-menu-item index="/admission">入住与床位</el-menu-item>
-        <el-menu-item index="/assessment">评估</el-menu-item>
-        <el-menu-item index="/care-plan">照护计划</el-menu-item>
-        <el-menu-item index="/tasks">每日任务</el-menu-item>
-        <el-menu-item index="/quality">质检台</el-menu-item>
-        <el-menu-item index="/coverage">双向核对</el-menu-item>
-        <el-menu-item index="/changes">变化简报</el-menu-item>
-        <el-menu-item index="/family">家属沟通</el-menu-item>
-        <el-menu-item index="/timeline/elder-305-wang">过程回放</el-menu-item>
-        <el-menu-item index="/demo">演示保障</el-menu-item>
-      </el-menu>
-    </el-aside>
-    <el-container>
-      <el-header class="page-header">
-        <span>管理端</span>
-        <span class="header-actions"><el-tag type="warning">演示数据</el-tag><el-button text @click="logout">退出</el-button></span>
-      </el-header>
-      <el-main><RouterView /></el-main>
-    </el-container>
-  </el-container>
-</template>
-
 <script setup lang="ts">
-import { useRouter } from 'vue-router'
+import { computed, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import {
+  Activity,
+  ArrowLeftRight,
+  BedDouble,
+  ChevronDown,
+  ChevronRight,
+  ClipboardCheck,
+  ClipboardList,
+  ContactRound,
+  Files,
+  FlaskConical,
+  History,
+  LayoutDashboard,
+  ListChecks,
+  LogOut,
+  Menu,
+  MessagesSquare,
+  NotebookPen,
+  ShieldCheck,
+  X,
+} from 'lucide-vue-next'
+import { getReducedTransparency, setReducedTransparency } from '@hulao/shared'
+import { useAuthStore, roleLabels } from '../stores/auth'
+import { allowedRoutes } from '../router/access'
+import { mode } from '../services/data'
+import ClearLocalDraftsButton from '../components/ClearLocalDraftsButton.vue'
 
+const auth = useAuthStore()
 const router = useRouter()
+const route = useRoute()
+const navigationOpen = ref(false)
+const accountOpen = ref(false)
+const accountElement = ref<HTMLElement>()
+const drafts = ref<InstanceType<typeof ClearLocalDraftsButton>>()
+const reducedTransparency = ref(getReducedTransparency())
+const preferenceError = ref('')
+const menu = computed(() =>
+  allowedRoutes(auth.role).filter(
+    (item) => mode === 'demo' || item.path !== '/demo',
+  ),
+)
+const definitions = [
+  {
+    label: '护理业务',
+    paths: [
+      '/dashboard',
+      '/tasks',
+      '/elders',
+      '/admission',
+      '/assessment',
+      '/care-plan',
+    ],
+  },
+  {
+    label: '质量与协作',
+    paths: ['/quality', '/coverage', '/changes', '/family', '/timeline'],
+  },
+  { label: '演示管理', paths: ['/demo'] },
+]
+const groups = computed(() =>
+  definitions
+    .map((group) => ({
+      ...group,
+      items: group.paths.flatMap((path) =>
+        menu.value.filter((item) => item.path === path),
+      ),
+    }))
+    .filter((group) => group.items.length),
+)
+const activeItem = computed(() =>
+  menu.value.find(
+    (item) =>
+      route.path === item.path || route.path.startsWith(item.path + '/'),
+  ),
+)
+const activeGroup = computed(
+  () =>
+    groups.value.find((group) =>
+      group.items.some((item) => item.path === activeItem.value?.path),
+    )?.label,
+)
+const icons = {
+  '/dashboard': LayoutDashboard,
+  '/tasks': ListChecks,
+  '/elders': ContactRound,
+  '/admission': BedDouble,
+  '/assessment': ClipboardCheck,
+  '/care-plan': ClipboardList,
+  '/quality': ShieldCheck,
+  '/coverage': ArrowLeftRight,
+  '/changes': NotebookPen,
+  '/family': MessagesSquare,
+  '/timeline': History,
+  '/demo': FlaskConical,
+}
+function changeTransparency(event: Event) {
+  const value = (event.target as HTMLInputElement).checked
+  reducedTransparency.value = value
+  preferenceError.value = setReducedTransparency(value)
+    ? ''
+    : '设置已应用，本机保存失败，刷新后可能恢复。'
+}
+function showDrafts() {
+  navigationOpen.value = false
+  drafts.value?.show()
+}
 function logout() {
-  localStorage.removeItem('hulao:session')
-  router.push('/login')
+  accountOpen.value = false
+  auth.logout()
+  void router.replace('/login')
+}
+watch(
+  () => route.fullPath,
+  () => {
+    navigationOpen.value = false
+    accountOpen.value = false
+  },
+)
+function leaveAccount(event: FocusEvent) {
+  if (!accountElement.value?.contains(event.relatedTarget as Node | null))
+    accountOpen.value = false
 }
 </script>
+
+<template>
+  <div class="admin-layout">
+    <aside
+      id="admin-navigation"
+      class="admin-sidebar"
+      :class="{ 'is-open': navigationOpen }"
+      aria-label="管理端导航"
+    >
+      <RouterLink
+        :to="menu[0]?.path || '/403'"
+        class="brand"
+      >
+        <span class="brand-mark"><Activity
+          :size="24"
+          aria-hidden="true"
+        /></span>
+        <span class="brand-copy">护老智交<small>护理协作管理</small></span>
+      </RouterLink>
+      <nav
+        class="side-menu"
+        aria-label="业务导航"
+      >
+        <div
+          v-for="group in groups"
+          :key="group.label"
+          class="nav-group"
+        >
+          <p class="nav-group-label">
+            {{ group.label }}
+          </p>
+          <RouterLink
+            v-for="item in group.items"
+            :key="item.path"
+            :to="item.path"
+            class="nav-link"
+            :class="{ 'is-active': activeItem?.path === item.path }"
+            :aria-current="activeItem?.path === item.path ? 'page' : undefined"
+            :title="item.label"
+          >
+            <component
+              :is="icons[item.path as keyof typeof icons]"
+              :size="18"
+              aria-hidden="true"
+            />
+            <span>{{ item.label }}</span>
+          </RouterLink>
+        </div>
+        <div class="nav-group">
+          <p class="nav-group-label">
+            本机记录
+          </p>
+          <button
+            class="nav-link"
+            type="button"
+            title="打开本机草稿"
+            @click="showDrafts"
+          >
+            <Files
+              :size="18"
+              aria-hidden="true"
+            /><span>草稿管理</span>
+          </button>
+        </div>
+      </nav>
+      <div class="sidebar-foot">
+        <span class="status-dot" /><span>管理端</span><span>{{ mode === 'demo' ? '演示模式' : '正式模式' }}</span>
+      </div>
+    </aside>
+    <button
+      v-if="navigationOpen"
+      class="navigation-backdrop"
+      aria-label="收起导航"
+      @click="navigationOpen = false"
+    />
+    <div class="admin-workspace">
+      <header class="page-header hl-glass">
+        <button
+          class="icon-button navigation-toggle"
+          type="button"
+          :aria-expanded="navigationOpen"
+          aria-controls="admin-navigation"
+          :aria-label="navigationOpen ? '收起导航' : '展开导航'"
+          @click="navigationOpen = !navigationOpen"
+        >
+          <component
+            :is="navigationOpen ? X : Menu"
+            :size="20"
+            aria-hidden="true"
+          />
+        </button>
+        <div class="breadcrumb">
+          <span>{{ activeGroup }}</span><ChevronRight
+            :size="14"
+            aria-hidden="true"
+          /><strong>{{
+            activeItem?.label || '管理端'
+          }}</strong>
+        </div>
+        <div class="header-actions">
+          <span
+            class="mode-label"
+            :class="{ 'is-demo': mode === 'demo' }"
+          ><FlaskConical
+            v-if="mode === 'demo'"
+            :size="14"
+            aria-hidden="true"
+          />{{ mode === 'demo' ? '虚构演示' : '正式模式' }}</span>
+          <ClearLocalDraftsButton ref="drafts" />
+          <div
+            ref="accountElement"
+            class="account-menu"
+            @focusout="leaveAccount"
+            @keydown.esc="accountOpen = false"
+          >
+            <button
+              type="button"
+              class="account-button"
+              :aria-label="'当前账号 · ' + (auth.role ? roleLabels[auth.role] : '权限未识别')"
+              :aria-expanded="accountOpen"
+              aria-controls="account-panel"
+              @click="accountOpen = !accountOpen"
+            >
+              <span class="account-avatar">{{
+                (auth.session?.accountKey || '账').slice(0, 1).toUpperCase()
+              }}</span>
+              <span class="account-role">{{
+                auth.role ? roleLabels[auth.role] : '权限未识别'
+              }}</span><ChevronDown
+                :size="14"
+                aria-hidden="true"
+              />
+            </button>
+            <div
+              v-if="accountOpen"
+              id="account-panel"
+              class="account-panel hl-glass"
+            >
+              <p class="account-id">
+                {{ auth.session?.accountKey }}
+              </p>
+              <p class="muted">
+                管理端 · {{ auth.role ? roleLabels[auth.role] : '权限未识别' }}
+              </p>
+              <label class="preference-toggle"><span>降低透明度</span><input
+                type="checkbox"
+                role="switch"
+                :checked="reducedTransparency"
+                @change="changeTransparency"
+              ></label>
+              <p
+                v-if="preferenceError"
+                class="warning-text preference-error"
+                role="status"
+              >
+                {{ preferenceError }}
+              </p>
+              <button
+                type="button"
+                class="account-logout"
+                @click="logout"
+              >
+                <LogOut
+                  :size="17"
+                  aria-hidden="true"
+                />退出登录
+              </button>
+            </div>
+          </div>
+        </div>
+      </header>
+      <main class="admin-main">
+        <RouterView />
+      </main>
+    </div>
+  </div>
+</template>

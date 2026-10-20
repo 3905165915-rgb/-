@@ -1,27 +1,65 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
-import { Button, Cell, CellGroup, NavBar, Empty, Form, Field, Tabbar, TabbarItem, Tag, NoticeBar, Divider, Steps, Step, showToast } from 'vant'
+import { VueQueryPlugin } from '@tanstack/vue-query'
+import {
+  Button,
+  Cell,
+  CellGroup,
+  NavBar,
+  Empty,
+  Form,
+  Field,
+  Tabbar,
+  TabbarItem,
+  Tag,
+  NoticeBar,
+  Divider,
+  Steps,
+  Step,
+  Loading,
+  Tabs,
+  Tab,
+  Checkbox,
+  CheckboxGroup,
+  Popup,
+  Search,
+  Switch,
+} from 'vant'
 import 'vant/lib/index.css'
+import '@hulao/shared/theme.css'
+import { applyUiPreferences } from '@hulao/shared'
 import App from './App.vue'
 import router from './router'
+import { queryClient } from './services/data'
 import './styles/main.css'
-
-createApp(App)
+applyUiPreferences()
+const app = createApp(App)
   .use(createPinia())
+  .use(VueQueryPlugin, { queryClient })
   .use(router)
-  .use(Button)
-  .use(Cell)
-  .use(CellGroup)
-  .use(NavBar)
-  .use(Empty)
-  .use(Form)
-  .use(Field)
-  .use(Tabbar)
-  .use(TabbarItem)
-  .use(Tag)
-  .use(NoticeBar)
-  .use(Divider)
-  .use(Steps)
-  .use(Step)
-  .provide('showToast', showToast)
-  .mount('#app')
+for (const component of [
+  Button,
+  Cell,
+  CellGroup,
+  NavBar,
+  Empty,
+  Form,
+  Field,
+  Tabbar,
+  TabbarItem,
+  Tag,
+  NoticeBar,
+  Divider,
+  Steps,
+  Step,
+  Loading,
+  Tabs,
+  Tab,
+  Checkbox,
+  CheckboxGroup,
+  Popup,
+  Search,
+  Switch,
+])
+  app.use(component)
+app.mount('#app')

@@ -6,6 +6,10 @@
     ".": {
       "types": "./src/index.ts",
       "import": "./src/index.ts"
+    },
+    "./gateway": {
+      "types": "./src/gateway.ts",
+      "import": "./src/gateway.ts"
     }
   },
   "dependencies": {

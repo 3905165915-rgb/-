@@ -5,3 +5,5 @@ dist/
 !.env.example
 .capacitor/
 android/
+dist-demo/
+test-results/

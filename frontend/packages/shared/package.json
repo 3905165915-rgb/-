@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./theme.css": "./src/ui/theme.css",
     ".": {
       "types": "./src/index.ts",
       "import": "./src/index.ts"

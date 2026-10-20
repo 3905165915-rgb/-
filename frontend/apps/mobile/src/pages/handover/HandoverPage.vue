@@ -1,12 +1,151 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { showDialog, showToast } from 'vant'
-import { readDemoState, writeDemoState } from '@hulao/shared'
-const state = ref(readDemoState())
-async function receive(item: (typeof state.value.handover)[number], status: '已接收' | '需澄清') {
-  if (status === '需澄清') await showDialog({ title: '补充澄清', message: '请在后端交班接口接入后填写澄清内容。' })
-  item.status = status; item.receivedAt = '刚刚'; writeDemoState(state.value); showToast(status === '已接收' ? '已记录接收人和时间' : '已标记需澄清')
+import { ref, watch } from 'vue'
+import {
+  onBeforeRouteLeave,
+  onBeforeRouteUpdate,
+  useRoute,
+  useRouter,
+} from 'vue-router'
+import { showConfirmDialog } from 'vant'
+import { useTasks, useHandover, mode, session } from '../../services/data'
+import HandoverEditor from '../../components/HandoverEditor.vue'
+import HandoverReceiveList from '../../components/HandoverReceiveList.vue'
+import FeedbackState from '../../components/FeedbackState.vue'
+const route = useRoute()
+const router = useRouter()
+const shift = ref(
+  typeof route.query.shift === 'string' ? route.query.shift : '',
+)
+const inputShift = ref(shift.value)
+const tab = ref('send')
+const tasks = useTasks()
+const handover = useHandover(() => shift.value)
+const editorRef = ref<InstanceType<typeof HandoverEditor>>()
+async function flush() {
+  if (editorRef.value?.busy) return false
+  if (!editorRef.value?.dirty) return true
+  return await editorRef.value.persist()
 }
+async function selectShift() {
+  if (!inputShift.value.trim()) return
+  await router.push({
+    query: { ...route.query, shift: inputShift.value.trim(), draft: undefined },
+  })
+}
+function chooseShift(name: string) {
+  inputShift.value = name
+  void selectShift()
+}
+watch(
+  () => route.query.shift,
+  (value) => {
+    shift.value = typeof value === 'string' ? value : ''
+    inputShift.value = shift.value
+  },
+)
+async function leave() {
+  if (!session.value) return true
+  if (editorRef.value?.busy) return false
+  if (await flush()) return true
+  try {
+    await showConfirmDialog({
+      title: '本机交班未保存',
+      message: '保存未完成，仍然离开？',
+    })
+    return true
+  } catch {
+    return false
+  }
+}
+onBeforeRouteLeave(leave)
+onBeforeRouteUpdate(leave)
 </script>
-
-<template><section><div class="page-title-row"><div><h1>接班</h1><p class="muted">晚班 · 逐项接收，未接收事项仍对主管可见</p></div><van-tag type="warning">演示</van-tag></div><van-cell-group inset class="mobile-card"><van-cell v-for="item in state.handover" :key="item.id" :title="item.title" :label="item.detail"><template #value><van-tag :type="item.status === '已接收' ? 'success' : item.status === '需澄清' ? 'danger' : 'warning'">{{ item.status }}</van-tag></template><template #label><div>{{ item.detail }}</div><div class="muted">责任人：{{ item.owner }}<span v-if="item.receivedAt"> · {{ item.receivedAt }}</span></div></template><template #right-icon><div class="handover-actions"><van-button v-if="item.status === '待接收'" size="small" type="primary" @click="receive(item, '已接收')">接收</van-button><van-button v-if="item.status === '待接收'" size="small" plain @click="receive(item, '需澄清')">澄清</van-button></div></template></van-cell></van-cell-group></section></template>
+<template>
+  <section class="handover-page editor-page">
+    <h1>交接班</h1>
+    <van-field
+      v-model="inputShift"
+      label="班次编号"
+      placeholder="请输入班次编号"
+    >
+      <template #button>
+        <van-button
+          size="small"
+          :disabled="!inputShift.trim()"
+          @click="selectShift"
+        >
+          载入
+        </van-button>
+      </template>
+    </van-field>
+    <div
+      v-if="mode === 'demo'"
+      class="action-row"
+    >
+      <van-button
+        v-for="name in [
+          ...new Set(
+            tasks.data.value?.map((task) => task.shift).filter(Boolean),
+          ),
+        ]"
+        :key="name"
+        size="small"
+        @click="chooseShift(name)"
+      >
+        {{ name }}
+      </van-button>
+    </div>
+    <FeedbackState
+      :loading="tasks.isPending.value"
+      :error="tasks.error.value"
+      @retry="tasks.refetch()"
+    /><van-empty
+      v-if="!shift"
+      description="请选择或输入班次编号"
+    />
+    <template v-else>
+      <p class="muted">
+        班次编号：{{ shift }}
+      </p>
+      <van-tabs
+        v-model:active="tab"
+        :lazy-render="false"
+      >
+        <van-tab
+          title="交班"
+          name="send"
+        >
+          <HandoverEditor
+            ref="editorRef"
+            :shift-id="shift"
+            :tasks="tasks.error.value ? [] : (tasks.data.value ?? [])"
+            :source-writable="!tasks.isPending.value && !tasks.error.value"
+          />
+        </van-tab><van-tab
+          title="接班"
+          name="receive"
+        >
+          <div class="action-row">
+            <van-button
+              size="small"
+              icon="replay"
+              @click="handover.refetch()"
+            >
+              刷新接班事项
+            </van-button>
+          </div>
+          <FeedbackState
+            :loading="handover.isPending.value"
+            :error="handover.error.value"
+            @retry="handover.refetch()"
+          /><HandoverReceiveList
+            v-if="!handover.isPending.value && !handover.error.value"
+            :items="handover.data.value ?? []"
+            :writable="!handover.error.value"
+            @reload="handover.refetch()"
+          />
+        </van-tab>
+      </van-tabs>
+    </template>
+  </section>
+</template>

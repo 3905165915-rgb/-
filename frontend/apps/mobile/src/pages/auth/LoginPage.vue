@@ -1,42 +1,109 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
+import { Activity } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
-import { createApi } from '@hulao/api-client'
-
+import type { Role } from '@hulao/shared'
+import { useAuthStore, roleLabels } from '../../stores/auth'
+import { homeForRole } from '../../router/access'
+import { mode, errorMessage } from '../../services/data'
 const router = useRouter()
+const auth = useAuthStore()
 const form = reactive({ username: '', password: '' })
+const selected = ref<Role>('caregiver')
 const error = ref('')
 const submitting = ref(false)
-const api = createApi(import.meta.env.VITE_API_BASE_URL)
-
 async function submit() {
+  if (submitting.value) return
   error.value = ''
   submitting.value = true
   try {
-    const result = await api.login(form)
-    localStorage.setItem('hulao:session', JSON.stringify(result))
-    await router.push('/caregiver')
-  } catch {
-    error.value = '登录失败，请检查账号、密码或网络连接。'
+    await auth.login(form.username, form.password)
+    await router.replace(homeForRole(auth.role))
+  } catch (failure) {
+    error.value = errorMessage(failure)
   } finally {
     submitting.value = false
   }
 }
-function demoLogin() {
-  localStorage.setItem('hulao:session', JSON.stringify({ access_token: 'demo-token', role: '护理员', demo: true }))
-  router.push('/caregiver')
+async function demoLogin() {
+  auth.demoLogin(selected.value)
+  await router.replace(homeForRole(auth.role))
 }
 </script>
-
 <template>
-  <van-form @submit="submit">
-    <h1>移动端登录</h1>
-    <van-cell-group inset>
-      <van-field v-model="form.username" name="username" label="账号" placeholder="请输入账号" />
-      <van-field v-model="form.password" name="password" type="password" label="密码" placeholder="请输入密码" />
+  <van-form
+    class="login-form"
+    @submit="submit"
+  >
+    <header class="login-heading">
+      <div class="login-brand">
+        <Activity
+          :size="28"
+          aria-hidden="true"
+        />
+        <h1>护老智交</h1>
+      </div>
+      <p>移动护理工作台</p>
+    </header>
+    <van-cell-group>
+      <van-field
+        v-model="form.username"
+        label="账号"
+        autocomplete="username"
+        placeholder="请输入账号"
+        required
+        :disabled="submitting"
+      /><van-field
+        v-model="form.password"
+        label="密码"
+        type="password"
+        autocomplete="current-password"
+        placeholder="请输入密码"
+        required
+        :disabled="submitting"
+      />
     </van-cell-group>
-    <p v-if="error" class="error-text">{{ error }}</p>
-    <div class="form-actions"><van-button block type="primary" native-type="submit" :loading="submitting">登录</van-button></div>
-    <div class="form-actions"><van-button block plain type="primary" @click="demoLogin">使用演示护理员账号</van-button></div>
+    <p
+      v-if="error"
+      class="error-text"
+      role="alert"
+    >
+      {{ error }}
+    </p>
+    <div class="form-actions">
+      <van-button
+        block
+        type="primary"
+        native-type="submit"
+        :loading="submitting"
+        :disabled="!form.username.trim() || !form.password"
+      >
+        登录
+      </van-button>
+    </div>
+    <div
+      v-if="mode === 'demo'"
+      class="demo-login"
+    >
+      <p class="muted">
+        虚构演示
+      </p>
+      <label class="select-field">角色<select v-model="selected">
+        <option
+          v-for="(label, key) in roleLabels"
+          :key="key"
+          :value="key"
+        >
+          {{ label }}
+        </option>
+      </select></label><van-button
+        block
+        plain
+        native-type="button"
+        @click="demoLogin"
+      >
+        进入演示
+      </van-button>
+    </div>
   </van-form>
 </template>

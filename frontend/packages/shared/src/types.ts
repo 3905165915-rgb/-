@@ -10,12 +10,12 @@ export interface Elder {
   id: string
   name: string
   bedLabel: string
-  age: number
+  age?: number
   status: '入住' | '外出' | '离院'
-  risk: '低' | '中' | '高'
-  contact: string
-  notes: string
-  lastUpdate: string
+  risk?: '低' | '中' | '高'
+  contact?: string
+  notes?: string
+  lastUpdate?: string
 }
 
 export interface Task {
@@ -27,6 +27,7 @@ export interface Task {
   status: TaskStatus
   dueAt: string
   result?: string
+  itemId?: string
 }
 
 export interface RecordDraft {
@@ -46,6 +47,10 @@ export interface HandoverItem {
   status: '待接收' | '已接收' | '需澄清'
   owner: string
   receivedAt?: string
+  itemId?: string
+  receiverId?: string
+  receivedBy?: string
+  note?: string
 }
 
 export interface FamilyCase {
@@ -64,4 +69,6 @@ export interface TimelineEvent {
   actor: string
   happenedAt: string
   enteredAt: string
+  itemId?: string
+  source?: 'demo'
 }

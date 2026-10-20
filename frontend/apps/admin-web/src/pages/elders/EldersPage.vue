@@ -1,35 +1,172 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { useRouter } from 'vue-router'
-import { readDemoState } from '@hulao/shared'
-import DemoBanner from '../../components/DemoBanner.vue'
-
-const router = useRouter()
-const state = ref(readDemoState())
+import { ArrowUpRight, RefreshCw, RotateCcw, Search } from 'lucide-vue-next'
+import { useElders } from '../../services/data'
+import QueryFeedback from '../../components/QueryFeedback.vue'
+const elders = useElders()
 const keyword = ref('')
-const status = ref('全部')
-const filtered = computed(() => state.value.elders.filter((elder) => {
-  const matchesKeyword = !keyword.value || `${elder.name}${elder.id}${elder.bedLabel}`.includes(keyword.value)
-  const matchesStatus = status.value === '全部' || elder.status === status.value
-  return matchesKeyword && matchesStatus
-}))
+const status = ref('')
+function resetFilters() {
+  keyword.value = ''
+  status.value = ''
+}
+const rows = computed(() =>
+  (elders.data.value ?? []).filter(
+    (item) =>
+      (!keyword.value ||
+        (item.name + item.id + item.bedLabel).includes(keyword.value)) &&
+      (!status.value || status.value === item.status),
+  ),
+)
 </script>
-
 <template>
-  <section>
-    <DemoBanner />
-    <div class="page-title-row"><div><h1>老人档案</h1><p class="muted">稳定老人编号，转床与历史记录保持连续</p></div><el-button type="primary" @click="router.push('/admission')">入住与床位</el-button></div>
-    <el-card shadow="never" class="section-card">
-      <el-form inline><el-form-item label="搜索"><el-input v-model="keyword" placeholder="姓名、编号或床位" clearable /></el-form-item><el-form-item label="状态"><el-select v-model="status"><el-option v-for="item in ['全部', '入住', '外出', '离院']" :key="item" :label="item" :value="item" /></el-select></el-form-item></el-form>
-      <el-table :data="filtered" stripe empty-text="暂无匹配老人">
-        <el-table-column prop="id" label="老人编号" min-width="180" />
-        <el-table-column prop="name" label="姓名" />
-        <el-table-column prop="bedLabel" label="床位" />
-        <el-table-column prop="status" label="入住状态" />
-        <el-table-column prop="risk" label="风险提示" />
-        <el-table-column prop="lastUpdate" label="最近更新" />
-        <el-table-column label="操作" fixed="right"><template #default="scope"><el-button link type="primary" @click="router.push(`/elders/${scope.row.id}`)">查看详情</el-button></template></el-table-column>
+  <section class="elders-page">
+    <div class="page-title-row">
+      <h1>老人档案</h1>
+      <el-button
+        class="icon-button"
+        title="刷新老人档案"
+        aria-label="刷新老人档案"
+        :loading="elders.isFetching.value"
+        @click="elders.refetch()"
+      >
+        <RefreshCw
+          :size="18"
+          aria-hidden="true"
+        />
+      </el-button>
+    </div>
+    <div class="data-section">
+      <el-form
+        inline
+        class="filter-bar"
+      >
+        <el-form-item label="搜索">
+          <el-input
+            v-model="keyword"
+            placeholder="姓名、编号或床位"
+            clearable
+          >
+            <template #prefix>
+              <Search
+                :size="16"
+                aria-hidden="true"
+              />
+            </template>
+          </el-input>
+        </el-form-item><el-form-item label="状态">
+          <el-select
+            v-model="status"
+            clearable
+            placeholder="全部状态"
+          >
+            <el-option
+              v-for="value in ['入住', '外出', '离院']"
+              :key="value"
+              :label="value"
+              :value="value"
+            />
+          </el-select>
+        </el-form-item><el-form-item>
+          <el-button
+            class="icon-button"
+            title="重置筛选"
+            aria-label="重置筛选"
+            @click="resetFilters"
+          >
+            <RotateCcw
+              :size="17"
+              aria-hidden="true"
+            />
+          </el-button>
+        </el-form-item>
+      </el-form><QueryFeedback
+        :loading="elders.isPending.value"
+        :error="elders.error.value"
+        @retry="elders.refetch()"
+      /><el-table
+        v-if="!elders.isPending.value && !elders.error.value"
+        :data="rows"
+        :empty-text="
+          elders.data.value?.length
+            ? '暂无匹配老人，请调整筛选条件'
+            : '暂无老人档案'
+        "
+      >
+        <el-table-column
+          label="姓名 / 编号"
+          min-width="180"
+        >
+          <template #default="{ row }">
+            <div class="table-primary">
+              {{ row.name }}
+            </div>
+            <div class="table-secondary">
+              {{ row.id }}
+            </div>
+          </template>
+        </el-table-column><el-table-column
+          prop="bedLabel"
+          label="床位"
+          min-width="100"
+        /><el-table-column
+          prop="status"
+          label="状态"
+          min-width="90"
+        /><el-table-column
+          label="风险"
+          min-width="80"
+        >
+          <template #default="{ row }">
+            <span
+              v-if="row.risk"
+              class="status-label"
+              :class="
+                row.risk === '高'
+                  ? 'status-danger'
+                  : row.risk === '中'
+                    ? 'status-warning'
+                    : 'status-neutral'
+              "
+            >{{ row.risk }}</span><span
+              v-else
+              class="muted"
+            >未提供</span>
+          </template>
+        </el-table-column><el-table-column
+          prop="lastUpdate"
+          label="最近更新"
+          min-width="140"
+        /><el-table-column
+          label="操作"
+          fixed="right"
+          width="100"
+        >
+          <template #default="{ row }">
+            <el-button
+              link
+              type="primary"
+              class="icon-button"
+              title="查看老人档案"
+              aria-label="查看老人档案"
+              @click="$router.push('/elders/' + encodeURIComponent(row.id))"
+            >
+              <ArrowUpRight
+                :size="18"
+                aria-hidden="true"
+              />
+            </el-button>
+          </template>
+        </el-table-column>
       </el-table>
-    </el-card>
+      <div
+        v-if="!elders.isPending.value && !elders.error.value"
+        class="table-footer"
+        role="status"
+      >
+        当前 {{ rows.length }} 位 · 已载入
+        {{ elders.data.value?.length ?? 0 }} 位
+      </div>
+    </div>
   </section>
 </template>

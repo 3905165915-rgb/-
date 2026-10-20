@@ -1,42 +1,106 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
+import { Activity, LogIn } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
-import { createApi } from '@hulao/api-client'
-
+import type { Role } from '@hulao/shared'
+import { useAuthStore, roleLabels } from '../../stores/auth'
+import { homeForRole } from '../../router/access'
+import { mode, errorMessage } from '../../services/data'
 const router = useRouter()
+const auth = useAuthStore()
 const form = reactive({ username: '', password: '' })
+const selected = ref<Role>('supervisor')
 const error = ref('')
 const submitting = ref(false)
-const api = createApi(import.meta.env.VITE_API_BASE_URL)
-
 async function submit() {
+  if (submitting.value) return
   error.value = ''
   submitting.value = true
   try {
-    const result = await api.login(form)
-    localStorage.setItem('hulao:session', JSON.stringify(result))
-    await router.push('/dashboard')
-  } catch {
-    error.value = '登录失败，请检查账号、密码或网络连接。'
+    await auth.login(form.username, form.password)
+    await router.replace(homeForRole(auth.role))
+  } catch (failure) {
+    error.value = errorMessage(failure)
   } finally {
     submitting.value = false
   }
 }
-function demoLogin() {
-  localStorage.setItem('hulao:session', JSON.stringify({ access_token: 'demo-token', role: '主管', demo: true }))
-  router.push('/dashboard')
+async function demoLogin() {
+  auth.demoLogin(selected.value)
+  await router.replace(homeForRole(auth.role))
 }
 </script>
-
 <template>
-  <el-card class="login-card">
-    <template #header>护老智交 · 管理端登录</template>
-    <el-form @submit.prevent="submit">
-      <el-form-item label="账号"><el-input v-model="form.username" autocomplete="username" /></el-form-item>
-      <el-form-item label="密码"><el-input v-model="form.password" type="password" show-password autocomplete="current-password" /></el-form-item>
-      <el-alert v-if="error" :title="error" type="error" show-icon />
-      <el-button class="login-button" type="primary" native-type="submit" :loading="submitting">登录</el-button>
-      <el-button class="login-button" plain @click="demoLogin">使用演示主管账号</el-button>
+  <section
+    class="login-card"
+    aria-labelledby="login-title"
+  >
+    <div class="login-brand">
+      <span class="brand-mark"><Activity
+        :size="24"
+        aria-hidden="true"
+      /></span>
+      <div>
+        <h1 id="login-title">
+          护老智交
+        </h1>
+        <p>管理端登录 · {{ mode === 'demo' ? '虚构演示' : '正式模式' }}</p>
+      </div>
+    </div>
+    <el-form
+      label-position="top"
+      @submit.prevent="submit"
+    >
+      <el-form-item label="账号">
+        <el-input
+          v-model="form.username"
+          autocomplete="username"
+        />
+      </el-form-item>
+      <el-form-item label="密码">
+        <el-input
+          v-model="form.password"
+          type="password"
+          show-password
+          autocomplete="current-password"
+        />
+      </el-form-item>
+      <el-alert
+        v-if="error"
+        :title="error"
+        type="error"
+        :closable="false"
+      />
+      <el-button
+        class="login-button"
+        type="primary"
+        native-type="submit"
+        :loading="submitting"
+      >
+        <LogIn
+          :size="17"
+          aria-hidden="true"
+        />登录
+      </el-button>
+      <template v-if="mode === 'demo'">
+        <el-divider>虚构演示</el-divider><el-select
+          v-model="selected"
+          aria-label="演示角色"
+        >
+          <el-option
+            v-for="(label, key) in roleLabels"
+            :key="key"
+            :value="key"
+            :label="label"
+          />
+        </el-select><el-button
+          class="login-button"
+          plain
+          @click="demoLogin"
+        >
+          进入演示
+        </el-button>
+      </template>
     </el-form>
-  </el-card>
+  </section>
 </template>

@@ -1,8 +1,60 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { readDemoState } from '@hulao/shared'
-import DemoBanner from '../../components/DemoBanner.vue'
-const state = ref(readDemoState())
+import { RefreshCw } from 'lucide-vue-next'
+import { useFamilyCases } from '../../services/data'
+import QueryFeedback from '../../components/QueryFeedback.vue'
+import StatusLabel from '../../components/StatusLabel.vue'
+const cases = useFamilyCases()
 </script>
-
-<template><section><DemoBanner /><h1>家属沟通</h1><el-card shadow="never" class="section-card"><el-table :data="state.familyCases.filter((item) => item.public)" border><el-table-column prop="subject" label="诉求" /><el-table-column prop="status" label="状态" /><el-table-column prop="reply" label="审核回复" min-width="300" /><el-table-column label="可见范围"><template #default><el-tag type="success">已审核可见</el-tag></template></el-table-column></el-table><el-alert class="section-action" title="已读不等于完成；真实推送接入前，页面会明确标注为演示通知。" type="info" show-icon /></el-card></section></template>
+<template>
+  <section>
+    <div class="page-title-row">
+      <h1>家属沟通</h1>
+      <el-button
+        class="icon-button"
+        title="刷新家属沟通"
+        aria-label="刷新家属沟通"
+        :loading="cases.isFetching.value"
+        @click="cases.refetch()"
+      >
+        <RefreshCw
+          :size="18"
+          aria-hidden="true"
+        />
+      </el-button>
+    </div>
+    <div class="data-section">
+      <QueryFeedback
+        :loading="cases.isPending.value"
+        :error="cases.error.value"
+        @retry="cases.refetch()"
+      /><el-table
+        v-if="!cases.isPending.value && !cases.error.value"
+        :data="cases.data.value ?? []"
+        empty-text="暂无公开内容"
+      >
+        <el-table-column
+          prop="subject"
+          label="诉求"
+          min-width="200"
+        /><el-table-column
+          label="状态"
+          min-width="100"
+        >
+          <template #default="{ row }">
+            <StatusLabel
+              :status="row.status"
+              kind="family"
+            />
+          </template>
+        </el-table-column><el-table-column
+          prop="reply"
+          label="公开回复"
+          min-width="280"
+        />
+      </el-table>
+    </div>
+    <p class="muted">
+      动态摘要与提交问题暂未接入。
+    </p>
+  </section>
+</template>

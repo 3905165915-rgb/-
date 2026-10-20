@@ -1,8 +1,75 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { showToast } from 'vant'
-import { readDemoState } from '@hulao/shared'
-const state = ref(readDemoState())
+import { RefreshCw } from 'lucide-vue-next'
+import { familyCaseStatusMeta, resolveStatus } from '@hulao/shared'
+import { useFamilyCases } from '../../services/data'
+import FeedbackState from '../../components/FeedbackState.vue'
+const cases = useFamilyCases()
+function statusMeta(status: unknown) {
+  return resolveStatus(familyCaseStatusMeta, status)
+}
 </script>
-
-<template><section><h1>家属动态</h1><van-notice-bar text="仅展示已授权、已审核和已发布内容。" left-icon="info-o" /><van-cell-group inset class="mobile-card"><van-cell title="王阿姨" label="305床 · 今日服务摘要"><template #value><van-tag type="success">已审核</van-tag></template></van-cell><van-cell title="午餐进食观察" label="记录已完成审核，晚餐情况待更新" /></van-cell-group><h2>我的诉求</h2><van-cell-group inset class="mobile-card"><van-cell v-for="item in state.familyCases.filter((item) => item.public)" :key="item.id" :title="item.subject" :label="item.reply"><template #value><van-tag type="primary">{{ item.status }}</van-tag></template></van-cell></van-cell-group><van-button block plain type="primary" @click="showToast('提交问题入口将在接口接入后启用')">提交问题</van-button></section></template>
+<template>
+  <section class="family-page">
+    <div class="page-title-row">
+      <h1>家属动态</h1>
+      <button
+        type="button"
+        class="icon-button"
+        title="刷新家属动态"
+        aria-label="刷新家属动态"
+        :disabled="cases.isFetching.value"
+        @click="cases.refetch()"
+      >
+        <RefreshCw
+          :size="20"
+          :class="{ 'is-spinning': cases.isFetching.value }"
+          aria-hidden="true"
+        />
+      </button>
+    </div>
+    <FeedbackState
+      :loading="cases.isPending.value"
+      :error="cases.error.value"
+      :empty="
+        !cases.isPending.value &&
+          !cases.error.value &&
+          !cases.data.value?.length
+      "
+      empty-text="暂无公开内容"
+      @retry="cases.refetch()"
+    />
+    <div
+      v-if="
+        !cases.isPending.value && !cases.error.value && cases.data.value?.length
+      "
+      class="family-feed"
+    >
+      <article
+        v-for="item in cases.data.value"
+        :key="item.id"
+        class="family-item"
+      >
+        <h2>{{ item.subject }}</h2>
+        <span
+          class="status-label"
+          :data-tone="statusMeta(item.status).tone"
+          :title="
+            statusMeta(item.status).known ? undefined : String(item.status)
+          "
+        >{{ statusMeta(item.status).label }}</span>
+        <p class="family-reply">
+          {{ item.reply || '暂无公开回复' }}
+        </p>
+      </article>
+    </div>
+    <p class="muted">
+      动态摘要与提交问题暂未接入。
+    </p>
+    <van-button
+      block
+      disabled
+    >
+      提交问题暂不可用
+    </van-button>
+  </section>
+</template>

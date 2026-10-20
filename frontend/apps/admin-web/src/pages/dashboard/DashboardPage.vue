@@ -1,27 +1,127 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { useRouter } from 'vue-router'
-import { readDemoState } from '@hulao/shared'
-import DemoBanner from '../../components/DemoBanner.vue'
-
-const router = useRouter()
-const state = ref(readDemoState())
-const pendingTasks = computed(() => state.value.tasks.filter((task) => task.status !== 'completed').length)
-const overdueTasks = computed(() => state.value.tasks.filter((task) => task.status === 'overdue').length)
-const pendingDrafts = computed(() => state.value.drafts.filter((draft) => draft.status === 'pending_review').length)
+import { computed } from 'vue'
+import { useQuery } from '@tanstack/vue-query'
+import { loadDemoState } from '@hulao/shared'
+import { ArrowUpRight, RefreshCw } from 'lucide-vue-next'
+import { useElders, useTasks, mode, queryKey } from '../../services/data'
+import QueryFeedback from '../../components/QueryFeedback.vue'
+const elders = useElders()
+const tasks = useTasks()
+const demo = useQuery({
+  queryKey: computed(() => queryKey('demo-preview')),
+  queryFn: loadDemoState,
+  enabled: mode === 'demo',
+})
+const pending = computed(
+  () =>
+    tasks.data.value?.filter(
+      (task) => !['completed', 'not_done', 'cancelled'].includes(task.status),
+    ).length ?? 0,
+)
+const overdue = computed(
+  () =>
+    tasks.data.value?.filter((task) => task.status === 'overdue').length ?? 0,
+)
 </script>
-
 <template>
   <section>
-    <DemoBanner />
-    <div class="page-title-row"><div><h1>工作台</h1><p class="muted">入住、空床、待办、交班与质检集中入口</p></div><el-button @click="router.push('/demo')">重置演示</el-button></div>
-    <el-row :gutter="16" class="metric-grid">
-      <el-col :xs="12" :sm="6"><el-card shadow="never" class="metric-card" @click="router.push('/elders')"><b>{{ state.elders.length }}</b><span>在住老人</span></el-card></el-col>
-      <el-col :xs="12" :sm="6"><el-card shadow="never" class="metric-card" @click="router.push('/tasks')"><b>{{ pendingTasks }}</b><span>待处理任务</span></el-card></el-col>
-      <el-col :xs="12" :sm="6"><el-card shadow="never" class="metric-card" @click="router.push('/tasks?status=overdue')"><b>{{ overdueTasks }}</b><span>逾期任务</span></el-card></el-col>
-      <el-col :xs="12" :sm="6"><el-card shadow="never" class="metric-card" @click="router.push('/quality')"><b>{{ pendingDrafts }}</b><span>待核对草稿</span></el-card></el-col>
-    </el-row>
-    <el-card shadow="never" class="section-card"><template #header>今日提醒</template><el-alert v-for="item in state.notifications" :key="item" :title="item" type="info" show-icon :closable="false" /></el-card>
-    <el-card shadow="never" class="section-card"><template #header>核心演示链</template><el-steps :active="2" finish-status="success" align-center><el-step title="护理记录" description="原文输入与AI草稿" /><el-step title="人工确认" description="修改、确认或放弃" /><el-step title="交班接收" description="下一班逐项接收" /><el-step title="主管回放" description="查看完整时间线" /></el-steps></el-card>
+    <div class="page-title-row">
+      <h1>工作台</h1>
+      <el-button
+        class="icon-button"
+        title="刷新工作台"
+        aria-label="刷新工作台"
+        :loading="elders.isFetching.value || tasks.isFetching.value"
+        @click="
+          () => {
+            elders.refetch()
+            tasks.refetch()
+            if (mode === 'demo') demo.refetch()
+          }
+        "
+      >
+        <RefreshCw
+          :size="18"
+          aria-hidden="true"
+        />
+      </el-button>
+    </div>
+    <QueryFeedback
+      :loading="elders.isPending.value || tasks.isPending.value"
+      :error="elders.error.value || tasks.error.value"
+      @retry="
+        () => {
+          elders.refetch()
+          tasks.refetch()
+        }
+      "
+    />
+    <div class="dashboard-metrics">
+      <button
+        type="button"
+        class="metric-card"
+        @click="$router.push('/elders')"
+      >
+        <b>{{
+          elders.error.value || elders.isPending.value
+            ? '—'
+            : (elders.data.value?.filter((elder) => elder.status === '入住')
+              .length ?? 0)
+        }}</b><span>在住老人</span>
+      </button><button
+        type="button"
+        class="metric-card metric-info"
+        @click="$router.push('/tasks')"
+      >
+        <b>{{ tasks.error.value || tasks.isPending.value ? '—' : pending }}</b><span>待处理任务</span>
+      </button><button
+        type="button"
+        class="metric-card metric-danger"
+        @click="$router.push('/tasks?status=overdue')"
+      >
+        <b>{{ tasks.error.value || tasks.isPending.value ? '—' : overdue }}</b><span>逾期任务</span>
+      </button>
+    </div>
+    <template v-if="mode === 'demo'">
+      <div class="dashboard-notices">
+        <h2>演示提醒</h2>
+        <QueryFeedback
+          :loading="demo.isPending.value"
+          :error="demo.error.value"
+          @retry="demo.refetch()"
+        /><el-alert
+          v-for="notice in demo.data.value?.notifications"
+          :key="notice"
+          :title="notice"
+          type="info"
+          :closable="false"
+        />
+        <p>
+          待核对演示草稿：{{
+            demo.data.value?.drafts.filter(
+              (draft) => draft.status === 'pending_review',
+            ).length ?? '未提供'
+          }}
+        </p>
+        <p>
+          待接收演示交班：{{
+            demo.data.value?.handover.filter((item) => item.status === '待接收')
+              .length ?? '未提供'
+          }}
+        </p>
+        <el-button @click="$router.push('/demo')">
+          演示数据管理<ArrowUpRight
+            :size="16"
+            aria-hidden="true"
+          />
+        </el-button>
+      </div>
+    </template>
+    <p
+      v-else
+      class="muted"
+    >
+      床位统计、质检与交班汇总暂未接入。
+    </p>
   </section>
 </template>

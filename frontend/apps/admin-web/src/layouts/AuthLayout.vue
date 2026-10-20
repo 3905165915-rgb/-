@@ -1,3 +1,5 @@
 <template>
-  <main class="auth-layout"><RouterView /></main>
+  <main class="auth-layout">
+    <RouterView />
+  </main>
 </template>
