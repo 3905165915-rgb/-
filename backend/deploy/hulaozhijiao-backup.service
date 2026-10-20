@@ -1,0 +1,17 @@
+[Unit]
+Description=Back up Hulaozhijiao JSON store
+
+[Service]
+Type=oneshot
+User=hulaozhijiao
+Group=hulaozhijiao
+WorkingDirectory=/opt/hulaozhijiao/app
+EnvironmentFile=/etc/hulaozhijiao/backend.env
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/opt/hulaozhijiao-venv/bin/python backend/scripts/backup_json.py
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/hulaozhijiao
+UMask=0077

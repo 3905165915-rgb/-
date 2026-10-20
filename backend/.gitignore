@@ -1,6 +1,7 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.test-runs/
 .venv/
 .env
 data/store.json

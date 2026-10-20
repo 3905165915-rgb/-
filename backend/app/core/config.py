@@ -28,6 +28,8 @@ class Settings:
     deepseek_timeout_seconds: float
     ai_fallback_mock: bool
     cors_origins: tuple[str, ...]
+    siliconflow_api_key: str = ''
+    speech_timeout_seconds: float = 45
 
 
 def get_settings() -> Settings:
@@ -43,12 +45,14 @@ def get_settings() -> Settings:
         ai_provider=os.getenv("AI_PROVIDER", "mock"),
         deepseek_api_key=os.getenv("DEEPSEEK_API_KEY", ""),
         deepseek_base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1").rstrip("/"),
-        deepseek_model=os.getenv("DEEPSEEK_MODEL", "deepseek-v4.1-flash"),
+        deepseek_model=os.getenv("DEEPSEEK_MODEL", "deepseek-flash"),
         deepseek_timeout_seconds=float(os.getenv("DEEPSEEK_TIMEOUT_SECONDS", "30")),
-        ai_fallback_mock=os.getenv("AI_FALLBACK_MOCK", "true").lower() in {"1", "true", "yes"},
+        ai_fallback_mock=os.getenv("AI_FALLBACK_MOCK", "false").lower() in {"1", "true", "yes"},
         cors_origins=_csv(
             os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:4173")
         ),
+        siliconflow_api_key=os.getenv('SILICONFLOW_API_KEY', '').strip(),
+        speech_timeout_seconds=float(os.getenv('SPEECH_TIMEOUT_SECONDS', '45')),
     )
 
 

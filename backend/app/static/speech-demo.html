@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="same-origin">
+  <title>护理语音录入</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;background:#f2f6f8;color:#233741;font:16px/1.6 system-ui,sans-serif}
+    main{max-width:680px;margin:32px auto;padding:24px;background:white;border-radius:18px}
+    h1{margin:0 0 8px;font-size:26px}p{margin:10px 0}.muted{color:#60757d;font-size:14px}
+    label{display:block;margin:14px 0}input,textarea{display:block;width:100%;padding:12px;border:1px solid #b9cbd0;border-radius:8px;font:inherit}
+    textarea{min-height:200px;resize:vertical}button{padding:12px 18px;border:0;border-radius:8px;background:#176c78;color:white;font:inherit;cursor:pointer;white-space:nowrap}
+    button:disabled{opacity:.45;cursor:default}.secondary{background:#e7f0f2;color:#23434c}.row{display:flex;flex-wrap:wrap;gap:10px;margin:16px 0}
+    #notice{padding:12px;border-radius:8px;background:#eaf3f5;white-space:pre-wrap;overflow-wrap:anywhere}[hidden]{display:none!important}
+    @media(max-width:720px){main{margin:12px;padding:20px}button{flex:1;font-size:15px;padding:10px 12px}}
+  </style>
+</head>
+<body><main>
+  <h1>护理语音录入</h1>
+  <p class="muted">每段最长60秒，停止后由云端转写。请核对人名、数值、否定和条件；本页不会自动保存护理记录。</p>
+  <form id="login">
+    <label>账号<input id="username" autocomplete="username" required></label>
+    <label>密码<input id="password" type="password" autocomplete="current-password" required></label>
+    <button id="signIn" type="submit">登录</button>
+  </form>
+  <section id="workspace" hidden>
+    <p id="account" class="muted"></p>
+    <div class="row">
+      <button id="start" disabled>开始录音</button>
+      <button id="stop" disabled>停止并转写</button>
+      <button id="cancel" class="secondary" disabled>放弃录音</button>
+    </div>
+    <p id="timer" class="muted" aria-live="off">尚未录音</p>
+    <label>转写结果（可修改）<textarea id="text" placeholder="也可以直接输入文字"></textarea></label>
+    <div class="row"><button id="copy" class="secondary">复制核对后的文字</button><button id="signOut" class="secondary">退出登录</button></div>
+  </section>
+  <p id="notice" role="status" aria-live="polite">请使用系统现有的工作人员账号登录。</p>
+  <p class="muted">这是独立的语音测试入口；核对后可复制到护理记录页。本页不保存登录状态或录音。</p>
+</main>
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+let token='',configured=false,busy=false,stream=null,context=null,source=null,processor=null;
+let chunks=[],frames=0,rate=0,started=0,ticker=null,cutoff=null,recording=false,preparing=false,abort=null;
+const messages={speech_not_configured_use_manual_entry:'语音服务尚未配置，可继续文字输入。',speech_rate_limited_retry_later:'操作较频繁，请稍后再试。',
+  speech_provider_rate_limited:'云端识别暂时限流，请稍后重试。',speech_provider_credentials_or_access_invalid:'语音服务配置或账号权限尚未就绪。',
+  speech_provider_timeout_use_manual_entry:'识别超时，请重试或继续文字输入。',speech_no_text_detected_retry_or_type:'未识别到文字，请靠近麦克风重试。',
+  speech_audio_empty:'没有录到有效音频，请稍等一秒后停止。',speech_upload_timeout:'上传超时，请重试。'};
+function tell(text){$('notice').textContent=text;}
+function controls(){
+  $('start').disabled=!token||!configured||busy||recording||preparing;
+  $('stop').disabled=!recording||busy;
+  $('cancel').disabled=!recording||busy;
+  $('copy').disabled=busy||recording||preparing;
+  $('signOut').disabled=preparing;
+}
+async function api(path,options={}){
+  const response=await fetch('/api/v1/'+path,{...options,headers:{...options.headers,...(token?{Authorization:'Bearer '+token}:{})}});
+  const data=await response.json().catch(()=>({}));
+  if(!response.ok){
+    if(response.status===401)throw new Error('登录失效或账号密码不正确，请重新登录。');
+    if(response.status===403)throw new Error('请使用护理员或管理人员账号登录。');
+    throw new Error(messages[data.detail]||'语音请求未完成，请重试或继续文字输入。');
+  }
+  return data;
+}
+$('login').addEventListener('submit',async event=>{
+  event.preventDefault();$('signIn').disabled=true;
+  try{
+    const result=await api('auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:$('username').value.trim(),password:$('password').value})});
+    token=result.access_token;
+    const state=await api('speech/status');configured=state.configured;
+    $('account').textContent='当前用户：'+result.display_name;
+    $('login').hidden=true;$('workspace').hidden=false;
+    tell(configured?'可以开始录音，转写结果会显示在下方。':'语音服务尚未配置，可先手工输入文字。');
+  }catch(error){token='';tell(error.message);}finally{$('password').value='';$('signIn').disabled=false;controls();}
+});
+function release(){
+  recording=false;clearInterval(ticker);clearTimeout(cutoff);
+  if(processor){processor.onaudioprocess=null;processor.disconnect();processor=null;}
+  if(source){source.disconnect();source=null;}
+  if(stream){stream.getTracks().forEach(track=>track.stop());stream=null;}
+  if(context){context.close().catch(()=>{});context=null;}
+}
+async function begin(){
+  if(busy||recording||preparing)return;
+  preparing=true;controls();
+  try{
+    if(!navigator.mediaDevices?.getUserMedia)throw new Error('此浏览器不支持麦克风，请用手机系统浏览器打开HTTPS页面。');
+    stream=await navigator.mediaDevices.getUserMedia({audio:{channelCount:1,echoCancellation:true,noiseSuppression:true}});
+    const Audio=window.AudioContext||window.webkitAudioContext;
+    if(!Audio)throw new Error('此浏览器不支持录音，请换系统浏览器。');
+    context=new Audio();await context.resume();rate=context.sampleRate;
+    source=context.createMediaStreamSource(stream);
+    processor=context.createScriptProcessor(4096,1,1);chunks=[];frames=0;recording=true;
+    processor.onaudioprocess=event=>{if(recording){const data=new Float32Array(event.inputBuffer.getChannelData(0));chunks.push(data);frames+=data.length;}};
+    source.connect(processor);processor.connect(context.destination);
+    started=Date.now();$('timer').textContent='正在录音：0秒';
+    ticker=setInterval(()=>{$('timer').textContent='正在录音：'+Math.min(60,Math.floor((Date.now()-started)/1000))+'秒';},250);
+    cutoff=setTimeout(finish,60000);tell('正在录音，说完后点击“停止并转写”。');
+  }catch(error){release();tell(error.message||'麦克风未开启，请在浏览器设置中允许使用。');}
+  finally{preparing=false;controls();}
+}
+async function wavBlob(){
+  if(!frames)throw new Error('没有录到音频，请稍等一秒后停止。');
+  const audio=new Float32Array(frames);let offset=0;
+  for(const chunk of chunks){audio.set(chunk,offset);offset+=chunk.length;}chunks=[];
+  const Offline=window.OfflineAudioContext||window.webkitOfflineAudioContext;
+  const target=Math.min(960000,Math.ceil(frames*16000/rate));
+  const offline=new Offline(1,target,16000),buffer=offline.createBuffer(1,frames,rate);
+  buffer.copyToChannel(audio,0);const node=offline.createBufferSource();node.buffer=buffer;node.connect(offline.destination);node.start();
+  const samples=(await offline.startRendering()).getChannelData(0),bytes=new ArrayBuffer(44+samples.length*2),view=new DataView(bytes);
+  const word=(position,value)=>{for(let i=0;i<value.length;i++)view.setUint8(position+i,value.charCodeAt(i));};
+  word(0,'RIFF');view.setUint32(4,36+samples.length*2,true);word(8,'WAVE');word(12,'fmt ');view.setUint32(16,16,true);
+  view.setUint16(20,1,true);view.setUint16(22,1,true);view.setUint32(24,16000,true);view.setUint32(28,32000,true);
+  view.setUint16(32,2,true);view.setUint16(34,16,true);word(36,'data');view.setUint32(40,samples.length*2,true);
+  for(let i=0;i<samples.length;i++){const value=Math.max(-1,Math.min(1,samples[i]));view.setInt16(44+i*2,value<0?value*32768:value*32767,true);}
+  return new Blob([bytes],{type:'audio/wav'});
+}
+async function finish(){
+  if(!recording||busy)return;
+  busy=true;release();controls();$('timer').textContent='正在转写…';abort=new AbortController();
+  const deadline=setTimeout(()=>abort?.abort(),65000);
+  try{
+    const blob=await wavBlob();
+    const result=await api('speech/transcriptions',{method:'POST',headers:{'Content-Type':'audio/wav'},body:blob,signal:abort.signal});
+    if(!token)return;
+    $('text').value=[$('text').value.trim(),result.text].filter(Boolean).join('\n');
+    tell('转写完成，请核对后再用于护理记录。文字尚未保存。');$('timer').textContent='本段 '+result.duration_seconds+' 秒';
+  }catch(error){if(token)tell(error.name==='AbortError'?'转写已取消或超时，可重试或继续文字输入。':error.message);}
+  finally{clearTimeout(deadline);abort=null;busy=false;chunks=[];frames=0;controls();}
+}
+$('start').addEventListener('click',begin);$('stop').addEventListener('click',finish);
+$('cancel').addEventListener('click',()=>{release();chunks=[];frames=0;tell('已放弃本次录音，没有发送到云端。');$('timer').textContent='尚未录音';controls();});
+$('copy').addEventListener('click',async()=>{try{await navigator.clipboard.writeText($('text').value);tell('已复制，请到护理记录页核对并提交。');}catch(_){$('text').focus();$('text').select();tell('请长按选中文字并复制。');}});
+$('signOut').addEventListener('click',()=>{release();abort?.abort();token='';configured=false;$('text').value='';chunks=[];frames=0;$('workspace').hidden=true;$('login').hidden=false;tell('已退出登录。');controls();});
+window.addEventListener('pagehide',()=>{release();abort?.abort();});
+</script></body></html>

@@ -14,12 +14,17 @@ def test_store_round_trip(tmp_path: Path) -> None:
 def test_confirm_draft_is_idempotent(tmp_path: Path) -> None:
     store = JsonStore(tmp_path)
     store.ensure()
+    store.mutate(lambda data: data['users'].append({
+        'id': 'USER-1', 'username': 'test-supervisor', 'display_name': '测试主管',
+        'role': 'supervisor', 'active': True, 'password_hash': 'unused-in-service-test',
+    }))
+    store.mutate(lambda data: data['elders'].append({'id': 'ELDER-1', 'name': '演示老人'}))
     store.mutate(
         lambda data: data["ai_drafts"].append(
             {
                 "id": "AI-1",
                 "elder_id": "ELDER-1",
-                "shift_id": "SHIFT-1",
+                "shift_id": None,
                 "raw_text": "需要联系家属",
                 "status": "pending_review",
                 "observations": ["需要联系家属"],

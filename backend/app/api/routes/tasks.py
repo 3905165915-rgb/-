@@ -1,21 +1,79 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Query
 
-from app.api.deps import StaffUser, Store
-from app.schemas.api import CareTask, TaskCompleteRequest
-from app.services.store_service import complete_task, list_tasks
+from app.api.deps import StaffUser, ManagementUser, Store
+from app.schemas.api import CareTask, TaskCompleteRequest, TaskUpdateRequest, TaskTransitionRequest
+from app.services import task_service
+from app.api.routes.records import IdempotencyKey
+from app.services.workflow import find
+from app.schemas.task_memory import TaskMemoryAdoptRequest, TaskMemoryResponse, TaskMemoryWithdrawRequest
+from app.services import task_memory_service
+from app.schemas.task_condition import ConditionConfigureRequest, ConditionClaimRequest, ConditionCheckRequest, TaskConditionResponse
+from app.services import task_condition_service
 
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
 
 @router.get("", response_model=list[CareTask])
-def tasks(_: StaffUser, store: Store, elder_id: str | None = Query(default=None)) -> list[CareTask]:
-    return list_tasks(store, elder_id)
+def tasks(_: StaffUser, store: Store, elder_id: str | None = None, shift_id: str | None = None,
+          assigned_to: str | None = None, status: str | None = None,
+          limit: int = Query(100, ge=1, le=200), offset: int = Query(0, ge=0)) -> list[CareTask]:
+    return task_service.list_tasks(store, elder_id, shift_id, assigned_to, status, limit, offset)
+
+
+@router.get('/{task_id}', response_model=CareTask)
+def detail(task_id: str, _: StaffUser, store: Store):
+    return task_service.task_view(find(store.read(), 'care_tasks', task_id, 'task_not_found'))
+
+
+@router.patch('/{task_id}', response_model=CareTask)
+def update(task_id: str, payload: TaskUpdateRequest, current: ManagementUser, store: Store):
+    return task_service.update(store, task_id, payload, current['sub'])
+
+
+@router.post('/{task_id}/transition', response_model=CareTask)
+def transition(task_id: str, payload: TaskTransitionRequest, current: StaffUser, store: Store, idempotency_key: IdempotencyKey = None):
+    return task_service.transition(store, task_id, payload, current['sub'], current['role'], idempotency_key)
 
 
 @router.post("/{task_id}/complete", response_model=CareTask)
-def complete(task_id: str, payload: TaskCompleteRequest, current: StaffUser, store: Store) -> CareTask:
-    try:
-        return complete_task(store, task_id, current["sub"], payload.result)
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail="Task not found") from exc
+def complete(task_id: str, payload: TaskCompleteRequest, current: StaffUser, store: Store, idempotency_key: IdempotencyKey = None) -> CareTask:
+    return task_service.complete(store, task_id, current['sub'], current['role'], payload.result, idempotency_key)
+
+
+@router.get('/{task_id}/memory-references', response_model=TaskMemoryResponse)
+def memory_references(task_id: str, _: StaffUser, store: Store):
+    return task_memory_service.get(store, task_id)
+
+
+@router.post('/{task_id}/memory-references', response_model=TaskMemoryResponse, status_code=201)
+def adopt_memory(task_id: str, payload: TaskMemoryAdoptRequest, current: StaffUser, store: Store, idempotency_key: IdempotencyKey = None):
+    return task_memory_service.adopt(store, task_id, payload, current['sub'], current['role'], idempotency_key)
+
+
+@router.post('/{task_id}/memory-references/{reference_id}/withdraw', response_model=TaskMemoryResponse)
+def withdraw_memory(task_id: str, reference_id: str, payload: TaskMemoryWithdrawRequest, current: StaffUser, store: Store, idempotency_key: IdempotencyKey = None):
+    return task_memory_service.withdraw(store, task_id, reference_id, payload, current['sub'], current['role'], idempotency_key)
+
+
+@router.get('/{task_id}/condition', response_model=TaskConditionResponse)
+def condition(task_id: str, _: StaffUser, store: Store):
+    return task_condition_service.get(store, task_id)
+
+
+@router.post('/{task_id}/condition/configure', response_model=TaskConditionResponse)
+def configure_condition(task_id: str, payload: ConditionConfigureRequest, current: ManagementUser, store: Store,
+                        idempotency_key: IdempotencyKey = None):
+    return task_condition_service.configure(store, task_id, payload, current['sub'], current['role'], idempotency_key)
+
+
+@router.post('/{task_id}/condition/claim', response_model=TaskConditionResponse)
+def claim_condition(task_id: str, payload: ConditionClaimRequest, current: StaffUser, store: Store,
+                    idempotency_key: IdempotencyKey = None):
+    return task_condition_service.claim(store, task_id, payload, current['sub'], current['role'], idempotency_key)
+
+
+@router.post('/{task_id}/condition/check', response_model=TaskConditionResponse)
+def check_condition(task_id: str, payload: ConditionCheckRequest, current: StaffUser, store: Store,
+                    idempotency_key: IdempotencyKey = None):
+    return task_condition_service.check(store, task_id, payload, current['sub'], current['role'], idempotency_key)

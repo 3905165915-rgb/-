@@ -14,4 +14,4 @@ def login(payload: LoginRequest, store: Store) -> LoginResponse:
     user = authenticate(store, payload.username, payload.password)
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid username or password")
-    return LoginResponse(access_token=create_access_token(user.id, user.role), user_id=user.id, role=user.role, display_name=user.display_name)
+    return LoginResponse(access_token=create_access_token(user.id, user.role, user.token_version), user_id=user.id, role=user.role, display_name=user.display_name)
