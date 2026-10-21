@@ -1,0 +1,30 @@
+{
+  "name": "@hulao/admin-web",
+  "private": true,
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 5173",
+    "build": "vite build",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "typecheck": "vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "@hulao/api-client": "workspace:*",
+    "@hulao/shared": "workspace:*",
+    "@tanstack/vue-query": "^5.0.0",
+    "@vueuse/core": "^12.0.0",
+    "axios": "^1.0.0",
+    "dayjs": "^1.11.0",
+    "element-plus": "^2.0.0",
+    "lucide-vue-next": "0.468.0",
+    "pinia": "^2.0.0",
+    "vue": "^3.5.0",
+    "vue-router": "^4.0.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.0.0",
+    "typescript": "^5.0.0",
+    "vite": "^6.0.0",
+    "vue-tsc": "^2.0.0"
+  }
+}
