@@ -2,7 +2,11 @@
 
 后端使用 JSON 文件，不使用数据库；只运行一个 Uvicorn worker。
 
-2026-10-20待交付版本为0.4.0/schema4；只读公网检查仍是0.2.1/schema2。新代码已完成服务器隔离Linux回归、真实HTTP和厂商AI/语音验收，见上级ACCEPTANCE_2026-10-20.md；本次未更新线上代码/业务。部署前仍须备份和显式迁移，不能把整个本地data目录上传覆盖。当前前端API路径和正文存在差异，见上级FRONTEND_HANDOFF.md，先完成联调再更新网站。
+2026-10-21 当前后端 0.4.2/schema4，前端累计补丁 54 文件；后端重试和覆盖复核修复发布于 release06，护理员人员目录补丁发布于 release07。Windows 后端 430 passed/12 skipped，Linux 415 passed/13 skipped，前端 291 项通过，两端构建通过，独立 HTTP 61 断言通过。原账号/私有配置和既有编号保留，无 schema 迁移或重置。最新验收与开放人工测试班次见上级 `RELEASE_2026-10-21.md`。
+
+2026-10-20 完整业务联合部署（release04）为 0.4.1/schema4。该次前端基于 4be5e22 加累计 47 文件补丁；管理端新建、AI 照护、交班、记忆、质检、变更核验和家属业务已接入。Linux 410 项回归、61 项真实 HTTP 断言、12 项真厂商验收及公网完整业务流程通过；该次前端 276 项通过。测试顺序和未实现的附件/推送等项目见上级 JOINT_TEST_2026-10-20.md。本轮未推仓库。
+
+后续 release05 手机入口修复已发布，累计前端补丁现为 51 文件、284 项测试通过，两端类型检查/构建及 ESLint 无错误。恢复根 `/403`、护理员从根入口进入手机端，手机根登录默认进入 `/mobile/`；`/login?view=admin` 可保留管理端。HTML 入口关闭缓存和条件 304，哈希资源缓存保留；重复 location 安全头，避免 Nginx add_header 继承失效。公网主管登录、刷新、旧错误页、AI 页目录及工作台真实任务加载通过；两种手机浏览器标识模拟不等同实际手机引擎验收。最新源码和网页包在 `/root/hulaozhijiao-release-20261020-05-entry-recovery`，网页/Nginx 备份在其中 `rollback/`。该次仅更新网页和 Nginx，不重启后端、不变更数据或账号，未重复收费 AI 验收。
 
 - 代码：`/opt/hulaozhijiao/app/backend`
 - Python：`/opt/hulaozhijiao-venv`
@@ -13,6 +17,7 @@
 - 管理网页：`/opt/hulaozhijiao/web/admin`，公网 `/`
 - 手机网页：`/opt/hulaozhijiao/web/mobile`，公网 `/mobile/`
 - 对外 API：`/api/v1`，由 Nginx 转发
+- 目前实际启用的养老域名 Nginx 配置：`/etc/nginx/sites-available/hulaozhijiao`；更新前检查sites-enabled链接，不要按域名猜配置文件，否则可能重复定义限流区。
 
 本次用户明确授权将 `https://99211314.xyz/` 原站入口替换为养老系统，继续使用现有有效 HTTPS 证书。`activate_nginx.py` 先备份 `/etc/nginx/sites-available/99211314.xyz` 为同目录的 `99211314.xyz.pre-hulaozhijiao`，仅移走指定域名，保留原应用进程及其他域名；`nginx -t` 成功后才 reload。HTTP 和 IP 请求重定向到 HTTPS 域名。
 
@@ -24,7 +29,7 @@
 
 验证：`python backend/deploy/verify.py`；真实 AI 调用就绪后增加 `--ai`。检查 `systemctl status hulaozhijiao`、`journalctl -u hulaozhijiao`。公网另验证首页、手机页面深链、静态资源和健康检查。
 
-当前前端为独立演示骨架，大部分业务通过 localStorage 演示，部署不代表全业务接口已联调。真实数据投入前应配置 HTTPS、细化老人级授权、完善业务接口与数据备份机制。没有 Android 构建产物时，手机网页不等于 APK。
+当前两端有可写业务表单；老人/床位/入住、评估/计划、AI 记录/交班/质检、记忆/核验、事件整改、家属授权/简报/反馈和统计已接入。未穷举每个参数组合，附件、独立补充交班及推送等仍未实现。手机网页不等于 APK。
 
 ## v4更新、备份及恢复
 
@@ -34,7 +39,7 @@
 
 手动恢复：停服后，在与服务一致的DATA_DIR环境下运行 `scripts/backup_json.py --restore <当前版本备份的绝对路径> --confirm-service-stopped`，检查结果并重新启动。恢复保留当前users集合及密码散列，且先备份原数据；不会把旧账号密码复活。对于v1/v2/v3历史备份应先在隔离目录迁移副本，禁止直接覆盖v4文件。
 
-0.3.3代码要求schema v4，迁移会新增空change_reviews集合；v1/v2还会补齐care_memories等此前新增集合，保留原有数据与未知扩展字段。不可仅替换Python文件后直接重启旧v1/v2/v3数据。迁移脚本会备份，但回滚时仍需同时还原旧代码和对应旧schema文件。新增核验队列和记忆接口的联调流程见上级CHANGE_REVIEW_API.md和MEMORY_API.md。本次本地开发不代表已执行服务器迁移或部署。
+0.3.3代码要求schema v4，迁移会新增空change_reviews集合；v1/v2还会补齐care_memories等此前新增集合，保留原有数据与未知扩展字段。不可仅替换Python文件后直接重启旧v1/v2/v3数据。迁移脚本会备份，但回滚时仍需同时还原旧代码和对应旧schema文件。新增核验队列和记忆接口的联调流程见上级CHANGE_REVIEW_API.md和MEMORY_API.md。以上为历史 schema 迁移说明；当前已为 schema4，0.4.1 更新不执行迁移。
 
 备份和恢复流程有自动测试；部署验证只在隔离副本演练恢复，不回滚在线业务。当前备份在同一台服务器，未配置异地复制或自动清理。测试和脚本默认只使用虚构数据。
 
@@ -57,7 +62,7 @@
 
 输出包含JUnit报告、HTTP断言、真实输出、网络元数据和汇总；脚本前后只对线上store计算文件摘要并比对，不将其作为测试资料。待验Nginx模板只执行独立`nginx -t`。证据留在受控临时目录，不提交Git；真实厂商/独立机构验证的边界见上级evaluation/README.md。
 
-生产APP_ENV=production/prod时，启动拒绝默认/不足32字符的SECRET_KEY、Mock提供方和Mock自动降级；AI_PROVIDER拼写错误也拒绝启动。新增AI上下文、交班摘要和质检location已加Nginx限流模板，并通过服务器隔离nginx -t；未reload，不代表线上配置已生效。正式更新配置仍须服务器nginx -t成功后reload。
+生产APP_ENV=production/prod时，启动拒绝默认/不足32字符的SECRET_KEY、Mock提供方和Mock自动降级；AI_PROVIDER拼写错误也拒绝启动。新增AI上下文、交班摘要和质检location已加Nginx限流模板，且现有线上配置已包含这些路径；验收脚本本身只做隔离 nginx -t，不执行 reload。后续配置修改仍须服务器 nginx -t 成功后 reload。
 
 ## 在线语音识别
 

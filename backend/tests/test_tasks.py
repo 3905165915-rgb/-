@@ -48,5 +48,25 @@ def test_staff_lookup_excludes_credentials_and_family(api):
     assert result.status_code == 200
     assert {row['id'] for row in result.json()} == {'staff', 'other', 'manager'}
     assert all(set(row) == {'id', 'display_name', 'role'} for row in result.json())
-    assert client.get('/api/v1/staff', headers=headers()).status_code == 403
+    caregiver_result = client.get('/api/v1/staff', headers=headers())
+    assert caregiver_result.status_code == 200
+    assert caregiver_result.json() == result.json()
+    assert client.get('/api/v1/staff/directory', headers=headers()).status_code == 403
     assert client.get('/api/v1/staff', headers=headers('family')).status_code == 403
+
+
+def test_caregiver_transfer_retries_replay_without_transferring_twice(api, manual_payload):
+    client, store, headers = api
+    item = task(api, manual_payload)
+    url = f'/api/v1/tasks/{item["id"]}/transition'
+    body = {'action': 'transfer', 'expected_revision': 1, 'assigned_to': 'other', 'note': '同班交由同事负责'}
+    auth = {**headers(), 'Idempotency-Key': 'transfer-retry'}
+    first = client.post(url, json=body, headers=auth)
+    assert first.status_code == 200
+    assert client.post(url, json=body, headers=auth).json() == first.json()
+    assert client.post(url, json={**body, 'note': '不同内容'}, headers=auth).status_code == 409
+    assert client.post(url, json=body, headers=headers()).status_code == 403
+    assert client.post(url, json=body, headers={**headers('other'), 'Idempotency-Key': 'transfer-retry'}).status_code == 409
+    assert len([row for row in store.read()['audit_logs'] if row['action'] == 'task_transfer']) == 1
+    store.mutate(lambda data: data['users'][0].update(active=False))
+    assert client.post(url, json=body, headers=auth).status_code == 401

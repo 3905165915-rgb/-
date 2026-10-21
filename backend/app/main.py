@@ -13,7 +13,7 @@ from app.core.config import settings
 from app.schemas.api import HealthResponse
 from app.storage.json_store import CURRENT_SCHEMA_VERSION, JsonStore
 from app.services.workflow import DomainError
-from app.api.routes import family, incidents, reports
+from app.api.routes import family, incidents, reports, insights
 
 
 @asynccontextmanager
@@ -29,7 +29,7 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title="护老智交 Backend", version="0.4.0", lifespan=lifespan)
+app = FastAPI(title="护老智交 Backend", version="0.4.2", lifespan=lifespan)
 
 
 @app.middleware('http')
@@ -86,3 +86,4 @@ app.include_router(planning.router, prefix="/api/v1")
 app.include_router(family.router, prefix="/api/v1")
 app.include_router(incidents.router, prefix="/api/v1")
 app.include_router(reports.router, prefix="/api/v1")
+app.include_router(insights.router, prefix="/api/v1")

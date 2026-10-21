@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import hashlib
+import json
+
 from pydantic import ValidationError
 
 from app.models.entities import AIDraft, CareRecord, CareTask
@@ -72,7 +75,24 @@ def confirm(store: JsonStore, draft_id: str, user_id: str, observations, candida
         current_staff(data, user_id, role)
         draft = find(data, 'ai_drafts', draft_id, 'draft_not_found')
         editable(data, draft, user_id, role)
+        values = observations if observations is not None else draft.get('observations', [])
+        if not values or any(not isinstance(value, str) or not value.strip() or len(value) > 5000 for value in values) or len(values) > 50:
+            raise DomainError('observations_required', 422)
+        proposed = candidates if candidates is not None else draft.get('task_candidates', [])
+        if len(proposed) > 50:
+            raise DomainError('too_many_task_candidates', 422)
+        try:
+            normalized = [TaskCandidate.model_validate(row).model_dump(mode='json', include={
+                'title', 'due_at', 'assigned_to', 'condition', 'due_text'}) for row in proposed]
+        except ValidationError as exc:
+            raise DomainError('invalid_task_candidate', 422) from exc
+        fingerprint = hashlib.sha256(json.dumps({'observations': values, 'task_candidates': normalized},
+                                    sort_keys=True, ensure_ascii=False).encode()).hexdigest()
         if draft['status'] == 'confirmed':
+            # Compare the original confirmation, never mutable records/tasks. Older
+            # confirmations without this fingerprint must be inspected, not guessed.
+            if draft.get('confirmation_fingerprint') != fingerprint:
+                raise DomainError('draft_already_confirmed_refresh_record')
             record = next((item for item in data['care_records'] if item.get('source_draft_id') == draft_id), None)
             if record is None:
                 raise DomainError('confirmed_draft_has_no_record')
@@ -88,18 +108,15 @@ def confirm(store: JsonStore, draft_id: str, user_id: str, observations, candida
         open_shift(data, draft.get('shift_id'), user_id, role)
         from app.services.assistant_service import validate_draft_context
         validate_draft_context(data, draft)
-        values = observations if observations is not None else draft.get('observations', [])
-        if not values or any(not isinstance(value, str) or not value.strip() or len(value) > 5000 for value in values) or len(values) > 50:
-            raise DomainError('observations_required', 422)
         record = CareRecord(
             id=identifier('REC'), elder_id=draft['elder_id'], shift_id=draft.get('shift_id'),
             admission_id=elder.get('current_admission_id'),
             raw_text=draft['raw_text'], observations=values, created_by=user_id,
             source_draft_id=draft_id, created_at=now(), updated_at=now(),
         )
-        tasks = create_tasks(data, record, candidates if candidates is not None else draft.get('task_candidates', []), user_id, role)
+        tasks = create_tasks(data, record, normalized, user_id, role)
         data['care_records'].append(record.model_dump())
-        draft.update(status='confirmed', confirmed_at=now(), confirmed_by=user_id)
+        draft.update(status='confirmed', confirmed_at=now(), confirmed_by=user_id, confirmation_fingerprint=fingerprint)
         audit(data, 'confirm_ai_draft', draft_id, user_id, elder_id=record.elder_id, record_id=record.id,
               detail='人工确认AI草稿', observations=values)
         return record, tasks

@@ -95,8 +95,10 @@ def transition(store: JsonStore, task_id: str, payload: TaskTransitionRequest, u
     def mutate(data):
         current_staff(data, user_id, role)
         item = find(data, 'care_tasks', task_id, 'task_not_found')
-        actor_can_execute(item, user_id, role)
         def operation():
+            # A successful transfer changes ownership. An identical retry by its
+            # original actor must replay the saved result before this check.
+            actor_can_execute(item, user_id, role)
             if payload.expected_revision != item.get('revision', 1):
                 raise DomainError('stale_revision')
             if item['status'] in {'completed', 'cancelled'}:

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Query
-from app.api.deps import ManagementUser, Store
+from app.api.deps import ManagementUser, StaffUser, Store
 from app.schemas.facility import StaffCreate, StaffUpdate, StaffPasswordReset
 from app.services import staff_service
 
@@ -7,7 +7,7 @@ router = APIRouter(prefix='/staff', tags=['staff'])
 
 
 @router.get('')
-def listing(_: ManagementUser, store: Store, limit: int = Query(100, ge=1, le=200), offset: int = Query(0, ge=0)):
+def listing(_: StaffUser, store: Store, limit: int = Query(100, ge=1, le=200), offset: int = Query(0, ge=0)):
     """Minimal safe lookup for shift members and task assignees; no credentials."""
     return [{'id': row['id'], 'display_name': row['display_name'], 'role': row['role']}
             for row in store.read()['users']

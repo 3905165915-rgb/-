@@ -99,6 +99,48 @@ def test_concurrent_confirmation_creates_one_record_and_task(api):
     assert len(store.read()['care_records']) == len(store.read()['care_tasks']) == 1
 
 
+def test_confirm_retry_rejects_changed_observations_and_tasks(api):
+    client, store, headers = api
+    draft = client.post('/api/v1/records/extract', json={
+        'elder_id': 'E1', 'text': '午餐吃了一半，请联系家属。'}, headers=headers()).json()
+    url = f'/api/v1/records/{draft["id"]}/confirm'
+    body = {'observations': ['午餐吃了一半'], 'task_candidates': [{'title': '联系家属'}]}
+    first = client.post(url, json=body, headers=headers())
+    assert first.status_code == 200
+    assert client.post(url, json=body, headers=headers()).json() == first.json()
+    for change in [{'observations': ['午餐吃了六成']}, {'task_candidates': []},
+                   {'task_candidates': [{'title': '联系家属', 'condition': '本人同意'}]}]:
+        result = client.post(url, json={**body, **change}, headers=headers())
+        assert result.status_code == 409
+        assert result.json()['detail'] == 'draft_already_confirmed_refresh_record'
+    assert len(store.read()['care_records']) == len(store.read()['care_tasks']) == 1
+
+
+def test_confirm_retry_uses_original_request_after_later_record_correction(api):
+    client, _, headers = api
+    draft = client.post('/api/v1/records/extract', json={'elder_id': 'E1', 'text': '午餐吃了一半'}, headers=headers()).json()
+    url = f'/api/v1/records/{draft["id"]}/confirm'
+    body = {'observations': ['午餐吃了一半'], 'task_candidates': []}
+    first = client.post(url, json=body, headers=headers()).json()
+    correction = client.post(f'/api/v1/records/{first["record"]["id"]}/corrections', json={
+        'observations': ['午餐吃了六成'], 'reason': '人工复核', 'expected_revision': 1}, headers=headers())
+    assert correction.status_code == 200
+    replay = client.post(url, json=body, headers=headers())
+    assert replay.status_code == 200 and replay.json()['record']['revision'] == 2
+    assert client.post(url, json={**body, 'observations': ['午餐吃了六成']}, headers=headers()).status_code == 409
+
+
+def test_legacy_confirmed_draft_without_request_snapshot_requires_inspection(api):
+    client, store, headers = api
+    draft = client.post('/api/v1/records/extract', json={'elder_id': 'E1', 'text': '午餐吃了一半'}, headers=headers()).json()
+    url = f'/api/v1/records/{draft["id"]}/confirm'
+    body = {'observations': ['午餐吃了一半'], 'task_candidates': []}
+    assert client.post(url, json=body, headers=headers()).status_code == 200
+    store.mutate(lambda data: data['ai_drafts'][0].pop('confirmation_fingerprint'))
+    assert client.post(url, json=body, headers=headers()).status_code == 409
+    assert len(client.get('/api/v1/records', headers=headers()).json()) == 1
+
+
 def test_version_one_upgrade_preserves_data_and_original_backup(tmp_path):
     data = {key: value for key, value in EMPTY_STORE.items() if key not in {'quality_checks', 'idempotency_keys', 'care_memories', 'change_reviews'}}
     data['schema_version'] = 1
