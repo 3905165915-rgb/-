@@ -7,6 +7,7 @@ import {
   RefreshCw,
   SlidersHorizontal,
   X,
+  Plus,
 } from 'lucide-vue-next'
 import { resolveStatus, taskStatusMeta } from '@hulao/shared'
 import { useTasks, useElders } from '../../services/data'
@@ -71,6 +72,7 @@ watch(filtered, () => {
     <div class="workbench-heading surface-band">
       <div class="page-title-row">
         <h1>护理工作台</h1>
+        <RouterLink to="/tasks/new" class="task-create-link"><Plus :size="18" aria-hidden="true" />新建任务</RouterLink>
         <button
           type="button"
           class="icon-button"
@@ -343,3 +345,6 @@ watch(filtered, () => {
     </van-popup>
   </section>
 </template>
+<style scoped>
+.task-create-link { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; font-size: 14px; color: #1767cf; white-space: nowrap; }
+</style>

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+const serverWorkflow = ['api'].includes(import.meta.env.VITE_APP_MODE || 'api')
+import WorkflowPanel from '@hulao/shared/workflow'
 import { ref, watch } from 'vue'
 import {
   onBeforeRouteLeave,
@@ -57,11 +59,18 @@ async function leave() {
     return false
   }
 }
-onBeforeRouteLeave(leave)
-onBeforeRouteUpdate(leave)
+onBeforeRouteLeave(() => (mode === 'api' ? true : leave()))
+onBeforeRouteUpdate(() => (mode === 'api' ? true : leave()))
 </script>
 <template>
-  <section class="handover-page editor-page">
+  <WorkflowPanel
+    v-if="serverWorkflow"
+    group="handovers"
+    title="交接班与AI摘要"
+    :context="{}"
+    initial-action="/handovers"
+  />
+  <section v-else class="handover-page editor-page">
     <h1>交接班</h1>
     <van-field
       v-model="inputShift"
@@ -78,10 +87,7 @@ onBeforeRouteUpdate(leave)
         </van-button>
       </template>
     </van-field>
-    <div
-      v-if="mode === 'demo'"
-      class="action-row"
-    >
+    <div v-if="mode === 'demo'" class="action-row">
       <van-button
         v-for="name in [
           ...new Set(
@@ -99,38 +105,20 @@ onBeforeRouteUpdate(leave)
       :loading="tasks.isPending.value"
       :error="tasks.error.value"
       @retry="tasks.refetch()"
-    /><van-empty
-      v-if="!shift"
-      description="请选择或输入班次编号"
-    />
+    /><van-empty v-if="!shift" description="请选择或输入班次编号" />
     <template v-else>
-      <p class="muted">
-        班次编号：{{ shift }}
-      </p>
-      <van-tabs
-        v-model:active="tab"
-        :lazy-render="false"
-      >
-        <van-tab
-          title="交班"
-          name="send"
-        >
+      <p class="muted">班次编号：{{ shift }}</p>
+      <van-tabs v-model:active="tab" :lazy-render="false">
+        <van-tab title="交班" name="send">
           <HandoverEditor
             ref="editorRef"
             :shift-id="shift"
             :tasks="tasks.error.value ? [] : (tasks.data.value ?? [])"
             :source-writable="!tasks.isPending.value && !tasks.error.value"
-          />
-        </van-tab><van-tab
-          title="接班"
-          name="receive"
-        >
+          /> </van-tab
+        ><van-tab title="接班" name="receive">
           <div class="action-row">
-            <van-button
-              size="small"
-              icon="replay"
-              @click="handover.refetch()"
-            >
+            <van-button size="small" icon="replay" @click="handover.refetch()">
               刷新接班事项
             </van-button>
           </div>

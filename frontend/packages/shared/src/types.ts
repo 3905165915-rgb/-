@@ -11,7 +11,7 @@ export interface Elder {
   name: string
   bedLabel: string
   age?: number
-  status: '入住' | '外出' | '离院'
+  status: '待入住' | '入住' | '外出' | '离院'
   risk?: '低' | '中' | '高'
   contact?: string
   notes?: string
@@ -38,6 +38,8 @@ export interface RecordDraft {
   evidence: string[]
   warnings: string[]
   status: AiDraftStatus
+  provider?: string
+  taskCandidates?: { title: string; [key: string]: unknown }[]
 }
 
 export interface HandoverItem {

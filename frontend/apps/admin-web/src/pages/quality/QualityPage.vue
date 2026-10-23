@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import UnsupportedPreview from '../../components/UnsupportedPreview.vue'
+import WorkflowPanel from '@hulao/shared/workflow'
 </script>
 <template>
-  <UnsupportedPreview
-    title="质检台"
-    kind="quality"
-  />
+  <section>
+    <h1>规则与AI质检</h1>
+    <WorkflowPanel group="quality" />
+  </section>
 </template>

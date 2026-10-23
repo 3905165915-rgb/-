@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import WorkflowPanel from '@hulao/shared/workflow'
 import { RefreshCw } from 'lucide-vue-next'
 import { useFamilyCases } from '../../services/data'
 import QueryFeedback from '../../components/QueryFeedback.vue'
@@ -16,10 +17,7 @@ const cases = useFamilyCases()
         :loading="cases.isFetching.value"
         @click="cases.refetch()"
       >
-        <RefreshCw
-          :size="18"
-          aria-hidden="true"
-        />
+        <RefreshCw :size="18" aria-hidden="true" />
       </el-button>
     </div>
     <div class="data-section">
@@ -36,25 +34,16 @@ const cases = useFamilyCases()
           prop="subject"
           label="诉求"
           min-width="200"
-        /><el-table-column
-          label="状态"
-          min-width="100"
-        >
+        /><el-table-column label="状态" min-width="100">
           <template #default="{ row }">
-            <StatusLabel
-              :status="row.status"
-              kind="family"
-            />
-          </template>
-        </el-table-column><el-table-column
-          prop="reply"
-          label="公开回复"
-          min-width="280"
-        />
+            <StatusLabel :status="row.status" kind="family" />
+          </template> </el-table-column
+        ><el-table-column prop="reply" label="公开回复" min-width="280" />
       </el-table>
     </div>
     <p class="muted">
-      动态摘要与提交问题暂未接入。
+      在下方新建家属账号、授权老人、编写并审核简报，以及回复家属问题。
     </p>
+    <WorkflowPanel group="family" title="家属账号、授权与服务沟通" />
   </section>
 </template>

@@ -1,0 +1,330 @@
+.workflow-panel {
+  --wf-canvas: #f5f7f8;
+  --wf-surface: #fff;
+  --wf-ink: #20282e;
+  --wf-muted: #5f6b73;
+  --wf-border: #dce3e7;
+  --wf-brand: #1767cf;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  margin: 24px 0;
+  color: var(--wf-ink);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  min-width: 0;
+  max-width: 100%;
+}
+.workflow-panel,
+.workflow-panel * {
+  box-sizing: border-box;
+  letter-spacing: 0;
+}
+.wf-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.wf-header > * {
+  min-width: 0;
+  max-width: 100%;
+}
+.workflow-panel h2 {
+  font-size: 20px;
+  margin: 0 0 14px;
+}
+.workflow-panel h3 {
+  font-size: 17px;
+  margin: 14px 0;
+}
+.wf-header h2 {
+  margin: 0;
+}
+.wf-actions,
+.wf-toolbar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 12px 0;
+}
+.workflow-panel button,
+.workflow-panel label.wf-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+  cursor: pointer;
+  border-radius: 6px;
+  padding: 8px 12px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  min-width: 0;
+  min-height: 44px;
+  max-width: 100%;
+  text-align: center;
+}
+.workflow-panel :is(button, input, select, textarea):disabled {
+  cursor: not-allowed;
+  opacity: 1;
+  background: var(--wf-canvas);
+  color: var(--wf-muted);
+  border-color: #b8c4cc;
+}
+.wf-action,
+.wf-secondary {
+  border: 1px solid var(--wf-border);
+  background: var(--wf-surface);
+  color: var(--wf-ink);
+}
+.wf-action:not(:disabled):not(.selected):hover,
+.wf-secondary:not(:disabled):hover {
+  border-color: var(--wf-brand);
+  color: var(--wf-brand);
+  background: var(--wf-canvas);
+}
+.wf-action.selected,
+.wf-primary {
+  border: 1px solid var(--wf-brand);
+  background: var(--wf-brand);
+  color: #fff;
+}
+.wf-primary:not(:disabled):hover {
+  background: #1252a6;
+  border-color: #1252a6;
+}
+.workflow-panel :is(button, a, input, select, textarea, summary):focus-visible {
+  outline: 2px solid var(--wf-brand);
+  outline-offset: 3px;
+}
+.wf-form {
+  background: transparent;
+  padding: 16px 0;
+  border: 0;
+  border-top: 1px solid var(--wf-border);
+  border-bottom: 1px solid var(--wf-border);
+  border-radius: 0;
+}
+.wf-inputs {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.wf-fieldset {
+  border: 0;
+  border-top: 1px solid var(--wf-border);
+  border-radius: 0;
+  padding: 12px 0;
+  margin: 16px 0;
+  min-width: 0;
+}
+.wf-fieldset .wf-fieldset {
+  border-top: 0;
+  border-left: 2px solid var(--wf-border);
+  padding-left: 12px;
+}
+.wf-fieldset legend {
+  padding: 0 8px 0 0;
+  font-size: 14px;
+  font-weight: 600;
+  max-width: 100%;
+  white-space: normal;
+}
+.wf-field {
+  display: grid;
+  grid-template-columns: minmax(120px, 180px) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  margin: 12px 0;
+  line-height: 1.6;
+}
+.wf-field > * {
+  min-width: 0;
+  max-width: 100%;
+}
+.wf-field > span {
+  padding-top: 9px;
+}
+.wf-field input,
+.wf-field select,
+.wf-field textarea {
+  font: inherit;
+  font-size: 16px;
+  border: 1px solid #b8c4cc;
+  border-radius: 6px;
+  padding: 9px;
+  background: var(--wf-surface);
+  color: var(--wf-ink);
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  max-width: 100%;
+}
+.wf-field :is(input, textarea)::placeholder {
+  color: var(--wf-muted);
+  opacity: 1;
+}
+.wf-field :is(input, textarea)[readonly] {
+  background: var(--wf-canvas);
+}
+.wf-field input[type='checkbox'] {
+  width: 22px;
+  height: 22px;
+  min-height: 22px;
+  accent-color: var(--wf-brand);
+  justify-self: start;
+}
+.wf-field textarea {
+  resize: vertical;
+}
+.wf-field b,
+.wf-error {
+  color: #be3545;
+}
+.wf-notice {
+  background: #fff6e5;
+  color: #684400;
+  border-left: 3px solid #946000;
+  padding: 12px;
+  line-height: 1.7;
+}
+.wf-success {
+  background: #edf7f2;
+  color: #14765e;
+  border-left: 3px solid #14765e;
+  padding: 12px;
+}
+.wf-error {
+  background: #fff0f1;
+  border-left: 3px solid #be3545;
+  padding: 12px;
+  overflow-wrap: anywhere;
+  line-height: 1.7;
+}
+.wf-muted {
+  color: var(--wf-muted);
+  font-size: 14px;
+  line-height: 1.7;
+}
+.wf-array-item {
+  border-left: 2px solid var(--wf-border);
+  padding: 0 12px;
+  margin: 12px 0;
+  min-width: 0;
+}
+.wf-result-item {
+  border: 0;
+  border-bottom: 1px solid var(--wf-border);
+  border-radius: 0;
+  padding: 16px 0;
+  margin: 0;
+  min-width: 0;
+}
+.wf-result-item .wf-result-item {
+  padding-left: 12px;
+  border-left: 2px solid var(--wf-border);
+}
+.wf-result-object,
+.wf-result-list {
+  min-width: 0;
+  max-width: 100%;
+}
+.wf-result-line {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  gap: 12px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--wf-border);
+  overflow-wrap: anywhere;
+}
+.wf-result-line span {
+  color: var(--wf-muted);
+  font-size: 14px;
+}
+.wf-result-line > * {
+  min-width: 0;
+  max-width: 100%;
+}
+.wf-result-line strong {
+  font-size: 14px;
+  font-weight: 500;
+  white-space: pre-wrap;
+}
+.wf-evidence {
+  background: var(--wf-canvas);
+  border-left: 2px solid var(--wf-border);
+  padding: 8px;
+}
+.wf-result-details {
+  margin: 8px 0;
+  padding: 8px 0;
+  border: 0;
+  border-top: 1px solid var(--wf-border);
+  border-radius: 0;
+  min-width: 0;
+}
+.wf-result-details summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 14px;
+  min-height: 44px;
+  padding: 10px 0;
+  overflow-wrap: anywhere;
+}
+.wf-result-details summary::marker {
+  color: var(--wf-muted);
+}
+.wf-result-scalar {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.wf-results {
+  margin-top: 24px;
+  min-width: 0;
+  max-width: 100%;
+}
+.wf-select-row {
+  font-size: 14px;
+}
+.wf-results .wf-result-item:nth-child(n + 21) {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 150px;
+}
+@media (max-width: 768px) {
+  .workflow-panel {
+    margin: 16px 0;
+  }
+  .wf-form {
+    padding: 12px 0;
+  }
+  .wf-field {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+  .wf-field > span {
+    padding-top: 0;
+  }
+  .wf-result-line {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+  .wf-action {
+    flex: 1 1 128px;
+  }
+  .wf-fieldset {
+    padding: 12px 0;
+  }
+  .wf-result-details {
+    padding: 8px 0;
+  }
+  .wf-toolbar .wf-primary {
+    width: 100%;
+  }
+}

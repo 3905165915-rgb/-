@@ -1,0 +1,6832 @@
+{
+  "schemas": {
+    "AIDraft": {
+      "properties": {
+        "id": {
+          "type": "string",
+          "title": "Id"
+        },
+        "elder_id": {
+          "type": "string",
+          "title": "Elder Id"
+        },
+        "shift_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Shift Id"
+        },
+        "raw_text": {
+          "type": "string",
+          "title": "Raw Text"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending_review", "confirmed", "rejected", "failed"],
+          "title": "Status",
+          "default": "pending_review"
+        },
+        "observations": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "title": "Observations"
+        },
+        "task_candidates": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "type": "array",
+          "title": "Task Candidates"
+        },
+        "evidence": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "type": "array",
+          "title": "Evidence"
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "title": "Warnings"
+        },
+        "provider": {
+          "type": "string",
+          "title": "Provider",
+          "default": "mock"
+        },
+        "created_at": {
+          "type": "string",
+          "title": "Created At"
+        },
+        "created_by": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Created By"
+        },
+        "rejected_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Rejected At"
+        },
+        "rejected_by": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Rejected By"
+        },
+        "rejection_reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Rejection Reason"
+        },
+        "confirmed_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Confirmed At"
+        },
+        "confirmed_by": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Confirmed By"
+        },
+        "generation_kind": {
+          "type": "string",
+          "enum": ["record", "context_record"],
+          "title": "Generation Kind",
+          "default": "record"
+        },
+        "memory_candidates": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "type": "array",
+          "title": "Memory Candidates"
+        },
+        "context_notes": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "type": "array",
+          "title": "Context Notes"
+        },
+        "context_snapshot": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Context Snapshot"
+        },
+        "elder_state_snapshot": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Elder State Snapshot"
+        }
+      },
+      "type": "object",
+      "required": ["id", "elder_id", "raw_text", "created_at"],
+      "title": "AIDraft"
+    },
+    "AIReviewRequest": {
+      "properties": {
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 1.0,
+          "title": "Expected Revision"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": ["expected_revision"],
+      "title": "AIReviewRequest"
+    },
+    "AdmissionAction": {
+      "properties": {
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 1.0,
+          "title": "Expected Revision"
+        },
+        "expected_elder_revision": {
+          "type": "integer",
+          "minimum": 1.0,
+          "title": "Expected Elder Revision"
+        },
+        "action": {
+          "type": "string",
+          "enum": ["transfer", "out", "return", "discharge"],
+          "title": "Action"
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Reason"
+        },
+        "bed_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 100,
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Bed Id"
+        },
+        "expected_bed_revision": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1.0
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Expected Bed Revision"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "expected_revision",
+        "expected_elder_revision",
+        "action",
+        "reason"
+      ],
+      "title": "AdmissionAction"
+    },
+    "AdmissionCreate": {
+      "properties": {
+        "expected_elder_revision": {
+          "type": "integer",
+          "minimum": 1.0,
+          "title": "Expected Elder Revision"
+        },
+        "bed_id": {
+          "type": "string",
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Bed Id"
+        },
+        "expected_bed_revision": {
+          "type": "integer",
+          "minimum": 1.0,
+          "title": "Expected Bed Revision"
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["admit", "legacy_registration"],
+          "title": "Kind",
+          "default": "admit"
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Reason"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "expected_elder_revision",
+        "bed_id",
+        "expected_bed_revision",
+        "reason"
+      ],
+      "title": "AdmissionCreate"
+    },
+    "AssessmentCreate": {
+      "properties": {
+        "elder_id": {
+          "type": "string",
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Elder Id"
+        },
+        "template_id": {
+          "type": "string",
+          "const": "barthel_basic_v1",
+          "title": "Template Id",
+          "default": "barthel_basic_v1"
+        },
+        "scores": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "type": "object",
+          "title": "Scores"
+        },
+        "assessed_at": {
+          "type": "string",
+          "format": "date-time",
+          "title": "Assessed At"
+        },
+        "review_due_at": {
+          "type": "string",
+          "format": "date-time",
+          "title": "Review Due At"
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Note"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/components/schemas/ReviewEvidence"
+          },
+          "type": "array",
+          "maxItems": 5,
+          "minItems": 1,
+          "title": "Evidence"
+        },
+        "supersedes_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 100,
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Supersedes Id"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "elder_id",
+        "scores",
+        "assessed_at",
+        "review_due_at",
+        "note",
+        "evidence"
+      ],
+      "title": "AssessmentCreate"
+    },
+    "AssessmentReview": {
+      "properties": {
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 1.0,
+          "title": "Expected Revision"
+        },
+        "action": {
+          "type": "string",
+          "enum": ["confirm", "reject", "retire"],
+          "title": "Action"
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Reason"
+        },
+        "care_level_label": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 100,
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Care Level Label"
+        },
+        "care_level_basis": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 2000,
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Care Level Basis"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": ["expected_revision", "action", "reason"],
+      "title": "AssessmentReview"
+    },
+    "BedCreate": {
+      "properties": {
+        "room": {
+          "type": "string",
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Room"
+        },
+        "label": {
+          "type": "string",
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Label"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": ["room", "label"],
+      "title": "BedCreate"
+    },
+    "BedUpdate": {
+      "properties": {
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 1.0,
+          "title": "Expected Revision"
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Reason"
+        },
+        "room": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 100,
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Room"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 100,
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Label"
+        },
+        "enabled": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Enabled"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": ["expected_revision", "reason"],
+      "title": "BedUpdate"
+    },
+    "BindingCreate": {
+      "properties": {
+        "elder_id": {
+          "type": "string",
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Elder Id"
+        },
+        "admission_id": {
+          "type": "string",
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Admission Id"
+        },
+        "family_id": {
+          "type": "string",
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Family Id"
+        },
+        "relationship": {
+          "type": "string",
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Relationship"
+        },
+        "consent_reference": {
+          "type": "string",
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Consent Reference"
+        },
+        "scopes": {
+          "items": {
+            "type": "string",
+            "enum": ["summary", "feedback"]
+          },
+          "type": "array",
+          "maxItems": 2,
+          "minItems": 1,
+          "title": "Scopes"
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time",
+          "title": "Expires At"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "elder_id",
+        "admission_id",
+        "family_id",
+        "relationship",
+        "consent_reference",
+        "scopes",
+        "expires_at"
+      ],
+      "title": "BindingCreate"
+    },
+    "CareRecord": {
+      "properties": {
+        "id": {
+          "type": "string",
+          "title": "Id"
+        },
+        "elder_id": {
+          "type": "string",
+          "title": "Elder Id"
+        },
+        "admission_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Admission Id"
+        },
+        "shift_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Shift Id"
+        },
+        "raw_text": {
+          "type": "string",
+          "title": "Raw Text"
+        },
+        "observations": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "title": "Observations"
+        },
+        "created_by": {
+          "type": "string",
+          "title": "Created By"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["draft", "confirmed", "corrected"],
+          "title": "Status",
+          "default": "confirmed"
+        },
+        "source_draft_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Source Draft Id"
+        },
+        "created_at": {
+          "type": "string",
+          "title": "Created At"
+        },
+        "happened_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Happened At"
+        },
+        "updated_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Updated At"
+        },
+        "revision": {
+          "type": "integer",
+          "title": "Revision",
+          "default": 1
+        },
+        "corrections": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "type": "array",
+          "title": "Corrections"
+        }
+      },
+      "type": "object",
+      "required": ["id", "elder_id", "raw_text", "created_by", "created_at"],
+      "title": "CareRecord"
+    },
+    "CareTask": {
+      "properties": {
+        "id": {
+          "type": "string",
+          "title": "Id"
+        },
+        "elder_id": {
+          "type": "string",
+          "title": "Elder Id"
+        },
+        "title": {
+          "type": "string",
+          "title": "Title"
+        },
+        "due_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Due At"
+        },
+        "assigned_to": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Assigned To"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "in_progress",
+            "completed",
+            "not_done",
+            "transferred",
+            "cancelled",
+            "overdue"
+          ],
+          "title": "Status",
+          "default": "pending"
+        },
+        "source_record_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Source Record Id"
+        },
+        "continuity_key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Continuity Key"
+        },
+        "result": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Result"
+        },
+        "updated_at": {
+          "type": "string",
+          "title": "Updated At"
+        },
+        "shift_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Shift Id"
+        },
+        "condition": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Condition"
+        },
+        "due_text": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Due Text"
+        },
+        "created_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Created At"
+        },
+        "created_by": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Created By"
+        },
+        "completed_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Completed At"
+        },
+        "completed_by": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Completed By"
+        },
+        "reason_code": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Reason Code"
+        },
+        "revision": {
+          "type": "integer",
+          "title": "Revision",
+          "default": 1
+        },
+        "memory_references": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "type": "array",
+          "title": "Memory References"
+        },
+        "condition_verification": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Condition Verification"
+        },
+        "source_plan_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Source Plan Id"
+        },
+        "source_plan_revision": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Source Plan Revision"
+        },
+        "plan_item_key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Plan Item Key"
+        },
+        "service_date": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Service Date"
+        },
+        "scheduled_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Scheduled At"
+        },
+        "occurrence_key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Occurrence Key"
+        },
+        "source_plan_snapshot": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Source Plan Snapshot"
+        },
+        "replaces_task_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Replaces Task Id"
+        }
+      },
+      "type": "object",
+      "required": ["id", "elder_id", "title", "updated_at"],
+      "title": "CareTask"
+    },
+    "ChangeAcknowledgement": {
+      "properties": {
+        "event_ids": {
+          "items": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1
+          },
+          "type": "array",
+          "maxItems": 200,
+          "minItems": 1,
+          "title": "Event Ids"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": ["event_ids"],
+      "title": "ChangeAcknowledgement"
+    },
+    "ChangeAssignRequest": {
+      "properties": {
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 1.0,
+          "title": "Expected Revision"
+        },
+        "expected_fingerprint": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Expected Fingerprint"
+        },
+        "assigned_to": {
+          "type": "string",
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Assigned To"
+        },
+        "due_at": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Due At"
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Reason"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "expected_revision",
+        "expected_fingerprint",
+        "assigned_to",
+        "reason"
+      ],
+      "title": "ChangeAssignRequest"
+    },
+    "ChangeReviewRequest": {
+      "properties": {
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 1.0,
+          "title": "Expected Revision"
+        },
+        "expected_fingerprint": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Expected Fingerprint"
+        },
+        "decision": {
+          "type": "string",
+          "enum": ["accept", "return"],
+          "title": "Decision"
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Note"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "expected_revision",
+        "expected_fingerprint",
+        "decision",
+        "note"
+      ],
+      "title": "ChangeReviewRequest"
+    },
+    "ChangeReviewResponse": {
+      "properties": {
+        "id": {
+          "type": "string",
+          "title": "Id"
+        },
+        "elder_id": {
+          "type": "string",
+          "title": "Elder Id"
+        },
+        "task_id": {
+          "type": "string",
+          "title": "Task Id"
+        },
+        "reference_id": {
+          "type": "string",
+          "title": "Reference Id"
+        },
+        "memory_id": {
+          "type": "string",
+          "title": "Memory Id"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "assigned", "awaiting_review", "closed"],
+          "title": "Status"
+        },
+        "revision": {
+          "type": "integer",
+          "title": "Revision"
+        },
+        "assigned_to": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Assigned To"
+        },
+        "due_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Due At"
+        },
+        "created_by": {
+          "type": "string",
+          "title": "Created By"
+        },
+        "created_at": {
+          "type": "string",
+          "title": "Created At"
+        },
+        "updated_at": {
+          "type": "string",
+          "title": "Updated At"
+        },
+        "closed_by": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Closed By"
+        },
+        "closed_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Closed At"
+        },
+        "initial_snapshot": {
+          "additionalProperties": true,
+          "type": "object",
+          "title": "Initial Snapshot"
+        },
+        "observations": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "type": "array",
+          "title": "Observations"
+        },
+        "submissions": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "type": "array",
+          "title": "Submissions"
+        },
+        "reviews": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "type": "array",
+          "title": "Reviews"
+        },
+        "current": {
+          "additionalProperties": true,
+          "type": "object",
+          "title": "Current"
+        },
+        "fingerprint": {
+          "type": "string",
+          "title": "Fingerprint"
+        },
+        "overdue": {
+          "type": "boolean",
+          "title": "Overdue"
+        }
+      },
+      "type": "object",
+      "required": [
+        "id",
+        "elder_id",
+        "task_id",
+        "reference_id",
+        "memory_id",
+        "status",
+        "revision",
+        "assigned_to",
+        "due_at",
+        "created_by",
+        "created_at",
+        "updated_at",
+        "closed_by",
+        "closed_at",
+        "initial_snapshot",
+        "observations",
+        "submissions",
+        "reviews",
+        "current",
+        "fingerprint",
+        "overdue"
+      ],
+      "title": "ChangeReviewResponse"
+    },
+    "ChangeScanRequest": {
+      "properties": {
+        "elder_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 100,
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Elder Id"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "title": "ChangeScanRequest"
+    },
+    "ChangeScanResponse": {
+      "properties": {
+        "as_of": {
+          "type": "string",
+          "title": "As Of"
+        },
+        "created_ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "title": "Created Ids"
+        },
+        "updated_ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "title": "Updated Ids"
+        },
+        "scanned_tasks": {
+          "type": "integer",
+          "title": "Scanned Tasks"
+        }
+      },
+      "type": "object",
+      "required": ["as_of", "created_ids", "updated_ids", "scanned_tasks"],
+      "title": "ChangeScanResponse"
+    },
+    "ChangeSubmitRequest": {
+      "properties": {
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 1.0,
+          "title": "Expected Revision"
+        },
+        "expected_fingerprint": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Expected Fingerprint"
+        },
+        "disposition": {
+          "type": "string",
+          "enum": [
+            "reference_withdrawn",
+            "reference_replaced",
+            "task_terminal",
+            "no_current_difference"
+          ],
+          "title": "Disposition"
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Note"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/components/schemas/ReviewEvidence"
+          },
+          "type": "array",
+          "maxItems": 5,
+          "minItems": 1,
+          "title": "Evidence"
+        },
+        "acknowledged_handover_ids": {
+          "items": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1
+          },
+          "type": "array",
+          "maxItems": 100,
+          "title": "Acknowledged Handover Ids"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "expected_revision",
+        "expected_fingerprint",
+        "disposition",
+        "note",
+        "evidence"
+      ],
+      "title": "ChangeSubmitRequest"
+    },
+    "ClarificationRequest": {
+      "properties": {
+        "note": {
+          "type": "string",
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Note"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": ["note"],
+      "title": "ClarificationRequest"
+    },
+    "ConditionCheckRequest": {
+      "properties": {
+        "expected_task_revision": {
+          "type": "integer",
+          "minimum": 1.0,
+          "title": "Expected Task Revision"
+        },
+        "outcome": {
+          "type": "string",
+          "enum": ["met", "not_met"],
+          "title": "Outcome"
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Note"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/components/schemas/ReviewEvidence"
+          },
+          "type": "array",
+          "maxItems": 5,
+          "minItems": 1,
+          "title": "Evidence"
+        },
+        "valid_until": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Valid Until"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": ["expected_task_revision", "outcome", "note", "evidence"],
+      "title": "ConditionCheckRequest"
+    },
+    "ConditionClaimRequest": {
+      "properties": {
+        "expected_task_revision": {
+          "type": "integer",
+          "minimum": 1.0,
+          "title": "Expected Task Revision"
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Reason"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": ["expected_task_revision", "reason"],
+      "title": "ConditionClaimRequest"
+    },
+    "ConditionConfigureRequest": {
+      "properties": {
+        "expected_task_revision": {
+          "type": "integer",
+          "minimum": 1.0,
+          "title": "Expected Task Revision"
+        },
+        "criterion": {
+          "type": "string",
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Criterion"
+        },
+        "checker_id": {
+          "type": "string",
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Checker Id"
+        },
+        "check_due_at": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Check Due At"
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Reason"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "expected_task_revision",
+        "criterion",
+        "checker_id",
+        "reason"
+      ],
+      "title": "ConditionConfigureRequest"
+    },
+    "ContextExtractRequest": {
+      "properties": {
+        "elder_id": {
+          "type": "string",
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Elder Id"
+        },
+        "shift_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 100,
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Shift Id"
+        },
+        "scene": {
+          "type": "string",
+          "enum": [
+            "bathing",
+            "dining",
+            "activity",
+            "communication",
+            "rest",
+            "other"
+          ],
+          "title": "Scene"
+        },
+        "text": {
+          "type": "string",
+          "maxLength": 5000,
+          "minLength": 1,
+          "title": "Text"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": ["elder_id", "scene", "text"],
+      "title": "ContextExtractRequest"
+    },
+    "CorrectRecordRequest": {
+      "properties": {
+        "observations": {
+          "items": {
+            "type": "string",
+            "maxLength": 5000,
+            "minLength": 1
+          },
+          "type": "array",
+          "maxItems": 50,
+          "minItems": 1,
+          "title": "Observations"
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Reason"
+        },
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 1.0,
+          "title": "Expected Revision"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": ["observations", "reason", "expected_revision"],
+      "title": "CorrectRecordRequest"
+    },
+    "CoverageReview": {
+      "properties": {
+        "elder_id": {
+          "type": "string",
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Elder Id"
+        },
+        "service_date": {
+          "type": "string",
+          "format": "date",
+          "title": "Service Date"
+        },
+        "occurrence_key": {
+          "type": "string",
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Occurrence Key"
+        },
+        "expected_fingerprint": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Expected Fingerprint"
+        },
+        "decision": {
+          "type": "string",
+          "enum": ["needs_followup", "not_applicable", "reopen_review"],
+          "title": "Decision"
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Note"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "elder_id",
+        "service_date",
+        "occurrence_key",
+        "expected_fingerprint",
+        "decision",
+        "note"
+      ],
+      "title": "CoverageReview"
+    },
+    "Elder": {
+      "properties": {
+        "id": {
+          "type": "string",
+          "title": "Id"
+        },
+        "name": {
+          "type": "string",
+          "title": "Name"
+        },
+        "bed_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Bed Id"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "active", "out", "discharged"],
+          "title": "Status",
+          "default": "active"
+        },
+        "contact_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Contact Name"
+        },
+        "contact_phone": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Contact Phone"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Notes"
+        },
+        "revision": {
+          "type": "integer",
+          "title": "Revision",
+          "default": 1
+        },
+        "current_admission_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Current Admission Id"
+        },
+        "care_state_version": {
+          "type": "integer",
+          "title": "Care State Version",
+          "default": 0
+        },
+        "created_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Created At"
+        },
+        "updated_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Updated At"
+        }
+      },
+      "type": "object",
+      "required": ["id", "name"],
+      "title": "Elder"
+    },
+    "ElderCreate": {
+      "properties": {
+        "name": {
+          "type": "string",
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Name"
+        },
+        "contact_name": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 100,
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Contact Name"
+        },
+        "contact_phone": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 50
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Contact Phone"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 2000,
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Notes"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": ["name"],
+      "title": "ElderCreate"
+    },
+    "ElderUpdate": {
+      "properties": {
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 1.0,
+          "title": "Expected Revision"
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Reason"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 100,
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Name"
+        },
+        "contact_name": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 100,
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Contact Name"
+        },
+        "contact_phone": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 50
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Contact Phone"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 2000,
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Notes"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": ["expected_revision", "reason"],
+      "title": "ElderUpdate"
+    },
+    "ExportRequest": {
+      "properties": {
+        "include_text": {
+          "type": "boolean",
+          "title": "Include Text",
+          "default": false
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Reason"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": ["reason"],
+      "title": "ExportRequest"
+    },
+    "FamilyAccountCreate": {
+      "properties": {
+        "username": {
+          "type": "string",
+          "maxLength": 64,
+          "minLength": 3,
+          "pattern": "^[a-z0-9][a-z0-9_.-]*$",
+          "title": "Username"
+        },
+        "display_name": {
+          "type": "string",
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Display Name"
+        },
+        "role": {
+          "type": "string",
+          "const": "family",
+          "title": "Role",
+          "default": "family"
+        },
+        "password": {
+          "type": "string",
+          "format": "password",
+          "title": "Password",
+          "writeOnly": true
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": ["username", "display_name", "password"],
+      "title": "FamilyAccountCreate"
+    },
+    "FamilyAccountUpdate": {
+      "properties": {
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 1.0,
+          "title": "Expected Revision"
+        },
+        "active": {
+          "type": "boolean",
+          "title": "Active"
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Reason"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": ["expected_revision", "active", "reason"],
+      "title": "FamilyAccountUpdate"
+    },
+    "FamilyDecision": {
+      "properties": {
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 1.0,
+          "title": "Expected Revision"
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Reason"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": ["expected_revision", "reason"],
+      "title": "FamilyDecision"
+    },
+    "FeedbackCreate": {
+      "properties": {
+        "binding_id": {
+          "type": "string",
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Binding Id"
+        },
+        "text": {
+          "type": "string",
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Text"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": ["binding_id", "text"],
+      "title": "FeedbackCreate"
+    },
+    "FeedbackResponse": {
+      "properties": {
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 1.0,
+          "title": "Expected Revision"
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Reason"
+        },
+        "reply": {
+          "type": "string",
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Reply"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": ["expected_revision", "reason", "reply"],
+      "title": "FeedbackResponse"
+    },
+    "HTTPValidationError": {
+      "properties": {
+        "detail": {
+          "items": {
+            "$ref": "#/components/schemas/ValidationError"
+          },
+          "type": "array",
+          "title": "Detail"
+        }
+      },
+      "type": "object",
+      "title": "HTTPValidationError"
+    },
+    "HandoverCreateRequest": {
+      "properties": {
+        "source_shift_id": {
+          "type": "string",
+          "title": "Source Shift Id"
+        },
+        "target_shift_id": {
+          "type": "string",
+          "title": "Target Shift Id"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": ["source_shift_id", "target_shift_id"],
+      "title": "HandoverCreateRequest"
+    },
+    "HandoverReceiveRequest": {
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["received", "clarifying"],
+          "title": "Status"
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 2000,
+          "title": "Note",
+          "default": ""
+        },
+        "assigned_to": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Assigned To"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": ["status"],
+      "title": "HandoverReceiveRequest"
+    },
+    "HandoverSubmitRequest": {
+      "properties": {
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 1.0,
+          "title": "Expected Revision"
+        },
+        "summary": {
+          "type": "string",
+          "maxLength": 5000,
+          "title": "Summary",
+          "default": ""
+        },
+        "approve_ai_summary": {
+          "type": "boolean",
+          "title": "Approve Ai Summary",
+          "default": false
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": ["expected_revision"],
+      "title": "HandoverSubmitRequest"
+    },
+    "HealthResponse": {
+      "properties": {
+        "status": {
+          "type": "string",
+          "title": "Status"
+        },
+        "environment": {
+          "type": "string",
+          "title": "Environment"
+        },
+        "schema_version": {
+          "type": "integer",
+          "title": "Schema Version"
+        }
+      },
+      "type": "object",
+      "required": ["status", "environment", "schema_version"],
+      "title": "HealthResponse"
+    },
+    "IncidentCreate": {
+      "properties": {
+        "elder_id": {
+          "type": "string",
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Elder Id"
+        },
+        "admission_id": {
+          "type": "string",
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Admission Id"
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time",
+          "title": "Occurred At"
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Description"
+        },
+        "immediate_action": {
+          "type": "string",
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Immediate Action"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/components/schemas/ReviewEvidence"
+          },
+          "type": "array",
+          "maxItems": 10,
+          "minItems": 1,
+          "title": "Evidence"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "elder_id",
+        "admission_id",
+        "occurred_at",
+        "description",
+        "immediate_action",
+        "evidence"
+      ],
+      "title": "IncidentCreate"
+    },
+    "IncidentReopen": {
+      "properties": {
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 1.0,
+          "title": "Expected Revision"
+        },
+        "expected_rectification_revision": {
+          "type": "integer",
+          "minimum": 1.0,
+          "title": "Expected Rectification Revision"
+        },
+        "assigned_to": {
+          "type": "string",
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Assigned To"
+        },
+        "due_at": {
+          "type": "string",
+          "format": "date-time",
+          "title": "Due At"
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Reason"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "expected_revision",
+        "expected_rectification_revision",
+        "assigned_to",
+        "due_at",
+        "reason"
+      ],
+      "title": "IncidentReopen"
+    },
+    "IncidentTriage": {
+      "properties": {
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 1.0,
+          "title": "Expected Revision"
+        },
+        "category": {
+          "type": "string",
+          "enum": [
+            "fall",
+            "choking",
+            "pressure_injury",
+            "wandering",
+            "medication",
+            "burn",
+            "conflict",
+            "infection_concern",
+            "service_omission",
+            "other"
+          ],
+          "title": "Category"
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["low", "medium", "high"],
+          "title": "Severity"
+        },
+        "classification_basis": {
+          "type": "string",
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Classification Basis"
+        },
+        "assigned_to": {
+          "type": "string",
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Assigned To"
+        },
+        "due_at": {
+          "type": "string",
+          "format": "date-time",
+          "title": "Due At"
+        },
+        "corrective_plan": {
+          "type": "string",
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Corrective Plan"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/components/schemas/ReviewEvidence"
+          },
+          "type": "array",
+          "maxItems": 10,
+          "minItems": 1,
+          "title": "Evidence"
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Reason"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "expected_revision",
+        "category",
+        "severity",
+        "classification_basis",
+        "assigned_to",
+        "due_at",
+        "corrective_plan",
+        "evidence",
+        "reason"
+      ],
+      "title": "IncidentTriage"
+    },
+    "LoginRequest": {
+      "properties": {
+        "username": {
+          "type": "string",
+          "title": "Username"
+        },
+        "password": {
+          "type": "string",
+          "title": "Password"
+        }
+      },
+      "type": "object",
+      "required": ["username", "password"],
+      "title": "LoginRequest"
+    },
+    "LoginResponse": {
+      "properties": {
+        "access_token": {
+          "type": "string",
+          "title": "Access Token"
+        },
+        "token_type": {
+          "type": "string",
+          "title": "Token Type",
+          "default": "bearer"
+        },
+        "user_id": {
+          "type": "string",
+          "title": "User Id"
+        },
+        "role": {
+          "type": "string",
+          "title": "Role"
+        },
+        "display_name": {
+          "type": "string",
+          "title": "Display Name"
+        }
+      },
+      "type": "object",
+      "required": ["access_token", "user_id", "role", "display_name"],
+      "title": "LoginResponse"
+    },
+    "ManualRecordRequest": {
+      "properties": {
+        "elder_id": {
+          "type": "string",
+          "title": "Elder Id"
+        },
+        "shift_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Shift Id"
+        },
+        "raw_text": {
+          "type": "string",
+          "maxLength": 5000,
+          "minLength": 1,
+          "title": "Raw Text"
+        },
+        "observations": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string",
+                "maxLength": 5000,
+                "minLength": 1
+              },
+              "type": "array",
+              "maxItems": 50
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Observations"
+        },
+        "happened_at": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Happened At"
+        },
+        "task_candidates": {
+          "items": {
+            "$ref": "#/components/schemas/TaskCandidate"
+          },
+          "type": "array",
+          "maxItems": 50,
+          "title": "Task Candidates"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": ["elder_id", "raw_text"],
+      "title": "ManualRecordRequest"
+    },
+    "MemoryContextResponse": {
+      "properties": {
+        "elder_id": {
+          "type": "string",
+          "title": "Elder Id"
+        },
+        "scene": {
+          "type": "string",
+          "enum": [
+            "bathing",
+            "dining",
+            "activity",
+            "communication",
+            "rest",
+            "other"
+          ],
+          "title": "Scene"
+        },
+        "as_of": {
+          "type": "string",
+          "title": "As Of"
+        },
+        "memories": {
+          "items": {
+            "$ref": "#/components/schemas/MemoryResponse"
+          },
+          "type": "array",
+          "title": "Memories"
+        }
+      },
+      "type": "object",
+      "required": ["elder_id", "scene", "as_of", "memories"],
+      "title": "MemoryContextResponse"
+    },
+    "MemoryCreateRequest": {
+      "properties": {
+        "content": {
+          "type": "string",
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Content"
+        },
+        "category": {
+          "type": "string",
+          "enum": [
+            "stable_preference",
+            "temporary_wish",
+            "communication",
+            "observation"
+          ],
+          "title": "Category"
+        },
+        "scenes": {
+          "items": {
+            "type": "string",
+            "enum": [
+              "bathing",
+              "dining",
+              "activity",
+              "communication",
+              "rest",
+              "other"
+            ]
+          },
+          "type": "array",
+          "maxItems": 6,
+          "minItems": 1,
+          "title": "Scenes"
+        },
+        "attributed_to": {
+          "type": "string",
+          "enum": ["elder", "family", "staff", "unknown"],
+          "title": "Attributed To",
+          "default": "unknown"
+        },
+        "source_record_id": {
+          "type": "string",
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Source Record Id"
+        },
+        "source_revision": {
+          "type": "integer",
+          "minimum": 1.0,
+          "title": "Source Revision"
+        },
+        "source_field": {
+          "type": "string",
+          "enum": ["raw_text", "observations"],
+          "title": "Source Field",
+          "default": "observations"
+        },
+        "source_quote": {
+          "type": "string",
+          "maxLength": 5000,
+          "minLength": 1,
+          "title": "Source Quote"
+        },
+        "valid_from": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Valid From"
+        },
+        "expires_at": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Expires At"
+        },
+        "review_due_at": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Review Due At"
+        },
+        "elder_id": {
+          "type": "string",
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Elder Id"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "content",
+        "category",
+        "scenes",
+        "source_record_id",
+        "source_revision",
+        "source_quote",
+        "elder_id"
+      ],
+      "title": "MemoryCreateRequest"
+    },
+    "MemoryFromDraftRequest": {
+      "properties": {
+        "draft_id": {
+          "type": "string",
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Draft Id"
+        },
+        "candidate_index": {
+          "type": "integer",
+          "maximum": 9.0,
+          "minimum": 0.0,
+          "title": "Candidate Index"
+        },
+        "expected_record_revision": {
+          "type": "integer",
+          "minimum": 1.0,
+          "title": "Expected Record Revision"
+        },
+        "valid_from": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Valid From"
+        },
+        "expires_at": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Expires At"
+        },
+        "review_due_at": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Review Due At"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": ["draft_id", "candidate_index", "expected_record_revision"],
+      "title": "MemoryFromDraftRequest"
+    },
+    "MemoryResponse": {
+      "properties": {
+        "id": {
+          "type": "string",
+          "title": "Id"
+        },
+        "elder_id": {
+          "type": "string",
+          "title": "Elder Id"
+        },
+        "content": {
+          "type": "string",
+          "title": "Content"
+        },
+        "category": {
+          "type": "string",
+          "enum": [
+            "stable_preference",
+            "temporary_wish",
+            "communication",
+            "observation"
+          ],
+          "title": "Category"
+        },
+        "scenes": {
+          "items": {
+            "type": "string",
+            "enum": [
+              "bathing",
+              "dining",
+              "activity",
+              "communication",
+              "rest",
+              "other"
+            ]
+          },
+          "type": "array",
+          "title": "Scenes"
+        },
+        "attributed_to": {
+          "type": "string",
+          "enum": ["elder", "family", "staff", "unknown"],
+          "title": "Attributed To"
+        },
+        "source": {
+          "$ref": "#/components/schemas/MemorySource"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "candidate",
+            "confirmed",
+            "review_required",
+            "rejected",
+            "retired"
+          ],
+          "title": "Status"
+        },
+        "revision": {
+          "type": "integer",
+          "title": "Revision"
+        },
+        "valid_from": {
+          "type": "string",
+          "title": "Valid From"
+        },
+        "expires_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Expires At"
+        },
+        "review_due_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Review Due At"
+        },
+        "confirmed_by": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Confirmed By"
+        },
+        "confirmed_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Confirmed At"
+        },
+        "created_by": {
+          "type": "string",
+          "title": "Created By"
+        },
+        "created_at": {
+          "type": "string",
+          "title": "Created At"
+        },
+        "updated_at": {
+          "type": "string",
+          "title": "Updated At"
+        },
+        "effective": {
+          "type": "boolean",
+          "title": "Effective"
+        },
+        "source_current": {
+          "type": "boolean",
+          "title": "Source Current"
+        },
+        "review_due": {
+          "type": "boolean",
+          "title": "Review Due"
+        },
+        "blocked_reasons": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "title": "Blocked Reasons"
+        },
+        "candidate_source": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Candidate Source"
+        }
+      },
+      "type": "object",
+      "required": [
+        "id",
+        "elder_id",
+        "content",
+        "category",
+        "scenes",
+        "attributed_to",
+        "source",
+        "status",
+        "revision",
+        "valid_from",
+        "expires_at",
+        "review_due_at",
+        "confirmed_by",
+        "confirmed_at",
+        "created_by",
+        "created_at",
+        "updated_at",
+        "effective",
+        "source_current",
+        "review_due",
+        "blocked_reasons"
+      ],
+      "title": "MemoryResponse"
+    },
+    "MemoryReviewRequest": {
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": ["confirm", "request_review", "reject", "retire"],
+          "title": "Action"
+        },
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 1.0,
+          "title": "Expected Revision"
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Reason"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": ["action", "expected_revision", "reason"],
+      "title": "MemoryReviewRequest"
+    },
+    "MemoryRevisionRequest": {
+      "properties": {
+        "content": {
+          "type": "string",
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Content"
+        },
+        "category": {
+          "type": "string",
+          "enum": [
+            "stable_preference",
+            "temporary_wish",
+            "communication",
+            "observation"
+          ],
+          "title": "Category"
+        },
+        "scenes": {
+          "items": {
+            "type": "string",
+            "enum": [
+              "bathing",
+              "dining",
+              "activity",
+              "communication",
+              "rest",
+              "other"
+            ]
+          },
+          "type": "array",
+          "maxItems": 6,
+          "minItems": 1,
+          "title": "Scenes"
+        },
+        "attributed_to": {
+          "type": "string",
+          "enum": ["elder", "family", "staff", "unknown"],
+          "title": "Attributed To",
+          "default": "unknown"
+        },
+        "source_record_id": {
+          "type": "string",
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Source Record Id"
+        },
+        "source_revision": {
+          "type": "integer",
+          "minimum": 1.0,
+          "title": "Source Revision"
+        },
+        "source_field": {
+          "type": "string",
+          "enum": ["raw_text", "observations"],
+          "title": "Source Field",
+          "default": "observations"
+        },
+        "source_quote": {
+          "type": "string",
+          "maxLength": 5000,
+          "minLength": 1,
+          "title": "Source Quote"
+        },
+        "valid_from": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Valid From"
+        },
+        "expires_at": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Expires At"
+        },
+        "review_due_at": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Review Due At"
+        },
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 1.0,
+          "title": "Expected Revision"
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Reason"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "content",
+        "category",
+        "scenes",
+        "source_record_id",
+        "source_revision",
+        "source_quote",
+        "expected_revision",
+        "reason"
+      ],
+      "title": "MemoryRevisionRequest"
+    },
+    "MemorySource": {
+      "properties": {
+        "record_id": {
+          "type": "string",
+          "title": "Record Id"
+        },
+        "revision": {
+          "type": "integer",
+          "title": "Revision"
+        },
+        "field": {
+          "type": "string",
+          "enum": ["raw_text", "observations"],
+          "title": "Field"
+        },
+        "quote": {
+          "type": "string",
+          "title": "Quote"
+        },
+        "snapshot_text": {
+          "type": "string",
+          "title": "Snapshot Text"
+        },
+        "record_status": {
+          "type": "string",
+          "title": "Record Status"
+        },
+        "captured_at": {
+          "type": "string",
+          "title": "Captured At"
+        }
+      },
+      "type": "object",
+      "required": [
+        "record_id",
+        "revision",
+        "field",
+        "quote",
+        "snapshot_text",
+        "record_status",
+        "captured_at"
+      ],
+      "title": "MemorySource"
+    },
+    "PlanCreate": {
+      "properties": {
+        "elder_id": {
+          "type": "string",
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Elder Id"
+        },
+        "assessment_id": {
+          "type": "string",
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Assessment Id"
+        },
+        "expected_assessment_revision": {
+          "type": "integer",
+          "minimum": 1.0,
+          "title": "Expected Assessment Revision"
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Title"
+        },
+        "goal": {
+          "type": "string",
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Goal"
+        },
+        "starts_on": {
+          "type": "string",
+          "format": "date",
+          "title": "Starts On"
+        },
+        "ends_on": {
+          "type": "string",
+          "format": "date",
+          "title": "Ends On"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/components/schemas/PlanItem"
+          },
+          "type": "array",
+          "maxItems": 20,
+          "minItems": 1,
+          "title": "Items"
+        },
+        "supersedes_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 100,
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Supersedes Id"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "elder_id",
+        "assessment_id",
+        "expected_assessment_revision",
+        "title",
+        "goal",
+        "starts_on",
+        "ends_on",
+        "items"
+      ],
+      "title": "PlanCreate"
+    },
+    "PlanGenerate": {
+      "properties": {
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 1.0,
+          "title": "Expected Revision"
+        },
+        "service_date": {
+          "type": "string",
+          "format": "date",
+          "title": "Service Date"
+        },
+        "shift_id": {
+          "type": "string",
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Shift Id"
+        },
+        "assigned_to": {
+          "type": "string",
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Assigned To"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "expected_revision",
+        "service_date",
+        "shift_id",
+        "assigned_to"
+      ],
+      "title": "PlanGenerate"
+    },
+    "PlanItem": {
+      "properties": {
+        "key": {
+          "type": "string",
+          "maxLength": 50,
+          "minLength": 1,
+          "pattern": "^[a-z0-9_-]+$",
+          "title": "Key"
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Title"
+        },
+        "scene": {
+          "type": "string",
+          "enum": [
+            "bathing",
+            "dining",
+            "activity",
+            "communication",
+            "rest",
+            "other"
+          ],
+          "title": "Scene"
+        },
+        "instruction": {
+          "type": "string",
+          "maxLength": 1500,
+          "minLength": 1,
+          "title": "Instruction"
+        },
+        "times": {
+          "items": {
+            "type": "string",
+            "pattern": "^(?:[01][0-9]|2[0-3]):[0-5][0-9]$"
+          },
+          "type": "array",
+          "maxItems": 6,
+          "minItems": 1,
+          "title": "Times"
+        },
+        "weekdays": {
+          "items": {
+            "type": "integer",
+            "maximum": 7.0,
+            "minimum": 1.0
+          },
+          "type": "array",
+          "maxItems": 7,
+          "minItems": 1,
+          "title": "Weekdays",
+          "default": [1, 2, 3, 4, 5, 6, 7]
+        },
+        "every_n_days": {
+          "type": "integer",
+          "maximum": 30.0,
+          "minimum": 1.0,
+          "title": "Every N Days",
+          "default": 1
+        },
+        "window_minutes": {
+          "type": "integer",
+          "maximum": 240.0,
+          "minimum": 1.0,
+          "title": "Window Minutes",
+          "default": 60
+        },
+        "condition": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 1000,
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Condition"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": ["key", "title", "scene", "instruction", "times"],
+      "title": "PlanItem"
+    },
+    "PlanReissue": {
+      "properties": {
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 1.0,
+          "title": "Expected Revision"
+        },
+        "previous_task_id": {
+          "type": "string",
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Previous Task Id"
+        },
+        "expected_task_revision": {
+          "type": "integer",
+          "minimum": 1.0,
+          "title": "Expected Task Revision"
+        },
+        "shift_id": {
+          "type": "string",
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Shift Id"
+        },
+        "assigned_to": {
+          "type": "string",
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Assigned To"
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Reason"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "expected_revision",
+        "previous_task_id",
+        "expected_task_revision",
+        "shift_id",
+        "assigned_to",
+        "reason"
+      ],
+      "title": "PlanReissue"
+    },
+    "PlanReview": {
+      "properties": {
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 1.0,
+          "title": "Expected Revision"
+        },
+        "action": {
+          "type": "string",
+          "enum": ["approve", "reject", "retire"],
+          "title": "Action"
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Reason"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": ["expected_revision", "action", "reason"],
+      "title": "PlanReview"
+    },
+    "QualityResolveRequest": {
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["acknowledged", "not_applicable"],
+          "title": "Status"
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Note"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": ["status", "note"],
+      "title": "QualityResolveRequest"
+    },
+    "QualityScanRequest": {
+      "properties": {
+        "elder_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Elder Id"
+        },
+        "shift_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Shift Id"
+        },
+        "handover_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Handover Id"
+        },
+        "include_ai": {
+          "type": "boolean",
+          "title": "Include Ai",
+          "default": false
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "title": "QualityScanRequest"
+    },
+    "RecordConfirmRequest": {
+      "properties": {
+        "observations": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string",
+                "maxLength": 5000,
+                "minLength": 1
+              },
+              "type": "array",
+              "maxItems": 50,
+              "minItems": 1
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Observations"
+        },
+        "task_candidates": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/components/schemas/TaskCandidate"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Task Candidates"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "title": "RecordConfirmRequest"
+    },
+    "RecordExtractRequest": {
+      "properties": {
+        "elder_id": {
+          "type": "string",
+          "title": "Elder Id"
+        },
+        "shift_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Shift Id"
+        },
+        "text": {
+          "type": "string",
+          "maxLength": 5000,
+          "minLength": 1,
+          "title": "Text"
+        }
+      },
+      "type": "object",
+      "required": ["elder_id", "text"],
+      "title": "RecordExtractRequest"
+    },
+    "RectificationAssign": {
+      "properties": {
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 1.0,
+          "title": "Expected Revision"
+        },
+        "assigned_to": {
+          "type": "string",
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Assigned To"
+        },
+        "due_at": {
+          "type": "string",
+          "format": "date-time",
+          "title": "Due At"
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Reason"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": ["expected_revision", "assigned_to", "due_at", "reason"],
+      "title": "RectificationAssign"
+    },
+    "RectificationReview": {
+      "properties": {
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 1.0,
+          "title": "Expected Revision"
+        },
+        "expected_incident_revision": {
+          "type": "integer",
+          "minimum": 1.0,
+          "title": "Expected Incident Revision"
+        },
+        "decision": {
+          "type": "string",
+          "enum": ["accept", "return"],
+          "title": "Decision"
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Note"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "expected_revision",
+        "expected_incident_revision",
+        "decision",
+        "note"
+      ],
+      "title": "RectificationReview"
+    },
+    "RectificationSubmit": {
+      "properties": {
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 1.0,
+          "title": "Expected Revision"
+        },
+        "expected_incident_revision": {
+          "type": "integer",
+          "minimum": 1.0,
+          "title": "Expected Incident Revision"
+        },
+        "result": {
+          "type": "string",
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Result"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/components/schemas/ReviewEvidence"
+          },
+          "type": "array",
+          "maxItems": 10,
+          "minItems": 1,
+          "title": "Evidence"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "expected_revision",
+        "expected_incident_revision",
+        "result",
+        "evidence"
+      ],
+      "title": "RectificationSubmit"
+    },
+    "ReferenceCurrentState": {
+      "properties": {
+        "memory_revision": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Memory Revision"
+        },
+        "memory_status": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Memory Status"
+        },
+        "effective": {
+          "type": "boolean",
+          "title": "Effective"
+        },
+        "source_current": {
+          "type": "boolean",
+          "title": "Source Current"
+        },
+        "review_due": {
+          "type": "boolean",
+          "title": "Review Due"
+        },
+        "outdated": {
+          "type": "boolean",
+          "title": "Outdated"
+        },
+        "reasons": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "title": "Reasons"
+        }
+      },
+      "type": "object",
+      "required": [
+        "memory_revision",
+        "memory_status",
+        "effective",
+        "source_current",
+        "review_due",
+        "outdated",
+        "reasons"
+      ],
+      "title": "ReferenceCurrentState"
+    },
+    "RejectDraftRequest": {
+      "properties": {
+        "reason": {
+          "type": "string",
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Reason"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": ["reason"],
+      "title": "RejectDraftRequest"
+    },
+    "ReviewEvidence": {
+      "properties": {
+        "record_id": {
+          "type": "string",
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Record Id"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1.0,
+          "title": "Revision"
+        },
+        "field": {
+          "type": "string",
+          "enum": ["raw_text", "observations"],
+          "title": "Field",
+          "default": "observations"
+        },
+        "quote": {
+          "type": "string",
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Quote"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": ["record_id", "revision", "quote"],
+      "title": "ReviewEvidence"
+    },
+    "ShiftCreateRequest": {
+      "properties": {
+        "name": {
+          "type": "string",
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Name"
+        },
+        "start_at": {
+          "type": "string",
+          "format": "date-time",
+          "title": "Start At"
+        },
+        "end_at": {
+          "type": "string",
+          "format": "date-time",
+          "title": "End At"
+        },
+        "caregiver_ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "maxItems": 30,
+          "minItems": 1,
+          "title": "Caregiver Ids"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": ["name", "start_at", "end_at", "caregiver_ids"],
+      "title": "ShiftCreateRequest"
+    },
+    "StaffCreate": {
+      "properties": {
+        "username": {
+          "type": "string",
+          "maxLength": 64,
+          "minLength": 3,
+          "pattern": "^[a-z0-9][a-z0-9_.-]*$",
+          "title": "Username"
+        },
+        "display_name": {
+          "type": "string",
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Display Name"
+        },
+        "role": {
+          "type": "string",
+          "enum": ["admin", "supervisor", "caregiver"],
+          "title": "Role",
+          "default": "caregiver"
+        },
+        "password": {
+          "type": "string",
+          "format": "password",
+          "title": "Password",
+          "writeOnly": true
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": ["username", "display_name", "password"],
+      "title": "StaffCreate"
+    },
+    "StaffPasswordReset": {
+      "properties": {
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 1.0,
+          "title": "Expected Revision"
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Reason"
+        },
+        "password": {
+          "type": "string",
+          "format": "password",
+          "title": "Password",
+          "writeOnly": true
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": ["expected_revision", "reason", "password"],
+      "title": "StaffPasswordReset"
+    },
+    "StaffUpdate": {
+      "properties": {
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 1.0,
+          "title": "Expected Revision"
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Reason"
+        },
+        "display_name": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 100,
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Display Name"
+        },
+        "role": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": ["admin", "supervisor", "caregiver"]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Role"
+        },
+        "active": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Active"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": ["expected_revision", "reason"],
+      "title": "StaffUpdate"
+    },
+    "SummaryCreate": {
+      "properties": {
+        "elder_id": {
+          "type": "string",
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Elder Id"
+        },
+        "admission_id": {
+          "type": "string",
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Admission Id"
+        },
+        "period_start": {
+          "type": "string",
+          "format": "date-time",
+          "title": "Period Start"
+        },
+        "period_end": {
+          "type": "string",
+          "format": "date-time",
+          "title": "Period End"
+        },
+        "text": {
+          "type": "string",
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Text"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/components/schemas/ReviewEvidence"
+          },
+          "type": "array",
+          "maxItems": 10,
+          "minItems": 1,
+          "title": "Evidence"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "elder_id",
+        "admission_id",
+        "period_start",
+        "period_end",
+        "text",
+        "evidence"
+      ],
+      "title": "SummaryCreate"
+    },
+    "SummaryReview": {
+      "properties": {
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 1.0,
+          "title": "Expected Revision"
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Reason"
+        },
+        "action": {
+          "type": "string",
+          "enum": ["publish", "reject", "withdraw"],
+          "title": "Action"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": ["expected_revision", "reason", "action"],
+      "title": "SummaryReview"
+    },
+    "TaskCandidate": {
+      "properties": {
+        "title": {
+          "type": "string",
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Title"
+        },
+        "due_at": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Due At"
+        },
+        "assigned_to": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Assigned To"
+        },
+        "condition": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Condition"
+        },
+        "due_text": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Due Text"
+        }
+      },
+      "additionalProperties": true,
+      "type": "object",
+      "required": ["title"],
+      "title": "TaskCandidate"
+    },
+    "TaskCompleteRequest": {
+      "properties": {
+        "result": {
+          "type": "string",
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Result"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": ["result"],
+      "title": "TaskCompleteRequest"
+    },
+    "TaskConditionResponse": {
+      "properties": {
+        "task_id": {
+          "type": "string",
+          "title": "Task Id"
+        },
+        "task_revision": {
+          "type": "integer",
+          "title": "Task Revision"
+        },
+        "task_status": {
+          "type": "string",
+          "title": "Task Status"
+        },
+        "condition": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Condition"
+        },
+        "verification": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Verification"
+        },
+        "current": {
+          "additionalProperties": true,
+          "type": "object",
+          "title": "Current"
+        },
+        "historical_only": {
+          "type": "boolean",
+          "title": "Historical Only"
+        },
+        "as_of": {
+          "type": "string",
+          "title": "As Of"
+        }
+      },
+      "type": "object",
+      "required": [
+        "task_id",
+        "task_revision",
+        "task_status",
+        "condition",
+        "verification",
+        "current",
+        "historical_only",
+        "as_of"
+      ],
+      "title": "TaskConditionResponse"
+    },
+    "TaskMemoryAdoptRequest": {
+      "properties": {
+        "expected_task_revision": {
+          "type": "integer",
+          "minimum": 1.0,
+          "title": "Expected Task Revision"
+        },
+        "memory_id": {
+          "type": "string",
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Memory Id"
+        },
+        "expected_memory_revision": {
+          "type": "integer",
+          "minimum": 1.0,
+          "title": "Expected Memory Revision"
+        },
+        "scene": {
+          "type": "string",
+          "enum": [
+            "bathing",
+            "dining",
+            "activity",
+            "communication",
+            "rest",
+            "other"
+          ],
+          "title": "Scene"
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Reason"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "expected_task_revision",
+        "memory_id",
+        "expected_memory_revision",
+        "scene",
+        "reason"
+      ],
+      "title": "TaskMemoryAdoptRequest"
+    },
+    "TaskMemoryReference": {
+      "properties": {
+        "id": {
+          "type": "string",
+          "title": "Id"
+        },
+        "memory_id": {
+          "type": "string",
+          "title": "Memory Id"
+        },
+        "memory_revision": {
+          "type": "integer",
+          "title": "Memory Revision"
+        },
+        "scene": {
+          "type": "string",
+          "enum": [
+            "bathing",
+            "dining",
+            "activity",
+            "communication",
+            "rest",
+            "other"
+          ],
+          "title": "Scene"
+        },
+        "snapshot": {
+          "additionalProperties": true,
+          "type": "object",
+          "title": "Snapshot"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "withdrawn"],
+          "title": "Status"
+        },
+        "adopted_by": {
+          "type": "string",
+          "title": "Adopted By"
+        },
+        "adopted_at": {
+          "type": "string",
+          "title": "Adopted At"
+        },
+        "reason": {
+          "type": "string",
+          "title": "Reason"
+        },
+        "withdrawn_by": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Withdrawn By"
+        },
+        "withdrawn_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Withdrawn At"
+        },
+        "withdrawal_reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Withdrawal Reason"
+        },
+        "current": {
+          "$ref": "#/components/schemas/ReferenceCurrentState"
+        },
+        "needs_review": {
+          "type": "boolean",
+          "title": "Needs Review"
+        }
+      },
+      "type": "object",
+      "required": [
+        "id",
+        "memory_id",
+        "memory_revision",
+        "scene",
+        "snapshot",
+        "status",
+        "adopted_by",
+        "adopted_at",
+        "reason",
+        "current",
+        "needs_review"
+      ],
+      "title": "TaskMemoryReference"
+    },
+    "TaskMemoryResponse": {
+      "properties": {
+        "task_id": {
+          "type": "string",
+          "title": "Task Id"
+        },
+        "task_revision": {
+          "type": "integer",
+          "title": "Task Revision"
+        },
+        "task_status": {
+          "type": "string",
+          "title": "Task Status"
+        },
+        "historical_only": {
+          "type": "boolean",
+          "title": "Historical Only"
+        },
+        "as_of": {
+          "type": "string",
+          "title": "As Of"
+        },
+        "needs_review": {
+          "type": "boolean",
+          "title": "Needs Review"
+        },
+        "references": {
+          "items": {
+            "$ref": "#/components/schemas/TaskMemoryReference"
+          },
+          "type": "array",
+          "title": "References"
+        }
+      },
+      "type": "object",
+      "required": [
+        "task_id",
+        "task_revision",
+        "task_status",
+        "historical_only",
+        "as_of",
+        "needs_review",
+        "references"
+      ],
+      "title": "TaskMemoryResponse"
+    },
+    "TaskMemoryWithdrawRequest": {
+      "properties": {
+        "expected_task_revision": {
+          "type": "integer",
+          "minimum": 1.0,
+          "title": "Expected Task Revision"
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Reason"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": ["expected_task_revision", "reason"],
+      "title": "TaskMemoryWithdrawRequest"
+    },
+    "TaskTransitionRequest": {
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": ["start", "not_done", "transfer", "cancel", "reopen"],
+          "title": "Action"
+        },
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 1.0,
+          "title": "Expected Revision"
+        },
+        "assigned_to": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Assigned To"
+        },
+        "reason_code": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "elder_refused",
+                "out",
+                "unwell",
+                "staff_shortage",
+                "equipment",
+                "family_request",
+                "other"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Reason Code"
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 2000,
+          "title": "Note",
+          "default": ""
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": ["action", "expected_revision"],
+      "title": "TaskTransitionRequest"
+    },
+    "TaskUpdateRequest": {
+      "properties": {
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 1.0,
+          "title": "Expected Revision"
+        },
+        "assigned_to": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Assigned To"
+        },
+        "due_at": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Due At"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": ["expected_revision"],
+      "title": "TaskUpdateRequest"
+    },
+    "TranscriptionResponse": {
+      "properties": {
+        "text": {
+          "type": "string",
+          "maxLength": 10000,
+          "minLength": 1,
+          "title": "Text"
+        },
+        "provider": {
+          "type": "string",
+          "title": "Provider",
+          "default": "siliconflow"
+        },
+        "model": {
+          "type": "string",
+          "title": "Model",
+          "default": "FunAudioLLM/SenseVoiceSmall"
+        },
+        "duration_seconds": {
+          "type": "number",
+          "title": "Duration Seconds"
+        },
+        "requires_confirmation": {
+          "type": "boolean",
+          "title": "Requires Confirmation",
+          "default": true
+        },
+        "saved": {
+          "type": "boolean",
+          "title": "Saved",
+          "default": false
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "title": "Warnings"
+        }
+      },
+      "type": "object",
+      "required": ["text", "duration_seconds"],
+      "title": "TranscriptionResponse"
+    },
+    "ValidationError": {
+      "properties": {
+        "loc": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ]
+          },
+          "type": "array",
+          "title": "Location"
+        },
+        "msg": {
+          "type": "string",
+          "title": "Message"
+        },
+        "type": {
+          "type": "string",
+          "title": "Error Type"
+        },
+        "input": {
+          "title": "Input"
+        },
+        "ctx": {
+          "type": "object",
+          "title": "Context"
+        }
+      },
+      "type": "object",
+      "required": ["loc", "msg", "type"],
+      "title": "ValidationError"
+    }
+  },
+  "operations": [
+    {
+      "id": "elders_api_v1_elders_get",
+      "group": "elders",
+      "title": "老人档案",
+      "path": "/elders",
+      "method": "get",
+      "roles": ["admin", "supervisor", "caregiver"],
+      "parameters": [],
+      "paginated": false,
+      "schema": null
+    },
+    {
+      "id": "create_api_v1_elders_post",
+      "group": "elders",
+      "title": "新建老人档案",
+      "path": "/elders",
+      "method": "post",
+      "roles": ["admin", "supervisor"],
+      "parameters": [],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/ElderCreate"
+      }
+    },
+    {
+      "id": "elder_api_v1_elders__elder_id__get",
+      "group": "elders",
+      "title": "查看老人资料",
+      "path": "/elders/{elder_id}",
+      "method": "get",
+      "roles": ["admin", "supervisor", "caregiver"],
+      "parameters": [
+        {
+          "name": "elder_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Elder Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": null
+    },
+    {
+      "id": "update_api_v1_elders__elder_id__patch",
+      "group": "elders",
+      "title": "修订老人资料",
+      "path": "/elders/{elder_id}",
+      "method": "patch",
+      "roles": ["admin", "supervisor"],
+      "parameters": [
+        {
+          "name": "elder_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Elder Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/ElderUpdate"
+      }
+    },
+    {
+      "id": "history_api_v1_elders__elder_id__admissions_get",
+      "group": "admission",
+      "title": "入住历史",
+      "path": "/elders/{elder_id}/admissions",
+      "method": "get",
+      "roles": ["admin", "supervisor"],
+      "parameters": [
+        {
+          "name": "elder_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Elder Id"
+          }
+        }
+      ],
+      "paginated": true,
+      "schema": null
+    },
+    {
+      "id": "admit_api_v1_elders__elder_id__admissions_post",
+      "group": "admission",
+      "title": "办理入住",
+      "path": "/elders/{elder_id}/admissions",
+      "method": "post",
+      "roles": ["admin", "supervisor"],
+      "parameters": [
+        {
+          "name": "elder_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Elder Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/AdmissionCreate"
+      }
+    },
+    {
+      "id": "records_api_v1_records_get",
+      "group": "records",
+      "title": "正式照护记录",
+      "path": "/records",
+      "method": "get",
+      "roles": ["admin", "supervisor", "caregiver"],
+      "parameters": [
+        {
+          "name": "elder_id",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Elder Id"
+          }
+        },
+        {
+          "name": "shift_id",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shift Id"
+          }
+        }
+      ],
+      "paginated": true,
+      "schema": null
+    },
+    {
+      "id": "drafts_api_v1_records_drafts_get",
+      "group": "records",
+      "title": "待核对草稿",
+      "path": "/records/drafts",
+      "method": "get",
+      "roles": ["admin", "supervisor", "caregiver"],
+      "parameters": [
+        {
+          "name": "elder_id",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Elder Id"
+          }
+        },
+        {
+          "name": "status",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "enum": ["pending_review", "confirmed", "rejected", "failed"],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        }
+      ],
+      "paginated": true,
+      "schema": null
+    },
+    {
+      "id": "draft_api_v1_records_drafts__draft_id__get",
+      "group": "records",
+      "title": "恢复草稿",
+      "path": "/records/drafts/{draft_id}",
+      "method": "get",
+      "roles": ["admin", "supervisor", "caregiver"],
+      "parameters": [
+        {
+          "name": "draft_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Draft Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": null
+    },
+    {
+      "id": "reject_api_v1_records_drafts__draft_id__reject_post",
+      "group": "records",
+      "title": "放弃AI草稿",
+      "path": "/records/drafts/{draft_id}/reject",
+      "method": "post",
+      "roles": ["admin", "supervisor", "caregiver"],
+      "parameters": [
+        {
+          "name": "draft_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Draft Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/RejectDraftRequest"
+      }
+    },
+    {
+      "id": "manual_api_v1_records_manual_post",
+      "group": "records",
+      "title": "新建人工记录",
+      "path": "/records/manual",
+      "method": "post",
+      "roles": ["admin", "supervisor", "caregiver"],
+      "parameters": [],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/ManualRecordRequest"
+      }
+    },
+    {
+      "id": "extract_api_v1_records_extract_post",
+      "group": "records",
+      "title": "AI原文提取",
+      "path": "/records/extract",
+      "method": "post",
+      "roles": ["admin", "supervisor", "caregiver"],
+      "parameters": [],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/RecordExtractRequest"
+      }
+    },
+    {
+      "id": "confirm_api_v1_records__draft_id__confirm_post",
+      "group": "records",
+      "title": "人工核对并确认记录",
+      "path": "/records/{draft_id}/confirm",
+      "method": "post",
+      "roles": ["admin", "supervisor", "caregiver"],
+      "parameters": [
+        {
+          "name": "draft_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Draft Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/RecordConfirmRequest"
+      }
+    },
+    {
+      "id": "context_extract_api_v1_records_context_extract_post",
+      "group": "records",
+      "title": "情境AI助手",
+      "path": "/records/context-extract",
+      "method": "post",
+      "roles": ["admin", "supervisor", "caregiver"],
+      "parameters": [],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/ContextExtractRequest"
+      }
+    },
+    {
+      "id": "detail_api_v1_records__record_id__get",
+      "group": "records",
+      "title": "查看正式记录",
+      "path": "/records/{record_id}",
+      "method": "get",
+      "roles": ["admin", "supervisor", "caregiver"],
+      "parameters": [
+        {
+          "name": "record_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Record Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": null
+    },
+    {
+      "id": "history_api_v1_records__record_id__history_get",
+      "group": "records",
+      "title": "记录更正历史",
+      "path": "/records/{record_id}/history",
+      "method": "get",
+      "roles": ["admin", "supervisor", "caregiver"],
+      "parameters": [
+        {
+          "name": "record_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Record Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": null
+    },
+    {
+      "id": "correct_api_v1_records__record_id__corrections_post",
+      "group": "records",
+      "title": "追加记录更正",
+      "path": "/records/{record_id}/corrections",
+      "method": "post",
+      "roles": ["admin", "supervisor", "caregiver"],
+      "parameters": [
+        {
+          "name": "record_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Record Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/CorrectRecordRequest"
+      }
+    },
+    {
+      "id": "tasks_api_v1_tasks_get",
+      "group": "tasks",
+      "title": "每日任务列表",
+      "path": "/tasks",
+      "method": "get",
+      "roles": ["admin", "supervisor", "caregiver"],
+      "parameters": [
+        {
+          "name": "elder_id",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Elder Id"
+          }
+        },
+        {
+          "name": "shift_id",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shift Id"
+          }
+        },
+        {
+          "name": "assigned_to",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assigned To"
+          }
+        },
+        {
+          "name": "status",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        }
+      ],
+      "paginated": true,
+      "schema": null
+    },
+    {
+      "id": "detail_api_v1_tasks__task_id__get",
+      "group": "tasks",
+      "title": "任务详情",
+      "path": "/tasks/{task_id}",
+      "method": "get",
+      "roles": ["admin", "supervisor", "caregiver"],
+      "parameters": [
+        {
+          "name": "task_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Task Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": null
+    },
+    {
+      "id": "update_api_v1_tasks__task_id__patch",
+      "group": "tasks",
+      "title": "安排责任人和期限",
+      "path": "/tasks/{task_id}",
+      "method": "patch",
+      "roles": ["admin", "supervisor", "caregiver"],
+      "parameters": [
+        {
+          "name": "task_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Task Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/TaskUpdateRequest"
+      }
+    },
+    {
+      "id": "transition_api_v1_tasks__task_id__transition_post",
+      "group": "tasks",
+      "title": "开始／未执行／转交／取消／重开",
+      "path": "/tasks/{task_id}/transition",
+      "method": "post",
+      "roles": ["admin", "supervisor", "caregiver"],
+      "parameters": [
+        {
+          "name": "task_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Task Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/TaskTransitionRequest"
+      }
+    },
+    {
+      "id": "complete_api_v1_tasks__task_id__complete_post",
+      "group": "tasks",
+      "title": "提交任务完成结果",
+      "path": "/tasks/{task_id}/complete",
+      "method": "post",
+      "roles": ["admin", "supervisor", "caregiver"],
+      "parameters": [
+        {
+          "name": "task_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Task Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/TaskCompleteRequest"
+      }
+    },
+    {
+      "id": "memory_references_api_v1_tasks__task_id__memory_references_get",
+      "group": "tasks",
+      "title": "已采用的个性化依据",
+      "path": "/tasks/{task_id}/memory-references",
+      "method": "get",
+      "roles": ["admin", "supervisor", "caregiver"],
+      "parameters": [
+        {
+          "name": "task_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Task Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": null
+    },
+    {
+      "id": "adopt_memory_api_v1_tasks__task_id__memory_references_post",
+      "group": "tasks",
+      "title": "采用个性化记忆",
+      "path": "/tasks/{task_id}/memory-references",
+      "method": "post",
+      "roles": ["admin", "supervisor", "caregiver"],
+      "parameters": [
+        {
+          "name": "task_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Task Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/TaskMemoryAdoptRequest"
+      }
+    },
+    {
+      "id": "withdraw_memory_api_v1_tasks__task_id__memory_references__reference_id__withdraw_post",
+      "group": "tasks",
+      "title": "撤回个性化依据",
+      "path": "/tasks/{task_id}/memory-references/{reference_id}/withdraw",
+      "method": "post",
+      "roles": ["admin", "supervisor", "caregiver"],
+      "parameters": [
+        {
+          "name": "task_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Task Id"
+          }
+        },
+        {
+          "name": "reference_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Reference Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/TaskMemoryWithdrawRequest"
+      }
+    },
+    {
+      "id": "condition_api_v1_tasks__task_id__condition_get",
+      "group": "tasks",
+      "title": "当前条件核验",
+      "path": "/tasks/{task_id}/condition",
+      "method": "get",
+      "roles": ["admin", "supervisor", "caregiver"],
+      "parameters": [
+        {
+          "name": "task_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Task Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": null
+    },
+    {
+      "id": "configure_condition_api_v1_tasks__task_id__condition_configure_post",
+      "group": "tasks",
+      "title": "配置人工核验条件",
+      "path": "/tasks/{task_id}/condition/configure",
+      "method": "post",
+      "roles": ["admin", "supervisor", "caregiver"],
+      "parameters": [
+        {
+          "name": "task_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Task Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/ConditionConfigureRequest"
+      }
+    },
+    {
+      "id": "claim_condition_api_v1_tasks__task_id__condition_claim_post",
+      "group": "tasks",
+      "title": "认领跨班核验",
+      "path": "/tasks/{task_id}/condition/claim",
+      "method": "post",
+      "roles": ["admin", "supervisor", "caregiver"],
+      "parameters": [
+        {
+          "name": "task_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Task Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/ConditionClaimRequest"
+      }
+    },
+    {
+      "id": "check_condition_api_v1_tasks__task_id__condition_check_post",
+      "group": "tasks",
+      "title": "提交条件核验结论",
+      "path": "/tasks/{task_id}/condition/check",
+      "method": "post",
+      "roles": ["admin", "supervisor", "caregiver"],
+      "parameters": [
+        {
+          "name": "task_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Task Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/ConditionCheckRequest"
+      }
+    },
+    {
+      "id": "create_shift_api_v1_shifts_post",
+      "group": "shifts",
+      "title": "新建班次",
+      "path": "/shifts",
+      "method": "post",
+      "roles": ["admin", "supervisor"],
+      "parameters": [],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/ShiftCreateRequest"
+      }
+    },
+    {
+      "id": "shifts_api_v1_shifts_get",
+      "group": "shifts",
+      "title": "班次列表",
+      "path": "/shifts",
+      "method": "get",
+      "roles": ["admin", "supervisor", "caregiver"],
+      "parameters": [],
+      "paginated": true,
+      "schema": null
+    },
+    {
+      "id": "shift_api_v1_shifts__shift_id__get",
+      "group": "shifts",
+      "title": "班次详情",
+      "path": "/shifts/{shift_id}",
+      "method": "get",
+      "roles": ["admin", "supervisor", "caregiver"],
+      "parameters": [
+        {
+          "name": "shift_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Shift Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": null
+    },
+    {
+      "id": "create_api_v1_handovers_post",
+      "group": "handovers",
+      "title": "新建交班草稿",
+      "path": "/handovers",
+      "method": "post",
+      "roles": ["admin", "supervisor", "caregiver"],
+      "parameters": [],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/HandoverCreateRequest"
+      }
+    },
+    {
+      "id": "listing_api_v1_handovers_get",
+      "group": "handovers",
+      "title": "交班单列表",
+      "path": "/handovers",
+      "method": "get",
+      "roles": ["admin", "supervisor", "caregiver"],
+      "parameters": [
+        {
+          "name": "shift_id",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shift Id"
+          }
+        }
+      ],
+      "paginated": true,
+      "schema": null
+    },
+    {
+      "id": "detail_api_v1_handovers__handover_id__get",
+      "group": "handovers",
+      "title": "交班明细与原文证据",
+      "path": "/handovers/{handover_id}",
+      "method": "get",
+      "roles": ["admin", "supervisor", "caregiver"],
+      "parameters": [
+        {
+          "name": "handover_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Handover Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": null
+    },
+    {
+      "id": "refresh_api_v1_handovers__handover_id__refresh_post",
+      "group": "handovers",
+      "title": "刷新交班来源",
+      "path": "/handovers/{handover_id}/refresh",
+      "method": "post",
+      "roles": ["admin", "supervisor", "caregiver"],
+      "parameters": [
+        {
+          "name": "handover_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Handover Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": null
+    },
+    {
+      "id": "submit_api_v1_handovers__handover_id__submit_post",
+      "group": "handovers",
+      "title": "人工审核并提交交班",
+      "path": "/handovers/{handover_id}/submit",
+      "method": "post",
+      "roles": ["admin", "supervisor", "caregiver"],
+      "parameters": [
+        {
+          "name": "handover_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Handover Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/HandoverSubmitRequest"
+      }
+    },
+    {
+      "id": "ai_summary_api_v1_handovers__handover_id__ai_summary_post",
+      "group": "handovers",
+      "title": "生成AI交班摘要",
+      "path": "/handovers/{handover_id}/ai-summary",
+      "method": "post",
+      "roles": ["admin", "supervisor", "caregiver"],
+      "parameters": [
+        {
+          "name": "handover_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Handover Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/AIReviewRequest"
+      }
+    },
+    {
+      "id": "receive_api_v1_handovers__handover_id__items__item_id__receive_post",
+      "group": "handovers",
+      "title": "逐项接班／待澄清",
+      "path": "/handovers/{handover_id}/items/{item_id}/receive",
+      "method": "post",
+      "roles": ["admin", "supervisor", "caregiver"],
+      "parameters": [
+        {
+          "name": "handover_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Handover Id"
+          }
+        },
+        {
+          "name": "item_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Item Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/HandoverReceiveRequest"
+      }
+    },
+    {
+      "id": "clarify_api_v1_handovers__handover_id__items__item_id__clarify_post",
+      "group": "handovers",
+      "title": "补充交班澄清",
+      "path": "/handovers/{handover_id}/items/{item_id}/clarify",
+      "method": "post",
+      "roles": ["admin", "supervisor", "caregiver"],
+      "parameters": [
+        {
+          "name": "handover_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Handover Id"
+          }
+        },
+        {
+          "name": "item_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Item Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/ClarificationRequest"
+      }
+    },
+    {
+      "id": "events_api_v1_items__item_id__timeline_get",
+      "group": "timeline",
+      "title": "照护事项过程回放",
+      "path": "/items/{item_id}/timeline",
+      "method": "get",
+      "roles": ["admin", "supervisor", "caregiver"],
+      "parameters": [
+        {
+          "name": "item_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Item Id"
+          }
+        }
+      ],
+      "paginated": true,
+      "schema": null
+    },
+    {
+      "id": "scan_api_v1_quality_checks_post",
+      "group": "quality",
+      "title": "执行规则与AI质检",
+      "path": "/quality/checks",
+      "method": "post",
+      "roles": ["admin", "supervisor"],
+      "parameters": [],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/QualityScanRequest"
+      }
+    },
+    {
+      "id": "listing_api_v1_quality_checks_get",
+      "group": "quality",
+      "title": "质检报告列表",
+      "path": "/quality/checks",
+      "method": "get",
+      "roles": ["admin", "supervisor"],
+      "parameters": [
+        {
+          "name": "elder_id",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Elder Id"
+          }
+        }
+      ],
+      "paginated": true,
+      "schema": null
+    },
+    {
+      "id": "detail_api_v1_quality_checks__report_id__get",
+      "group": "quality",
+      "title": "质检原文与建议",
+      "path": "/quality/checks/{report_id}",
+      "method": "get",
+      "roles": ["admin", "supervisor"],
+      "parameters": [
+        {
+          "name": "report_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Report Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": null
+    },
+    {
+      "id": "resolve_api_v1_quality_checks__report_id__issues__issue_id__resolve_post",
+      "group": "quality",
+      "title": "人工核对质检提示",
+      "path": "/quality/checks/{report_id}/issues/{issue_id}/resolve",
+      "method": "post",
+      "roles": ["admin", "supervisor"],
+      "parameters": [
+        {
+          "name": "report_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Report Id"
+          }
+        },
+        {
+          "name": "issue_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Issue Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/QualityResolveRequest"
+      }
+    },
+    {
+      "id": "listing_api_v1_staff_get",
+      "group": "staff",
+      "title": "员工列表",
+      "path": "/staff",
+      "method": "get",
+      "roles": ["admin", "supervisor", "caregiver"],
+      "parameters": [],
+      "paginated": true,
+      "schema": null
+    },
+    {
+      "id": "create_api_v1_staff_post",
+      "group": "staff",
+      "title": "新建员工账号",
+      "path": "/staff",
+      "method": "post",
+      "roles": ["admin", "supervisor"],
+      "parameters": [],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/StaffCreate"
+      }
+    },
+    {
+      "id": "directory_api_v1_staff_directory_get",
+      "group": "staff",
+      "title": "工作人员目录",
+      "path": "/staff/directory",
+      "method": "get",
+      "roles": ["admin", "supervisor"],
+      "parameters": [
+        {
+          "name": "active",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active"
+          }
+        }
+      ],
+      "paginated": true,
+      "schema": null
+    },
+    {
+      "id": "workload_api_v1_staff__staff_id__workload_get",
+      "group": "staff",
+      "title": "员工责任清单",
+      "path": "/staff/{staff_id}/workload",
+      "method": "get",
+      "roles": ["admin", "supervisor"],
+      "parameters": [
+        {
+          "name": "staff_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Staff Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": null
+    },
+    {
+      "id": "update_api_v1_staff__staff_id__patch",
+      "group": "staff",
+      "title": "修改员工资料",
+      "path": "/staff/{staff_id}",
+      "method": "patch",
+      "roles": ["admin", "supervisor"],
+      "parameters": [
+        {
+          "name": "staff_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Staff Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/StaffUpdate"
+      }
+    },
+    {
+      "id": "reset_password_api_v1_staff__staff_id__reset_password_post",
+      "group": "staff",
+      "title": "重置员工密码",
+      "path": "/staff/{staff_id}/reset-password",
+      "method": "post",
+      "roles": ["admin", "supervisor"],
+      "parameters": [
+        {
+          "name": "staff_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Staff Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/StaffPasswordReset"
+      }
+    },
+    {
+      "id": "status_api_v1_speech_status_get",
+      "group": "records",
+      "title": "语音服务状态",
+      "path": "/speech/status",
+      "method": "get",
+      "roles": ["admin", "supervisor", "caregiver"],
+      "parameters": [],
+      "paginated": false,
+      "schema": null
+    },
+    {
+      "id": "create_api_v1_memories_post",
+      "group": "memories",
+      "title": "从正式记录建立记忆候选",
+      "path": "/memories",
+      "method": "post",
+      "roles": ["admin", "supervisor"],
+      "parameters": [],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/MemoryCreateRequest"
+      }
+    },
+    {
+      "id": "listing_api_v1_memories_get",
+      "group": "memories",
+      "title": "个性化记忆列表",
+      "path": "/memories",
+      "method": "get",
+      "roles": ["admin", "supervisor", "caregiver"],
+      "parameters": [
+        {
+          "name": "elder_id",
+          "in": "query",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Elder Id"
+          }
+        },
+        {
+          "name": "status",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "enum": [
+                  "candidate",
+                  "confirmed",
+                  "review_required",
+                  "rejected",
+                  "retired"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        {
+          "name": "scene",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "enum": [
+                  "bathing",
+                  "dining",
+                  "activity",
+                  "communication",
+                  "rest",
+                  "other"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scene"
+          }
+        }
+      ],
+      "paginated": true,
+      "schema": null
+    },
+    {
+      "id": "context_api_v1_memories_context_get",
+      "group": "memories",
+      "title": "按服务场景检索有效记忆",
+      "path": "/memories/context",
+      "method": "get",
+      "roles": ["admin", "supervisor", "caregiver"],
+      "parameters": [
+        {
+          "name": "elder_id",
+          "in": "query",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Elder Id"
+          }
+        },
+        {
+          "name": "scene",
+          "in": "query",
+          "required": true,
+          "schema": {
+            "enum": [
+              "bathing",
+              "dining",
+              "activity",
+              "communication",
+              "rest",
+              "other"
+            ],
+            "type": "string",
+            "title": "Scene"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": null
+    },
+    {
+      "id": "detail_api_v1_memories__memory_id__get",
+      "group": "memories",
+      "title": "记忆详情与有效状态",
+      "path": "/memories/{memory_id}",
+      "method": "get",
+      "roles": ["admin", "supervisor", "caregiver"],
+      "parameters": [
+        {
+          "name": "memory_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Memory Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": null
+    },
+    {
+      "id": "from_draft_api_v1_memories_from_draft_post",
+      "group": "memories",
+      "title": "选择AI记忆候选",
+      "path": "/memories/from-draft",
+      "method": "post",
+      "roles": ["admin", "supervisor", "caregiver"],
+      "parameters": [],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/MemoryFromDraftRequest"
+      }
+    },
+    {
+      "id": "history_api_v1_memories__memory_id__history_get",
+      "group": "memories",
+      "title": "记忆历史版本",
+      "path": "/memories/{memory_id}/history",
+      "method": "get",
+      "roles": ["admin", "supervisor", "caregiver"],
+      "parameters": [
+        {
+          "name": "memory_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Memory Id"
+          }
+        }
+      ],
+      "paginated": true,
+      "schema": null
+    },
+    {
+      "id": "revise_api_v1_memories__memory_id__revisions_post",
+      "group": "memories",
+      "title": "修订个性化记忆",
+      "path": "/memories/{memory_id}/revisions",
+      "method": "post",
+      "roles": ["admin", "supervisor"],
+      "parameters": [
+        {
+          "name": "memory_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Memory Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/MemoryRevisionRequest"
+      }
+    },
+    {
+      "id": "review_api_v1_memories__memory_id__review_post",
+      "group": "memories",
+      "title": "确认／复核／停用记忆",
+      "path": "/memories/{memory_id}/review",
+      "method": "post",
+      "roles": ["admin", "supervisor"],
+      "parameters": [
+        {
+          "name": "memory_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Memory Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/MemoryReviewRequest"
+      }
+    },
+    {
+      "id": "listing_api_v1_change_reviews_get",
+      "group": "changes",
+      "title": "变更核验队列",
+      "path": "/change-reviews",
+      "method": "get",
+      "roles": ["admin", "supervisor", "caregiver"],
+      "parameters": [
+        {
+          "name": "status",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "enum": ["pending", "assigned", "awaiting_review", "closed"],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        {
+          "name": "elder_id",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Elder Id"
+          }
+        },
+        {
+          "name": "task_id",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Id"
+          }
+        },
+        {
+          "name": "assigned_to",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assigned To"
+          }
+        }
+      ],
+      "paginated": true,
+      "schema": null
+    },
+    {
+      "id": "scan_api_v1_change_reviews_scan_post",
+      "group": "changes",
+      "title": "扫描来源变化与自然到期",
+      "path": "/change-reviews/scan",
+      "method": "post",
+      "roles": ["admin", "supervisor"],
+      "parameters": [],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/ChangeScanRequest"
+      }
+    },
+    {
+      "id": "detail_api_v1_change_reviews__case_id__get",
+      "group": "changes",
+      "title": "变更影响与当前证据",
+      "path": "/change-reviews/{case_id}",
+      "method": "get",
+      "roles": ["admin", "supervisor", "caregiver"],
+      "parameters": [
+        {
+          "name": "case_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Case Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": null
+    },
+    {
+      "id": "assign_api_v1_change_reviews__case_id__assign_post",
+      "group": "changes",
+      "title": "指派变更核验",
+      "path": "/change-reviews/{case_id}/assign",
+      "method": "post",
+      "roles": ["admin", "supervisor"],
+      "parameters": [
+        {
+          "name": "case_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Case Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/ChangeAssignRequest"
+      }
+    },
+    {
+      "id": "submit_api_v1_change_reviews__case_id__submit_post",
+      "group": "changes",
+      "title": "提交变更核验结论",
+      "path": "/change-reviews/{case_id}/submit",
+      "method": "post",
+      "roles": ["admin", "supervisor", "caregiver"],
+      "parameters": [
+        {
+          "name": "case_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Case Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/ChangeSubmitRequest"
+      }
+    },
+    {
+      "id": "review_api_v1_change_reviews__case_id__review_post",
+      "group": "changes",
+      "title": "独立复查通过／退回",
+      "path": "/change-reviews/{case_id}/review",
+      "method": "post",
+      "roles": ["admin", "supervisor"],
+      "parameters": [
+        {
+          "name": "case_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Case Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/ChangeReviewRequest"
+      }
+    },
+    {
+      "id": "listing_api_v1_beds_get",
+      "group": "admission",
+      "title": "床位列表",
+      "path": "/beds",
+      "method": "get",
+      "roles": ["admin", "supervisor"],
+      "parameters": [
+        {
+          "name": "status",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "enum": ["available", "occupied", "inactive", "conflict"],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        }
+      ],
+      "paginated": true,
+      "schema": null
+    },
+    {
+      "id": "create_api_v1_beds_post",
+      "group": "admission",
+      "title": "新建床位",
+      "path": "/beds",
+      "method": "post",
+      "roles": ["admin", "supervisor"],
+      "parameters": [],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/BedCreate"
+      }
+    },
+    {
+      "id": "update_api_v1_beds__bed_id__patch",
+      "group": "admission",
+      "title": "修改床位",
+      "path": "/beds/{bed_id}",
+      "method": "patch",
+      "roles": ["admin", "supervisor"],
+      "parameters": [
+        {
+          "name": "bed_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Bed Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/BedUpdate"
+      }
+    },
+    {
+      "id": "action_api_v1_admissions__admission_id__actions_post",
+      "group": "admission",
+      "title": "转床／外出／返院／离院",
+      "path": "/admissions/{admission_id}/actions",
+      "method": "post",
+      "roles": ["admin", "supervisor"],
+      "parameters": [
+        {
+          "name": "admission_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Admission Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/AdmissionAction"
+      }
+    },
+    {
+      "id": "templates_api_v1_assessments_templates_get",
+      "group": "assessments",
+      "title": "评估量表与评分选项",
+      "path": "/assessments/templates",
+      "method": "get",
+      "roles": ["admin", "supervisor"],
+      "parameters": [],
+      "paginated": false,
+      "schema": null
+    },
+    {
+      "id": "list_assessments_api_v1_assessments_get",
+      "group": "assessments",
+      "title": "评估历史",
+      "path": "/assessments",
+      "method": "get",
+      "roles": ["admin", "supervisor"],
+      "parameters": [
+        {
+          "name": "elder_id",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Elder Id"
+          }
+        }
+      ],
+      "paginated": true,
+      "schema": null
+    },
+    {
+      "id": "create_assessment_api_v1_assessments_post",
+      "group": "assessments",
+      "title": "新建Barthel评估",
+      "path": "/assessments",
+      "method": "post",
+      "roles": ["admin", "supervisor"],
+      "parameters": [],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/AssessmentCreate"
+      }
+    },
+    {
+      "id": "get_assessment_api_v1_assessments__assessment_id__get",
+      "group": "assessments",
+      "title": "评估结果与依据",
+      "path": "/assessments/{assessment_id}",
+      "method": "get",
+      "roles": ["admin", "supervisor"],
+      "parameters": [
+        {
+          "name": "assessment_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Assessment Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": null
+    },
+    {
+      "id": "review_assessment_api_v1_assessments__assessment_id__review_post",
+      "group": "assessments",
+      "title": "人工确认／驳回／停用评估",
+      "path": "/assessments/{assessment_id}/review",
+      "method": "post",
+      "roles": ["admin", "supervisor"],
+      "parameters": [
+        {
+          "name": "assessment_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Assessment Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/AssessmentReview"
+      }
+    },
+    {
+      "id": "list_plans_api_v1_care_plans_get",
+      "group": "plans",
+      "title": "照护计划列表",
+      "path": "/care-plans",
+      "method": "get",
+      "roles": ["admin", "supervisor", "caregiver"],
+      "parameters": [
+        {
+          "name": "elder_id",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Elder Id"
+          }
+        }
+      ],
+      "paginated": true,
+      "schema": null
+    },
+    {
+      "id": "create_plan_api_v1_care_plans_post",
+      "group": "plans",
+      "title": "新建照护计划",
+      "path": "/care-plans",
+      "method": "post",
+      "roles": ["admin", "supervisor"],
+      "parameters": [],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/PlanCreate"
+      }
+    },
+    {
+      "id": "get_plan_api_v1_care_plans__plan_id__get",
+      "group": "plans",
+      "title": "计划内容与有效状态",
+      "path": "/care-plans/{plan_id}",
+      "method": "get",
+      "roles": ["admin", "supervisor", "caregiver"],
+      "parameters": [
+        {
+          "name": "plan_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Plan Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": null
+    },
+    {
+      "id": "review_plan_api_v1_care_plans__plan_id__review_post",
+      "group": "plans",
+      "title": "审批／驳回／停用计划",
+      "path": "/care-plans/{plan_id}/review",
+      "method": "post",
+      "roles": ["admin", "supervisor"],
+      "parameters": [
+        {
+          "name": "plan_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Plan Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/PlanReview"
+      }
+    },
+    {
+      "id": "generate_api_v1_care_plans__plan_id__generate_post",
+      "group": "plans",
+      "title": "按计划生成每日任务",
+      "path": "/care-plans/{plan_id}/generate",
+      "method": "post",
+      "roles": ["admin", "supervisor"],
+      "parameters": [
+        {
+          "name": "plan_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Plan Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/PlanGenerate"
+      }
+    },
+    {
+      "id": "reissue_api_v1_care_plans__plan_id__reissue_post",
+      "group": "plans",
+      "title": "取消后明确补发任务",
+      "path": "/care-plans/{plan_id}/reissue",
+      "method": "post",
+      "roles": ["admin", "supervisor"],
+      "parameters": [
+        {
+          "name": "plan_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Plan Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/PlanReissue"
+      }
+    },
+    {
+      "id": "task_plan_check_api_v1_tasks__task_id__plan_check_get",
+      "group": "tasks",
+      "title": "核对任务的计划依据",
+      "path": "/tasks/{task_id}/plan-check",
+      "method": "get",
+      "roles": ["admin", "supervisor", "caregiver"],
+      "parameters": [
+        {
+          "name": "task_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Task Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": null
+    },
+    {
+      "id": "create_account_api_v1_family_accounts_post",
+      "group": "family",
+      "title": "新建家属账号",
+      "path": "/family/accounts",
+      "method": "post",
+      "roles": ["admin", "supervisor"],
+      "parameters": [],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/FamilyAccountCreate"
+      }
+    },
+    {
+      "id": "accounts_api_v1_family_accounts_get",
+      "group": "family",
+      "title": "家属账号列表",
+      "path": "/family/accounts",
+      "method": "get",
+      "roles": ["admin", "supervisor"],
+      "parameters": [],
+      "paginated": true,
+      "schema": null
+    },
+    {
+      "id": "update_account_api_v1_family_accounts__account_id__patch",
+      "group": "family",
+      "title": "启用／停用家属账号",
+      "path": "/family/accounts/{account_id}",
+      "method": "patch",
+      "roles": ["admin", "supervisor"],
+      "parameters": [
+        {
+          "name": "account_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Account Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/FamilyAccountUpdate"
+      }
+    },
+    {
+      "id": "reset_password_api_v1_family_accounts__account_id__reset_password_post",
+      "group": "family",
+      "title": "重置家属密码",
+      "path": "/family/accounts/{account_id}/reset-password",
+      "method": "post",
+      "roles": ["admin", "supervisor"],
+      "parameters": [
+        {
+          "name": "account_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Account Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/StaffPasswordReset"
+      }
+    },
+    {
+      "id": "cases_api_v1_family_cases_get",
+      "group": "family",
+      "title": "授权／简报／反馈列表",
+      "path": "/family/cases",
+      "method": "get",
+      "roles": ["admin", "supervisor"],
+      "parameters": [
+        {
+          "name": "kind",
+          "in": "query",
+          "required": true,
+          "schema": {
+            "enum": ["binding", "summary", "feedback"],
+            "type": "string",
+            "title": "Kind"
+          }
+        },
+        {
+          "name": "elder_id",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Elder Id"
+          }
+        }
+      ],
+      "paginated": true,
+      "schema": null
+    },
+    {
+      "id": "bind_api_v1_family_bindings_post",
+      "group": "family",
+      "title": "建立家属授权",
+      "path": "/family/bindings",
+      "method": "post",
+      "roles": ["admin", "supervisor"],
+      "parameters": [],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/BindingCreate"
+      }
+    },
+    {
+      "id": "revoke_api_v1_family_bindings__binding_id__revoke_post",
+      "group": "family",
+      "title": "撤销家属授权",
+      "path": "/family/bindings/{binding_id}/revoke",
+      "method": "post",
+      "roles": ["admin", "supervisor"],
+      "parameters": [
+        {
+          "name": "binding_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Binding Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/FamilyDecision"
+      }
+    },
+    {
+      "id": "create_summary_api_v1_family_summaries_post",
+      "group": "family",
+      "title": "编写家属简报",
+      "path": "/family/summaries",
+      "method": "post",
+      "roles": ["admin", "supervisor"],
+      "parameters": [],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/SummaryCreate"
+      }
+    },
+    {
+      "id": "review_summary_api_v1_family_summaries__summary_id__review_post",
+      "group": "family",
+      "title": "审核发布／撤回家属简报",
+      "path": "/family/summaries/{summary_id}/review",
+      "method": "post",
+      "roles": ["admin", "supervisor"],
+      "parameters": [
+        {
+          "name": "summary_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Summary Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/SummaryReview"
+      }
+    },
+    {
+      "id": "my_bindings_api_v1_family_me_bindings_get",
+      "group": "family",
+      "title": "我的授权老人",
+      "path": "/family/me/bindings",
+      "method": "get",
+      "roles": ["family"],
+      "parameters": [],
+      "paginated": false,
+      "schema": null
+    },
+    {
+      "id": "summaries_api_v1_family_me_bindings__binding_id__summaries_get",
+      "group": "family",
+      "title": "已审核服务动态",
+      "path": "/family/me/bindings/{binding_id}/summaries",
+      "method": "get",
+      "roles": ["family"],
+      "parameters": [
+        {
+          "name": "binding_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Binding Id"
+          }
+        }
+      ],
+      "paginated": true,
+      "schema": null
+    },
+    {
+      "id": "feedback_api_v1_family_me_feedback_post",
+      "group": "family",
+      "title": "向机构提交问题",
+      "path": "/family/me/feedback",
+      "method": "post",
+      "roles": ["family"],
+      "parameters": [],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/FeedbackCreate"
+      }
+    },
+    {
+      "id": "my_feedback_api_v1_family_me_bindings__binding_id__feedback_get",
+      "group": "family",
+      "title": "我的问题与回复",
+      "path": "/family/me/bindings/{binding_id}/feedback",
+      "method": "get",
+      "roles": ["family"],
+      "parameters": [
+        {
+          "name": "binding_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Binding Id"
+          }
+        }
+      ],
+      "paginated": true,
+      "schema": null
+    },
+    {
+      "id": "reply_api_v1_family_feedback__feedback_id__reply_post",
+      "group": "family",
+      "title": "审核并回复家属问题",
+      "path": "/family/feedback/{feedback_id}/reply",
+      "method": "post",
+      "roles": ["admin", "supervisor"],
+      "parameters": [
+        {
+          "name": "feedback_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Feedback Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/FeedbackResponse"
+      }
+    },
+    {
+      "id": "listing_api_v1_incidents_get",
+      "group": "incidents",
+      "title": "不良事件列表",
+      "path": "/incidents",
+      "method": "get",
+      "roles": ["admin", "supervisor", "caregiver"],
+      "parameters": [
+        {
+          "name": "elder_id",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Elder Id"
+          }
+        }
+      ],
+      "paginated": true,
+      "schema": null
+    },
+    {
+      "id": "create_api_v1_incidents_post",
+      "group": "incidents",
+      "title": "上报不良事件",
+      "path": "/incidents",
+      "method": "post",
+      "roles": ["admin", "supervisor", "caregiver"],
+      "parameters": [],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/IncidentCreate"
+      }
+    },
+    {
+      "id": "get_api_v1_incidents__incident_id__get",
+      "group": "incidents",
+      "title": "事件与整改进度",
+      "path": "/incidents/{incident_id}",
+      "method": "get",
+      "roles": ["admin", "supervisor", "caregiver"],
+      "parameters": [
+        {
+          "name": "incident_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Incident Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": null
+    },
+    {
+      "id": "triage_api_v1_incidents__incident_id__triage_post",
+      "group": "incidents",
+      "title": "人工分级并制定整改",
+      "path": "/incidents/{incident_id}/triage",
+      "method": "post",
+      "roles": ["admin", "supervisor"],
+      "parameters": [
+        {
+          "name": "incident_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Incident Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/IncidentTriage"
+      }
+    },
+    {
+      "id": "assign_api_v1_rectifications__rectification_id__assign_post",
+      "group": "incidents",
+      "title": "指派整改责任人",
+      "path": "/rectifications/{rectification_id}/assign",
+      "method": "post",
+      "roles": ["admin", "supervisor"],
+      "parameters": [
+        {
+          "name": "rectification_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Rectification Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/RectificationAssign"
+      }
+    },
+    {
+      "id": "submit_api_v1_rectifications__rectification_id__submit_post",
+      "group": "incidents",
+      "title": "提交整改证据",
+      "path": "/rectifications/{rectification_id}/submit",
+      "method": "post",
+      "roles": ["admin", "supervisor", "caregiver"],
+      "parameters": [
+        {
+          "name": "rectification_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Rectification Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/RectificationSubmit"
+      }
+    },
+    {
+      "id": "review_api_v1_rectifications__rectification_id__review_post",
+      "group": "incidents",
+      "title": "独立复查／退回整改",
+      "path": "/rectifications/{rectification_id}/review",
+      "method": "post",
+      "roles": ["admin", "supervisor"],
+      "parameters": [
+        {
+          "name": "rectification_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Rectification Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/RectificationReview"
+      }
+    },
+    {
+      "id": "reopen_api_v1_incidents__incident_id__reopen_post",
+      "group": "incidents",
+      "title": "重新开启事件",
+      "path": "/incidents/{incident_id}/reopen",
+      "method": "post",
+      "roles": ["admin", "supervisor"],
+      "parameters": [
+        {
+          "name": "incident_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Incident Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/IncidentReopen"
+      }
+    },
+    {
+      "id": "metrics_api_v1_reports_metrics_get",
+      "group": "reports",
+      "title": "运营指标与统计口径",
+      "path": "/reports/metrics",
+      "method": "get",
+      "roles": ["admin", "supervisor"],
+      "parameters": [
+        {
+          "name": "start",
+          "in": "query",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "date",
+            "title": "Start"
+          }
+        },
+        {
+          "name": "end",
+          "in": "query",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "date",
+            "title": "End"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": null
+    },
+    {
+      "id": "export_api_v1_reports_elders__elder_id__export_post",
+      "group": "reports",
+      "title": "导出单老人证据链",
+      "path": "/reports/elders/{elder_id}/export",
+      "method": "post",
+      "roles": ["admin", "supervisor"],
+      "parameters": [
+        {
+          "name": "elder_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Elder Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/ExportRequest"
+      }
+    },
+    {
+      "id": "coverage_api_v1_insights_coverage_get",
+      "group": "coverage",
+      "title": "计划与实际记录双向核对",
+      "path": "/insights/coverage",
+      "method": "get",
+      "roles": ["admin", "supervisor"],
+      "parameters": [
+        {
+          "name": "elder_id",
+          "in": "query",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Elder Id"
+          }
+        },
+        {
+          "name": "service_date",
+          "in": "query",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "date",
+            "title": "Service Date"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": null
+    },
+    {
+      "id": "review_api_v1_insights_coverage_reviews_post",
+      "group": "coverage",
+      "title": "说明不适用／缺项跟进",
+      "path": "/insights/coverage/reviews",
+      "method": "post",
+      "roles": ["admin", "supervisor"],
+      "parameters": [],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/CoverageReview"
+      }
+    },
+    {
+      "id": "changes_api_v1_insights_changes_get",
+      "group": "brief",
+      "title": "新增、更正与重要遗留简报",
+      "path": "/insights/changes",
+      "method": "get",
+      "roles": ["admin", "supervisor"],
+      "parameters": [
+        {
+          "name": "since",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Since"
+          }
+        },
+        {
+          "name": "elder_id",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Elder Id"
+          }
+        }
+      ],
+      "paginated": true,
+      "schema": null
+    },
+    {
+      "id": "acknowledge_api_v1_insights_changes_acknowledge_post",
+      "group": "brief",
+      "title": "标记所选变更为已读",
+      "path": "/insights/changes/acknowledge",
+      "method": "post",
+      "roles": ["admin", "supervisor"],
+      "parameters": [],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/ChangeAcknowledgement"
+      }
+    },
+    {
+      "id": "impact_api_v1_care_plans__plan_id__impact_get",
+      "group": "plans",
+      "title": "预览计划变更影响",
+      "path": "/care-plans/{plan_id}/impact",
+      "method": "get",
+      "roles": ["admin", "supervisor", "caregiver"],
+      "parameters": [
+        {
+          "name": "plan_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "title": "Plan Id"
+          }
+        }
+      ],
+      "paginated": false,
+      "schema": null
+    }
+  ]
+}

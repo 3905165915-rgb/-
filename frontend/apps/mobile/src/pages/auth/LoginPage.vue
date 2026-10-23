@@ -45,6 +45,7 @@ async function demoLogin() {
       </div>
       <p>移动护理工作台</p>
     </header>
+    <p><a href="/login?view=admin">打开管理网站</a></p>
     <van-cell-group>
       <van-field
         v-model="form.username"

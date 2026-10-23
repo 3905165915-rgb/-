@@ -20,11 +20,12 @@ import {
   MessagesSquare,
   NotebookPen,
   ShieldCheck,
+  UsersRound,
   X,
 } from 'lucide-vue-next'
 import { getReducedTransparency, setReducedTransparency } from '@hulao/shared'
 import { useAuthStore, roleLabels } from '../stores/auth'
-import { allowedRoutes } from '../router/access'
+import { allowedNavigationGroups, homeForRole } from '../router/access'
 import { mode } from '../services/data'
 import ClearLocalDraftsButton from '../components/ClearLocalDraftsButton.vue'
 
@@ -37,39 +38,10 @@ const accountElement = ref<HTMLElement>()
 const drafts = ref<InstanceType<typeof ClearLocalDraftsButton>>()
 const reducedTransparency = ref(getReducedTransparency())
 const preferenceError = ref('')
-const menu = computed(() =>
-  allowedRoutes(auth.role).filter(
-    (item) => mode === 'demo' || item.path !== '/demo',
-  ),
-)
-const definitions = [
-  {
-    label: '护理业务',
-    paths: [
-      '/dashboard',
-      '/tasks',
-      '/elders',
-      '/admission',
-      '/assessment',
-      '/care-plan',
-    ],
-  },
-  {
-    label: '质量与协作',
-    paths: ['/quality', '/coverage', '/changes', '/family', '/timeline'],
-  },
-  { label: '演示管理', paths: ['/demo'] },
-]
 const groups = computed(() =>
-  definitions
-    .map((group) => ({
-      ...group,
-      items: group.paths.flatMap((path) =>
-        menu.value.filter((item) => item.path === path),
-      ),
-    }))
-    .filter((group) => group.items.length),
+  allowedNavigationGroups(auth.role, mode === 'demo'),
 )
+const menu = computed(() => groups.value.flatMap((group) => group.items))
 const activeItem = computed(() =>
   menu.value.find(
     (item) =>
@@ -95,6 +67,14 @@ const icons = {
   '/family': MessagesSquare,
   '/timeline': History,
   '/demo': FlaskConical,
+  '/workflows/records': NotebookPen,
+  '/workflows/shifts': ClipboardCheck,
+  '/workflows/handovers': ClipboardList,
+  '/workflows/memories': ContactRound,
+  '/workflows/staff': UsersRound,
+  '/workflows/incidents': ShieldCheck,
+  '/workflows/reports': LayoutDashboard,
+  '/recovery': History,
 }
 function changeTransparency(event: Event) {
   const value = (event.target as HTMLInputElement).checked
@@ -134,7 +114,7 @@ function leaveAccount(event: FocusEvent) {
       aria-label="管理端导航"
     >
       <RouterLink
-        :to="menu[0]?.path || '/403'"
+        :to="homeForRole(auth.role)"
         class="brand"
       >
         <span class="brand-mark"><Activity
@@ -172,23 +152,20 @@ function leaveAccount(event: FocusEvent) {
             <span>{{ item.label }}</span>
           </RouterLink>
         </div>
-        <div class="nav-group">
-          <p class="nav-group-label">
-            本机记录
-          </p>
-          <button
-            class="nav-link"
-            type="button"
-            title="打开本机草稿"
-            @click="showDrafts"
-          >
-            <Files
-              :size="18"
-              aria-hidden="true"
-            /><span>草稿管理</span>
-          </button>
-        </div>
       </nav>
+      <div class="sidebar-tools">
+        <button
+          class="nav-link"
+          type="button"
+          title="打开本机草稿"
+          @click="showDrafts"
+        >
+          <Files
+            :size="18"
+            aria-hidden="true"
+          /><span>草稿管理</span>
+        </button>
+      </div>
       <div class="sidebar-foot">
         <span class="status-dot" /><span>管理端</span><span>{{ mode === 'demo' ? '演示模式' : '正式模式' }}</span>
       </div>
@@ -242,7 +219,10 @@ function leaveAccount(event: FocusEvent) {
             <button
               type="button"
               class="account-button"
-              :aria-label="'当前账号 · ' + (auth.role ? roleLabels[auth.role] : '权限未识别')"
+              :aria-label="
+                '当前账号 · ' +
+                  (auth.role ? roleLabels[auth.role] : '权限未识别')
+              "
               :aria-expanded="accountOpen"
               aria-controls="account-panel"
               @click="accountOpen = !accountOpen"
@@ -301,3 +281,10 @@ function leaveAccount(event: FocusEvent) {
     </div>
   </div>
 </template>
+
+<style scoped>
+.sidebar-tools {
+  padding: 8px 12px 0;
+  border-top: 1px solid var(--hl-border, #dce3e7);
+}
+</style>

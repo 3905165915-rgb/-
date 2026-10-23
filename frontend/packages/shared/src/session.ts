@@ -3,6 +3,7 @@ export type AppMode = 'api' | 'demo'
 export interface FrontendSession {
   mode: AppMode
   accountKey: string
+  userId?: string
   accessToken?: string
   role: Role | null
 }

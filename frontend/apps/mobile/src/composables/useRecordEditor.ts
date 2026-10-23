@@ -325,10 +325,6 @@ export function useRecordEditor() {
       error.value = '请选择老人，填写原文和观察结果。'
       return
     }
-    if (manual && mode === 'api') {
-      error.value = '手工记录仅可保存本机，正式提交暂未接入。'
-      return
-    }
     if (!manual && !confirmable.value) {
       error.value = '原文已变更，请重新提取后核对。'
       return
@@ -365,8 +361,12 @@ export function useRecordEditor() {
         notice.value = '内容已变更，请重新核对后提交。'
         return
       }
-      if (mode === 'api' && !manual) {
-        confirmKey = JSON.stringify([mode, 'record', intent.ai!.draft.id])
+      if (mode === 'api') {
+        confirmKey = JSON.stringify([
+          mode,
+          manual ? 'manual-record' : 'record',
+          manual ? intent.localId : intent.ai!.draft.id,
+        ])
         claimed = await claimWriteAttempt(confirmKey)
         if (!claimed) {
           editor.value.phase = 'uncertain'
@@ -388,8 +388,22 @@ export function useRecordEditor() {
       }
       attempted = true
       const result: unknown = manual
-        ? await saveDemoManualRecord(intent)
+        ? mode === 'demo'
+          ? await saveDemoManualRecord(intent)
+          : await gateway.manualRecord(
+              {
+                elder_id: intent.elderId,
+                raw_text: intent.text,
+                review: {
+                  observation: intent.review.observation,
+                  followUp: intent.review.followUp,
+                  contactTarget: '',
+                },
+              },
+              intent.localId,
+            )
         : await gateway.confirmRecord(intent.ai!.draft.id, {
+            taskCandidates: intent.ai!.draft.taskCandidates,
             fields: {
               observation: intent.review.observation,
               followUp: intent.review.followUp,
@@ -398,17 +412,16 @@ export function useRecordEditor() {
           })
       editor.value.phase = 'submitted'
       changed()
-      if (
-        mode === 'demo' &&
+      if (mode === 'demo') notice.value = '演示记录已确认，结果仅保存在本机。'
+      else if (
         result &&
         typeof result === 'object' &&
-        'status' in result &&
-        result.status === 'confirmed' &&
-        'task_ids' in result &&
-        Array.isArray(result.task_ids)
+        'record' in result &&
+        'tasks' in result &&
+        Array.isArray(result.tasks)
       )
         notice.value =
-          '演示记录已确认；关联任务 ' + result.task_ids.length + ' 项。'
+          '服务端记录已确认；关联任务 ' + result.tasks.length + ' 项。'
       else notice.value = '已提交；记录状态与任务结果请以服务端查询为准。'
       await persist()
       await refreshData()

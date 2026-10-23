@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import WorkflowPanel from '@hulao/shared/workflow'
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import type { Task } from '@hulao/shared'
@@ -8,6 +9,7 @@ import {
   RotateCcw,
   Search,
   SquarePen,
+  Plus,
 } from 'lucide-vue-next'
 import { useTasks, useElders } from '../../services/data'
 import {
@@ -65,6 +67,8 @@ const { filters, filtered, shifts, assignees, sync, reset } = useTaskFilters(
 const selected = ref<Task | null>(null)
 const route = useRoute()
 const router = useRouter()
+const creating = computed(() => route.query.create === '1')
+const createContext = computed(() => typeof route.query.elder === 'string' ? { elder_id: route.query.elder } : {})
 function closeTask() {
   selected.value = null
   if (route.query.task || route.query.draft) {
@@ -98,7 +102,16 @@ watch(
 <template>
   <section class="tasks-page">
     <div class="page-title-row">
-      <h1>每日任务</h1>
+      <h1>任务管理</h1>
+      <el-button type="primary" @click="router.push({ query: { ...route.query, create: '1' } })"><Plus :size="16" aria-hidden="true" />新建任务</el-button>
+    </div>
+    <section v-if="creating" aria-label="新建照护任务">
+      <el-button link @click="router.push({ query: {} })">返回任务列表</el-button>
+      <WorkflowPanel group="records" title="新建照护任务" initial-action="/records/manual" :context="createContext" task-creation @changed="tasks.refetch()" />
+    </section>
+    <template v-else>
+    <div class="page-title-row">
+      <h2>每日任务</h2>
       <el-button
         class="icon-button"
         title="刷新任务"
@@ -106,32 +119,23 @@ watch(
         :loading="tasks.isFetching.value"
         @click="tasks.refetch()"
       >
-        <RefreshCw
-          :size="18"
-          aria-hidden="true"
-        />
+        <RefreshCw :size="18" aria-hidden="true" />
       </el-button>
     </div>
-    <div
-      class="task-metrics"
-      aria-label="已载入任务统计"
-    >
+    <div class="task-metrics" aria-label="已载入任务统计">
       <div
         v-for="metric in counts"
         :key="metric.label"
         :class="'metric-' + metric.tone"
       >
-        <span>{{ metric.label }}</span><strong>{{
+        <span>{{ metric.label }}</span
+        ><strong>{{
           tasks.isPending.value || tasks.error.value ? '未提供' : metric.value
         }}</strong>
       </div>
     </div>
     <div class="data-section">
-      <div
-        class="section-tabs"
-        role="group"
-        aria-label="任务状态视图"
-      >
+      <div class="section-tabs" role="group" aria-label="任务状态视图">
         <button
           v-for="tab in statusTabs"
           :key="tab.value"
@@ -142,14 +146,8 @@ watch(
           {{ tab.label }}
         </button>
       </div>
-      <el-form
-        inline
-        class="filter-bar task-filters"
-      >
-        <el-form-item
-          label="搜索"
-          class="task-search"
-        >
+      <el-form inline class="filter-bar task-filters">
+        <el-form-item label="搜索" class="task-search">
           <el-input
             v-model="filters.q"
             placeholder="已载入任务、老人、床位"
@@ -157,28 +155,16 @@ watch(
             @input="sync"
           >
             <template #prefix>
-              <Search
-                :size="16"
-                aria-hidden="true"
-              />
+              <Search :size="16" aria-hidden="true" />
             </template>
           </el-input>
         </el-form-item>
         <el-form-item label="排序">
-          <el-select
-            v-model="filters.sort"
-            @change="sync"
-          >
-            <el-option
-              label="原始顺序"
-              value="source"
-            /><el-option
+          <el-select v-model="filters.sort" @change="sync">
+            <el-option label="原始顺序" value="source" /><el-option
               label="截止时间从早到晚"
               value="due_asc"
-            /><el-option
-              label="截止时间从晚到早"
-              value="due_desc"
-            />
+            /><el-option label="截止时间从晚到早" value="due_desc" />
           </el-select>
         </el-form-item>
         <el-form-item>
@@ -188,10 +174,7 @@ watch(
             aria-label="重置筛选"
             @click="reset"
           >
-            <RotateCcw
-              :size="17"
-              aria-hidden="true"
-            />
+            <RotateCcw :size="17" aria-hidden="true" />
           </el-button>
         </el-form-item>
         <el-form-item label="老人">
@@ -207,8 +190,8 @@ watch(
               :label="item.name + ' · ' + item.bedLabel"
               :value="item.id"
             />
-          </el-select>
-        </el-form-item><el-form-item label="班次">
+          </el-select> </el-form-item
+        ><el-form-item label="班次">
           <el-select
             v-model="filters.shift"
             placeholder="全部班次"
@@ -221,8 +204,8 @@ watch(
               :label="item"
               :value="item"
             />
-          </el-select>
-        </el-form-item><el-form-item label="责任人">
+          </el-select> </el-form-item
+        ><el-form-item label="责任人">
           <el-select
             v-model="filters.assignee"
             placeholder="全部责任人"
@@ -235,8 +218,8 @@ watch(
               :label="item"
               :value="item"
             />
-          </el-select>
-        </el-form-item><el-form-item label="状态">
+          </el-select> </el-form-item
+        ><el-form-item label="状态">
           <el-select
             v-model="filters.status"
             placeholder="全部状态"
@@ -262,10 +245,7 @@ watch(
           }
         "
       />
-      <QueryFeedback
-        :error="elders.error.value"
-        @retry="elders.refetch()"
-      />
+      <QueryFeedback :error="elders.error.value" @retry="elders.refetch()" />
       <el-table
         v-if="!tasks.isPending.value && !tasks.error.value"
         :data="paged"
@@ -273,10 +253,7 @@ watch(
           tasks.data.value?.length ? '暂无匹配任务，请调整筛选条件' : '暂无任务'
         "
       >
-        <el-table-column
-          label="护理任务"
-          min-width="220"
-        >
+        <el-table-column label="护理任务" min-width="220">
           <template #default="{ row }">
             <div class="table-primary">
               {{ row.title }}
@@ -284,11 +261,8 @@ watch(
             <div class="table-secondary">
               {{ row.id }}
             </div>
-          </template>
-        </el-table-column><el-table-column
-          label="老人 / 床位"
-          min-width="180"
-        >
+          </template> </el-table-column
+        ><el-table-column label="老人 / 床位" min-width="180">
           <template #default="{ row }">
             <RouterLink
               v-if="elderMap.has(row.elderId)"
@@ -298,22 +272,21 @@ watch(
               <span class="bed-label">{{
                 elderMap.get(row.elderId)?.bedLabel || '床位未提供'
               }}</span>
-              <span><span class="table-primary">{{
-                elderMap.get(row.elderId)?.name
-              }}</span><span class="table-secondary">{{ row.elderId }}</span></span>
+              <span
+                ><span class="table-primary">{{
+                  elderMap.get(row.elderId)?.name
+                }}</span
+                ><span class="table-secondary">{{ row.elderId }}</span></span
+              >
             </RouterLink>
-            <span
-              v-else
-              class="muted"
-            >{{ row.elderId }} ·
+            <span v-else class="muted"
+              >{{ row.elderId }} ·
               {{
                 elders.isPending.value ? '档案加载中' : '姓名及床位未提供'
-              }}</span>
-          </template>
-        </el-table-column><el-table-column
-          label="班次 · 责任人"
-          min-width="140"
-        >
+              }}</span
+            >
+          </template> </el-table-column
+        ><el-table-column label="班次 · 责任人" min-width="140">
           <template #default="{ row }">
             <div class="table-primary">
               {{ row.assignee || '责任人未提供' }}
@@ -321,23 +294,16 @@ watch(
             <div class="table-secondary">
               {{ row.shift || '班次未提供' }}
             </div>
-          </template>
-        </el-table-column><el-table-column
+          </template> </el-table-column
+        ><el-table-column
           prop="dueAt"
           label="截止时间"
           min-width="160"
-        /><el-table-column
-          label="状态"
-          min-width="100"
-        >
+        /><el-table-column label="状态" min-width="100">
           <template #default="{ row }">
             <StatusLabel :status="row.status" />
-          </template>
-        </el-table-column><el-table-column
-          label="操作"
-          width="128"
-          fixed="right"
-        >
+          </template> </el-table-column
+        ><el-table-column label="操作" width="128" fixed="right">
           <template #default="{ row }">
             <el-button
               link
@@ -347,11 +313,8 @@ watch(
               aria-label="处理任务"
               @click="selected = row"
             >
-              <SquarePen
-                :size="18"
-                aria-hidden="true"
-              />
-            </el-button><el-button
+              <SquarePen :size="18" aria-hidden="true" /> </el-button
+            ><el-button
               v-if="row.itemId"
               link
               class="icon-button"
@@ -361,10 +324,7 @@ watch(
                 $router.push('/timeline/' + encodeURIComponent(row.itemId))
               "
             >
-              <History
-                :size="18"
-                aria-hidden="true"
-              />
+              <History :size="18" aria-hidden="true" />
             </el-button>
           </template>
         </el-table-column>
@@ -373,8 +333,10 @@ watch(
         v-if="!tasks.isPending.value && !tasks.error.value"
         class="list-summary table-footer"
       >
-        <span role="status">当前 {{ filtered.length }} 项 · 已载入
-          {{ tasks.data.value?.length ?? 0 }} 项</span><el-pagination
+        <span role="status"
+          >当前 {{ filtered.length }} 项 · 已载入
+          {{ tasks.data.value?.length ?? 0 }} 项</span
+        ><el-pagination
           v-model:current-page="page"
           v-model:page-size="pageSize"
           :page-sizes="[10, 25, 50]"
@@ -390,5 +352,11 @@ watch(
       :assignees="assignees"
       @close="closeTask"
     />
+    <WorkflowPanel
+      group="tasks"
+      title="任务办理与依据核验"
+      @changed="tasks.refetch()"
+    />
+    </template>
   </section>
 </template>

@@ -1,10 +1,12 @@
 <script setup lang="ts">
+import WorkflowPanel from '@hulao/shared/workflow'
 import { computed, ref } from 'vue'
 import { ArrowUpRight, RefreshCw, RotateCcw, Search } from 'lucide-vue-next'
 import { useElders } from '../../services/data'
 import QueryFeedback from '../../components/QueryFeedback.vue'
 const elders = useElders()
 const keyword = ref('')
+const creating = ref(false)
 const status = ref('')
 function resetFilters() {
   keyword.value = ''
@@ -23,6 +25,9 @@ const rows = computed(() =>
   <section class="elders-page">
     <div class="page-title-row">
       <h1>老人档案</h1>
+      <el-button type="primary" @click="creating = !creating">{{
+        creating ? '收起办理' : '新建老人'
+      }}</el-button>
       <el-button
         class="icon-button"
         title="刷新老人档案"
@@ -30,57 +35,44 @@ const rows = computed(() =>
         :loading="elders.isFetching.value"
         @click="elders.refetch()"
       >
-        <RefreshCw
-          :size="18"
-          aria-hidden="true"
-        />
+        <RefreshCw :size="18" aria-hidden="true" />
       </el-button>
     </div>
+    <WorkflowPanel
+      v-if="creating"
+      group="elders"
+      initial-action="/elders"
+      title="新建与维护老人档案"
+      @changed="elders.refetch()"
+    />
     <div class="data-section">
-      <el-form
-        inline
-        class="filter-bar"
-      >
+      <el-form inline class="filter-bar">
         <el-form-item label="搜索">
-          <el-input
-            v-model="keyword"
-            placeholder="姓名、编号或床位"
-            clearable
-          >
+          <el-input v-model="keyword" placeholder="姓名、编号或床位" clearable>
             <template #prefix>
-              <Search
-                :size="16"
-                aria-hidden="true"
-              />
+              <Search :size="16" aria-hidden="true" />
             </template>
-          </el-input>
-        </el-form-item><el-form-item label="状态">
-          <el-select
-            v-model="status"
-            clearable
-            placeholder="全部状态"
-          >
+          </el-input> </el-form-item
+        ><el-form-item label="状态">
+          <el-select v-model="status" clearable placeholder="全部状态">
             <el-option
               v-for="value in ['入住', '外出', '离院']"
               :key="value"
               :label="value"
               :value="value"
             />
-          </el-select>
-        </el-form-item><el-form-item>
+          </el-select> </el-form-item
+        ><el-form-item>
           <el-button
             class="icon-button"
             title="重置筛选"
             aria-label="重置筛选"
             @click="resetFilters"
           >
-            <RotateCcw
-              :size="17"
-              aria-hidden="true"
-            />
+            <RotateCcw :size="17" aria-hidden="true" />
           </el-button>
-        </el-form-item>
-      </el-form><QueryFeedback
+        </el-form-item> </el-form
+      ><QueryFeedback
         :loading="elders.isPending.value"
         :error="elders.error.value"
         @retry="elders.refetch()"
@@ -93,10 +85,7 @@ const rows = computed(() =>
             : '暂无老人档案'
         "
       >
-        <el-table-column
-          label="姓名 / 编号"
-          min-width="180"
-        >
+        <el-table-column label="姓名 / 编号" min-width="180">
           <template #default="{ row }">
             <div class="table-primary">
               {{ row.name }}
@@ -104,8 +93,8 @@ const rows = computed(() =>
             <div class="table-secondary">
               {{ row.id }}
             </div>
-          </template>
-        </el-table-column><el-table-column
+          </template> </el-table-column
+        ><el-table-column
           prop="bedLabel"
           label="床位"
           min-width="100"
@@ -113,10 +102,7 @@ const rows = computed(() =>
           prop="status"
           label="状态"
           min-width="90"
-        /><el-table-column
-          label="风险"
-          min-width="80"
-        >
+        /><el-table-column label="风险" min-width="80">
           <template #default="{ row }">
             <span
               v-if="row.risk"
@@ -128,20 +114,14 @@ const rows = computed(() =>
                     ? 'status-warning'
                     : 'status-neutral'
               "
-            >{{ row.risk }}</span><span
-              v-else
-              class="muted"
-            >未提供</span>
-          </template>
-        </el-table-column><el-table-column
+              >{{ row.risk }}</span
+            ><span v-else class="muted">未提供</span>
+          </template> </el-table-column
+        ><el-table-column
           prop="lastUpdate"
           label="最近更新"
           min-width="140"
-        /><el-table-column
-          label="操作"
-          fixed="right"
-          width="100"
-        >
+        /><el-table-column label="操作" fixed="right" width="100">
           <template #default="{ row }">
             <el-button
               link
@@ -151,10 +131,7 @@ const rows = computed(() =>
               aria-label="查看老人档案"
               @click="$router.push('/elders/' + encodeURIComponent(row.id))"
             >
-              <ArrowUpRight
-                :size="18"
-                aria-hidden="true"
-              />
+              <ArrowUpRight :size="18" aria-hidden="true" />
             </el-button>
           </template>
         </el-table-column>

@@ -1,4 +1,7 @@
 <script setup lang="ts">
+const serverWorkflow = ['api'].includes(import.meta.env.VITE_APP_MODE || 'api')
+import WorkflowPanel from '@hulao/shared/workflow'
+import TaskCareContext from '@hulao/shared/task-care-context'
 import { computed } from 'vue'
 import { Clock3, Save, Send, Paperclip } from 'lucide-vue-next'
 import { isKnownStatus, resolveStatus, taskStatusMeta } from '@hulao/shared'
@@ -52,6 +55,7 @@ const {
 } = useTaskAction(
   () => String(route.params.id),
   () => (typeof route.query.draft === 'string' ? route.query.draft : undefined),
+  () => !serverWorkflow,
 )
 const readonly = computed(
   () =>
@@ -79,8 +83,8 @@ async function leave() {
     return false
   }
 }
-onBeforeRouteLeave(leave)
-onBeforeRouteUpdate(leave)
+onBeforeRouteLeave(() => (mode === 'api' ? true : leave()))
+onBeforeRouteUpdate(() => (mode === 'api' ? true : leave()))
 async function saveAsNew() {
   await copyAsNew()
   if (saved.value && form.value?.localId && route.query.draft)
@@ -90,10 +94,20 @@ async function saveAsNew() {
 }
 </script>
 <template>
-  <section class="task-detail-page editor-page">
-    <p class="page-kicker">
-      任务详情
-    </p>
+  <TaskCareContext
+    :task-id="String(route.params.id)"
+    :mode="mode"
+    :session="session"
+  />
+  <WorkflowPanel
+    v-if="serverWorkflow"
+    group="tasks"
+    title="任务处理与依据核验"
+    :context="{ task_id: String(route.params.id) }"
+    initial-action="/tasks/{task_id}/transition"
+  />
+  <section v-else class="task-detail-page editor-page">
+    <p class="page-kicker">任务详情</p>
     <FeedbackState
       :loading="tasks.isPending.value || loading"
       :error="tasks.error.value"
@@ -101,21 +115,17 @@ async function saveAsNew() {
       empty-text="未找到任务"
       @retry="tasks.refetch()"
     />
-    <div
-      v-if="task"
-      class="task-overview surface-band"
-    >
+    <div v-if="task" class="task-overview surface-band">
       <div class="task-reference">
-        <span>任务 {{ task.id }}</span><span
-          class="status-label"
-          :data-tone="status.tone"
-        >{{
+        <span>任务 {{ task.id }}</span
+        ><span class="status-label" :data-tone="status.tone">{{
           taskStatusLabels[task.status]
         }}</span>
       </div>
       <div class="person-line">
         <div class="detail-bed">
-          <small>床位</small><strong>{{
+          <small>床位</small
+          ><strong>{{
             elders.error.value ? '未载入' : elder?.bedLabel || '未提供'
           }}</strong>
         </div>
@@ -133,16 +143,11 @@ async function saveAsNew() {
       </div>
       <h1>{{ task.title }}</h1>
       <p class="task-deadline">
-        <Clock3
-          :size="16"
-          aria-hidden="true"
-        />截止：{{
+        <Clock3 :size="16" aria-hidden="true" />截止：{{
           task.dueAt || '未提供'
         }}
       </p>
-      <p v-if="task.result">
-        最新结果：{{ task.result }}
-      </p>
+      <p v-if="task.result">最新结果：{{ task.result }}</p>
       <van-button
         v-if="task.itemId"
         size="small"
@@ -152,43 +157,21 @@ async function saveAsNew() {
         事项回放
       </van-button>
     </div>
-    <FeedbackState
-      :error="elders.error.value"
-      @retry="elders.refetch()"
-    />
+    <FeedbackState :error="elders.error.value" @retry="elders.refetch()" />
     <template v-if="task">
-      <p
-        v-if="!status.known"
-        class="warning-text"
-        role="status"
-      >
+      <p v-if="!status.known" class="warning-text" role="status">
         任务状态待核实，暂不可处理，请刷新任务。
       </p>
-      <p
-        v-else-if="submitted"
-        class="success-text"
-        role="status"
-      >
+      <p v-else-if="submitted" class="success-text" role="status">
         此任务操作已结束，当前内容只读。
       </p>
-      <p
-        v-if="uncertain"
-        class="warning-text"
-        role="status"
-      >
+      <p v-if="uncertain" class="warning-text" role="status">
         提交结果待核实，请勿重复提交。
       </p>
-      <p
-        v-if="error"
-        class="error-text"
-        role="alert"
-      >
+      <p v-if="error" class="error-text" role="alert">
         {{ error }}
       </p>
-      <p
-        v-if="message"
-        role="status"
-      >
+      <p v-if="message" role="status">
         {{ message }}
       </p>
       <fieldset
@@ -197,15 +180,14 @@ async function saveAsNew() {
         class="plain-fieldset form-band"
       >
         <h2>处理任务</h2>
-        <label class="select-field">操作<select
-          v-model="form.action"
-          @change="changed"
+        <label class="select-field"
+          >操作<select v-model="form.action" @change="changed">
+            <option value="start">开始</option>
+            <option value="complete">完成</option>
+            <option value="not_done">未执行</option>
+            <option value="transfer">转交</option>
+          </select></label
         >
-          <option value="start">开始</option>
-          <option value="complete">完成</option>
-          <option value="not_done">未执行</option>
-          <option value="transfer">转交</option>
-        </select></label>
         <van-field
           v-if="form.action === 'complete'"
           v-model="form.result"
@@ -218,26 +200,22 @@ async function saveAsNew() {
           placeholder="填写本次观察及处理结果"
           @update:model-value="changed"
         />
-        <label
-          v-if="form.action === 'not_done'"
-          class="select-field"
-        >未执行原因<select
-          v-model="form.reason"
-          @change="changed"
+        <label v-if="form.action === 'not_done'" class="select-field"
+          >未执行原因<select v-model="form.reason" @change="changed">
+            <option value="">请选择</option>
+            <option
+              v-for="reason in [
+                '老人拒绝',
+                '身体状况不允许',
+                '资源不足',
+                '其他',
+              ]"
+              :key="reason"
+            >
+              {{ reason }}
+            </option>
+          </select></label
         >
-          <option value="">请选择</option>
-          <option
-            v-for="reason in [
-              '老人拒绝',
-              '身体状况不允许',
-              '资源不足',
-              '其他',
-            ]"
-            :key="reason"
-          >
-            {{ reason }}
-          </option>
-        </select></label>
         <van-field
           v-if="form.action === 'transfer'"
           v-model="form.transferTo"
@@ -247,10 +225,7 @@ async function saveAsNew() {
           :disabled="readonly"
           @update:model-value="changed"
         /><datalist id="assignees">
-          <option
-            v-for="name in assignees"
-            :key="name"
-          >
+          <option v-for="name in assignees" :key="name">
             {{ name }}
           </option>
         </datalist>
@@ -263,23 +238,26 @@ async function saveAsNew() {
           autosize
           placeholder="补充需要关注的信息"
           @update:model-value="changed"
-        /><label class="file-field"><span class="field-label-with-icon"><Paperclip
-          :size="18"
-          aria-hidden="true"
-        />本机附件</span><span class="muted">最多3个，每个不超过5MB</span><input
-          type="file"
-          multiple
-          :disabled="readonly"
-          aria-label="选择本机附件"
-          @change="addFiles"
-        ></label>
+        /><label class="file-field"
+          ><span class="field-label-with-icon"
+            ><Paperclip :size="18" aria-hidden="true" />本机附件</span
+          ><span class="muted">最多3个，每个不超过5MB</span
+          ><input
+            type="file"
+            multiple
+            :disabled="readonly"
+            aria-label="选择本机附件"
+            @change="addFiles"
+        /></label>
         <div
           v-for="(file, index) in form.attachments"
           :key="index"
           class="attachment-row"
         >
-          <span>{{ file.name }} · {{ Math.ceil(file.size / 1024) }}KB ·
-            {{ saved ? '已保存到本机' : '尚未保存' }}</span><van-button
+          <span
+            >{{ file.name }} · {{ Math.ceil(file.size / 1024) }}KB ·
+            {{ saved ? '已保存到本机' : '尚未保存' }}</span
+          ><van-button
             size="mini"
             icon="delete-o"
             title="移除附件"
@@ -301,7 +279,8 @@ async function saveAsNew() {
         :key="name"
         class="attachment-row"
       >
-        <span class="warning-text">{{ name }} · 需要重新选择</span><van-button
+        <span class="warning-text">{{ name }} · 需要重新选择</span
+        ><van-button
           size="mini"
           :disabled="readonly"
           @click="removeMissing(name)"
@@ -309,16 +288,10 @@ async function saveAsNew() {
           移除缺失附件
         </van-button>
       </div>
-      <p
-        v-if="mode === 'api'"
-        class="muted"
-      >
+      <p v-if="mode === 'api'" class="muted">
         仅完成结果可提交；其他操作、备注及附件仅保存在本机。
       </p>
-      <p
-        v-if="errors.length"
-        class="muted"
-      >
+      <p v-if="errors.length" class="muted">
         {{ errors.join('；') }}
       </p>
       <div
@@ -357,20 +330,14 @@ async function saveAsNew() {
             :disabled="!form || busy || loading || deleted"
             @click="save"
           >
-            <Save
-              :size="17"
-              aria-hidden="true"
-            />保存本机
-          </van-button><van-button
+            <Save :size="17" aria-hidden="true" />保存本机 </van-button
+          ><van-button
             type="primary"
             :loading="busy"
             :disabled="!canSend || readonly"
             @click="submit"
           >
-            <Send
-              :size="17"
-              aria-hidden="true"
-            />{{
+            <Send :size="17" aria-hidden="true" />{{
               mode === 'demo' ? '提交演示操作' : '提交完成结果'
             }}
           </van-button>
@@ -386,8 +353,8 @@ async function saveAsNew() {
             :disabled="busy"
             @click="reconcile"
           >
-            核实状态
-          </van-button><van-button
+            核实状态 </van-button
+          ><van-button
             v-if="submitted && mode === 'demo'"
             block
             size="small"

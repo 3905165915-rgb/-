@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import WorkflowPanel from '@hulao/shared/workflow'
 import { computed } from 'vue'
 import { useQuery } from '@tanstack/vue-query'
 import { loadDemoState } from '@hulao/shared'
@@ -6,6 +7,12 @@ import { ArrowUpRight, RefreshCw } from 'lucide-vue-next'
 import { useElders, useTasks, mode, queryKey } from '../../services/data'
 import QueryFeedback from '../../components/QueryFeedback.vue'
 const elders = useElders()
+const today = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Asia/Shanghai',
+}).format(new Date())
+const tomorrow = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Asia/Shanghai',
+}).format(new Date(Date.now() + 86400000))
 const tasks = useTasks()
 const demo = useQuery({
   queryKey: computed(() => queryKey('demo-preview')),
@@ -40,10 +47,7 @@ const overdue = computed(
           }
         "
       >
-        <RefreshCw
-          :size="18"
-          aria-hidden="true"
-        />
+        <RefreshCw :size="18" aria-hidden="true" />
       </el-button>
     </div>
     <QueryFeedback
@@ -66,20 +70,23 @@ const overdue = computed(
           elders.error.value || elders.isPending.value
             ? '—'
             : (elders.data.value?.filter((elder) => elder.status === '入住')
-              .length ?? 0)
-        }}</b><span>在住老人</span>
-      </button><button
+                .length ?? 0)
+        }}</b
+        ><span>在住老人</span></button
+      ><button
         type="button"
         class="metric-card metric-info"
         @click="$router.push('/tasks')"
       >
-        <b>{{ tasks.error.value || tasks.isPending.value ? '—' : pending }}</b><span>待处理任务</span>
-      </button><button
+        <b>{{ tasks.error.value || tasks.isPending.value ? '—' : pending }}</b
+        ><span>待处理任务</span></button
+      ><button
         type="button"
         class="metric-card metric-danger"
         @click="$router.push('/tasks?status=overdue')"
       >
-        <b>{{ tasks.error.value || tasks.isPending.value ? '—' : overdue }}</b><span>逾期任务</span>
+        <b>{{ tasks.error.value || tasks.isPending.value ? '—' : overdue }}</b
+        ><span>逾期任务</span>
       </button>
     </div>
     <template v-if="mode === 'demo'">
@@ -110,18 +117,20 @@ const overdue = computed(
           }}
         </p>
         <el-button @click="$router.push('/demo')">
-          演示数据管理<ArrowUpRight
-            :size="16"
-            aria-hidden="true"
-          />
+          演示数据管理<ArrowUpRight :size="16" aria-hidden="true" />
         </el-button>
       </div>
     </template>
-    <p
-      v-else
-      class="muted"
-    >
-      床位统计、质检与交班汇总暂未接入。
+    <p v-else class="muted">
+      任务卡片显示已载入的当前快照；下方运营指标由服务器按所选统计窗口计算。
     </p>
+    <WorkflowPanel
+      v-if="mode === 'api'"
+      group="reports"
+      title="运营统计与证据链"
+      :context="{ start: today, end: tomorrow }"
+      initial-action="/reports/metrics"
+      :auto-read="true"
+    />
   </section>
 </template>

@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import UnsupportedPreview from '../../components/UnsupportedPreview.vue'
+import WorkflowPanel from '@hulao/shared/workflow'
 </script>
 <template>
-  <UnsupportedPreview
-    title="照护计划"
-    kind="care-plan"
-  />
+  <section>
+    <h1>照护计划</h1>
+    <WorkflowPanel group="plans" />
+  </section>
 </template>

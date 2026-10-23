@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
 import { Activity, LogIn } from 'lucide-vue-next'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import type { Role } from '@hulao/shared'
 import { useAuthStore, roleLabels } from '../../stores/auth'
 import { homeForRole } from '../../router/access'
 import { mode, errorMessage } from '../../services/data'
 const router = useRouter()
+const route = useRoute()
 const auth = useAuthStore()
 const form = reactive({ username: '', password: '' })
 const selected = ref<Role>('supervisor')
@@ -18,6 +19,14 @@ async function submit() {
   submitting.value = true
   try {
     await auth.login(form.username, form.password)
+    if (
+      mode === 'api' &&
+      route.query.view !== 'admin' &&
+      window.matchMedia('(max-width: 768px)').matches
+    ) {
+      window.location.replace('/mobile/')
+      return
+    }
     await router.replace(homeForRole(auth.role))
   } catch (failure) {
     error.value = errorMessage(failure)
@@ -47,6 +56,7 @@ async function demoLogin() {
         <p>管理端登录 · {{ mode === 'demo' ? '虚构演示' : '正式模式' }}</p>
       </div>
     </div>
+    <p><a href="/mobile/login">打开手机护理端</a></p>
     <el-form
       label-position="top"
       @submit.prevent="submit"

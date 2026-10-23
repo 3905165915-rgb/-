@@ -23,11 +23,13 @@ export const useAuthStore = defineStore('auth', () => {
     const next: FrontendSession = {
       mode,
       accountKey: username.trim(),
+      userId: result.user_id,
       role: normalizeRole(result.role),
       accessToken: mode === 'api' ? result.access_token : undefined,
     }
     if (mode === 'api' && !next.accessToken)
       throw new Error('登录响应缺少凭证。')
+    if (!next.role) throw new Error('登录响应缺少有效角色，请重新登录。')
     saveSession(next)
     session.value = next
     queryClient.clear()

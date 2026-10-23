@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import WorkflowPanel from '@hulao/shared/workflow'
 import { RefreshCw } from 'lucide-vue-next'
 import { familyCaseStatusMeta, resolveStatus } from '@hulao/shared'
 import { useFamilyCases } from '../../services/data'
@@ -32,10 +33,10 @@ function statusMeta(status: unknown) {
       :error="cases.error.value"
       :empty="
         !cases.isPending.value &&
-          !cases.error.value &&
-          !cases.data.value?.length
+        !cases.error.value &&
+        !cases.data.value?.length
       "
-      empty-text="暂无公开内容"
+      empty-text="暂无已授权内容"
       @retry="cases.refetch()"
     />
     <div
@@ -56,20 +57,20 @@ function statusMeta(status: unknown) {
           :title="
             statusMeta(item.status).known ? undefined : String(item.status)
           "
-        >{{ statusMeta(item.status).label }}</span>
+          >{{ statusMeta(item.status).label }}</span
+        >
         <p class="family-reply">
-          {{ item.reply || '暂无公开回复' }}
+          {{ item.reply || '暂无回复' }}
         </p>
       </article>
     </div>
     <p class="muted">
-      动态摘要与提交问题暂未接入。
+      仅显示授权范围内的已审核简报与反馈，可在下方提交问题和查看回复。
     </p>
-    <van-button
-      block
-      disabled
-    >
-      提交问题暂不可用
-    </van-button>
+    <WorkflowPanel
+      group="family"
+      title="我的授权、服务简报与问题沟通"
+      @changed="cases.refetch()"
+    />
   </section>
 </template>

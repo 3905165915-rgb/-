@@ -33,14 +33,39 @@ const router = createRouter({
           meta: { roles: internalRoles },
         },
         {
+          path: 'elders',
+          component: () => import('../pages/elders/EldersPage.vue'),
+          meta: { roles: internalRoles },
+        },
+        {
+          path: 'elders/:id',
+          component: () => import('../pages/elders/ElderDetailPage.vue'),
+          meta: { roles: internalRoles },
+        },
+        {
+          path: 'account',
+          component: () => import('../pages/account/AccountPage.vue'),
+          meta: { roles: internalRoles },
+        },
+        {
+          path: 'account/recovery',
+          component: () => import('../pages/recovery/RecoveryPage.vue'),
+          meta: { roles: internalRoles, focused: true },
+        },
+        {
           path: 'records/new',
           component: () => import('../pages/records/RecordPage.vue'),
-          meta: { roles: internalRoles },
+          meta: { roles: internalRoles, focused: true },
+        },
+        {
+          path: 'tasks/new',
+          component: () => import('../pages/tasks/TaskCreatePage.vue'),
+          meta: { roles: internalRoles, focused: true },
         },
         {
           path: 'tasks/:id',
           component: () => import('../pages/tasks/TaskDetailPage.vue'),
-          meta: { roles: internalRoles },
+          meta: { roles: internalRoles, focused: true },
         },
         {
           path: 'handover',
@@ -55,7 +80,7 @@ const router = createRouter({
         {
           path: 'timeline/:id?',
           component: () => import('../pages/timeline/TimelinePage.vue'),
-          meta: { roles: internalRoles },
+          meta: { roles: internalRoles, focused: true },
         },
       ],
     },
@@ -63,16 +88,26 @@ const router = createRouter({
   ],
 })
 router.beforeEach((to) => {
-  const current = readSession()
-  session.value = current
-  if (current && current.mode !== mode) {
+  let current = readSession()
+  if (
+    !current ||
+    current.mode !== mode ||
+    !current.role ||
+    (mode === 'api' && !current.accessToken?.trim())
+  ) {
     clearSession()
-    session.value = null
+    current = null
     queryClient.clear()
-    return '/login'
   }
+  session.value = current
   if (to.meta.requiresAuth && !current) return '/login'
   if (to.path === '/login' && current) return homeForRole(current.role)
+  // Recover bookmarks and open tabs left on the old mobile forbidden page.
+  if (
+    to.path === '/403' &&
+    (!current || canAccess(current.role, internalRoles))
+  )
+    return homeForRole(current?.role ?? null)
   const roles = to.meta.roles as readonly Role[] | undefined
   if (roles && !canAccess(current?.role ?? null, roles)) return '/403'
 })

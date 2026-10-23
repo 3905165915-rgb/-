@@ -13,8 +13,13 @@ const auth = useAuthStore()
 const router = useRouter()
 const route = useRoute()
 const menu = computed(() => allowedRoutes(auth.role))
-const focused = computed(() =>
-  /^\/(tasks\/|records\/|handover(?:\/|$)|timeline(?:\/|$))/.test(route.path),
+const focused = computed(() => route.meta.focused === true)
+const activeTab = computed(
+  () =>
+    menu.value.find(
+      (item) =>
+        route.path === item.path || route.path.startsWith(item.path + '/'),
+    )?.path,
 )
 const accountOpen = ref(false)
 const reducedTransparency = ref(getReducedTransparency())
@@ -26,6 +31,12 @@ function updateTransparency(value: boolean) {
 }
 function back() {
   void router.push(homeForRole(auth.role))
+}
+function openAccount() {
+  if (auth.role === 'family') {
+    reducedTransparency.value = getReducedTransparency()
+    accountOpen.value = true
+  } else void router.push('/account')
 }
 function logout() {
   accountOpen.value = false
@@ -72,11 +83,11 @@ function logout() {
         <button
           type="button"
           class="icon-button account-trigger"
-          title="账号与偏好"
-          aria-label="账号与偏好"
-          aria-haspopup="dialog"
-          :aria-expanded="accountOpen"
-          @click="accountOpen = true"
+          :title="auth.role === 'family' ? '账号与偏好' : '我的'"
+          :aria-label="auth.role === 'family' ? '账号与偏好' : '我的'"
+          :aria-haspopup="auth.role === 'family' ? 'dialog' : undefined"
+          :aria-expanded="auth.role === 'family' ? accountOpen : undefined"
+          @click="openAccount"
         >
           <UserRound
             :size="20"
@@ -90,13 +101,14 @@ function logout() {
     </section>
     <van-tabbar
       v-if="!focused && !keyboardOpen"
-      route
+      :model-value="activeTab"
       class="hl-glass"
       aria-label="主导航"
     >
       <van-tabbar-item
         v-for="item in menu"
         :key="item.path"
+        :name="item.path"
         replace
         :to="item.path"
         :icon="item.icon"

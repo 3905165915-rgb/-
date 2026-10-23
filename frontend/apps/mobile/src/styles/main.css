@@ -816,6 +816,12 @@ select {
   padding: 10px 16px calc(12px + env(safe-area-inset-bottom, 0px));
   border-top: 1px solid var(--hl-border);
 }
+.mobile-layout:not(.keyboard-open) .handover-page .editor-footer {
+  bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+}
+.mobile-layout.keyboard-open .handover-page .editor-footer {
+  bottom: var(--mobile-keyboard-offset, 0px);
+}
 .save-status {
   color: var(--hl-success);
   font-size: 13px;

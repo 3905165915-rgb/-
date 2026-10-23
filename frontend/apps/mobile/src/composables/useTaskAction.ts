@@ -40,6 +40,7 @@ import {
 export function useTaskAction(
   taskId: () => string,
   draftId: () => string | undefined = () => undefined,
+  enabled: () => boolean = () => true,
 ) {
   const form = ref<TaskEditor>()
   const busy = ref(false)
@@ -90,6 +91,7 @@ export function useTaskAction(
   const operationKey = (id: string) => JSON.stringify([mode, id])
   const snapshot = () => snapshotTaskEditor(toRaw(form.value!))
   async function initialize(fresh = false, durable = false) {
+    if (!enabled()) return
     const current = ++generation
     clearTimeout(timer)
     loading.value = true

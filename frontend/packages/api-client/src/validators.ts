@@ -148,6 +148,34 @@ export function parseList<T extends { id: string }>(
 }
 
 export const parseElder: Parser<Elder> = (value, endpoint, path = '$') => {
+  const wire = object(value, endpoint, path)
+  if (
+    'bed_id' in wire ||
+    ['pending', 'active', 'out', 'discharged'].includes(String(wire.status))
+  ) {
+    enumeration(
+      wire.status,
+      ['pending', 'active', 'out', 'discharged'],
+      endpoint,
+      `${path}.status`,
+    )
+    if (wire.bed_id !== null && wire.bed_id !== undefined)
+      string(wire.bed_id, endpoint, `${path}.bed_id`)
+    value = {
+      ...wire,
+      bedLabel: wire.bed_id ?? '',
+      status: (
+        {
+          pending: '待入住',
+          active: '入住',
+          out: '外出',
+          discharged: '离院',
+        } as Record<string, string>
+      )[String(wire.status)],
+      contact: wire.contact_name ?? '',
+      notes: wire.notes ?? '',
+    }
+  }
   const row = object(value, endpoint, path)
   strings(row, ['id', 'name'], endpoint, path, true)
   strings(row, ['bedLabel'], endpoint, path)
@@ -157,7 +185,12 @@ export const parseElder: Parser<Elder> = (value, endpoint, path = '$') => {
     (typeof row.age !== 'number' || !Number.isInteger(row.age) || row.age < 0)
   )
     invalid(endpoint, `${path}.age`, '需要非负整数')
-  enumeration(row.status, ['入住', '外出', '离院'], endpoint, `${path}.status`)
+  enumeration(
+    row.status,
+    ['待入住', '入住', '外出', '离院'],
+    endpoint,
+    `${path}.status`,
+  )
   if (row.risk !== undefined)
     enumeration(row.risk, ['低', '中', '高'], endpoint, `${path}.risk`)
   if (row.lastUpdate !== undefined)
@@ -166,6 +199,17 @@ export const parseElder: Parser<Elder> = (value, endpoint, path = '$') => {
 }
 
 export const parseTask: Parser<Task> = (value, endpoint, path = '$') => {
+  const wire = object(value, endpoint, path)
+  if ('elder_id' in wire)
+    value = {
+      ...wire,
+      elderId: wire.elder_id,
+      shift: wire.shift_id ?? '',
+      assignee: wire.assigned_to ?? '',
+      dueAt: wire.due_at ?? '',
+      result: wire.result ?? '',
+      itemId: wire.id,
+    }
   const row = object(value, endpoint, path)
   strings(row, ['id', 'elderId', 'title'], endpoint, path, true)
   strings(row, ['shift', 'assignee'], endpoint, path)
@@ -216,6 +260,13 @@ export const parseTimelineEvent: Parser<TimelineEvent> = (
   endpoint,
   path = '$',
 ) => {
+  const wire = object(value, endpoint, path)
+  if ('happened_at' in wire)
+    value = {
+      ...wire,
+      happenedAt: wire.happened_at,
+      enteredAt: wire.entered_at,
+    }
   const row = object(value, endpoint, path)
   strings(row, ['id', 'label'], endpoint, path, true)
   strings(row, ['detail', 'actor'], endpoint, path)
@@ -232,6 +283,43 @@ export const parseRecordDraft: Parser<RecordDraft> = (
   endpoint,
   path = '$',
 ) => {
+  const wire = object(value, endpoint, path)
+  if ('elder_id' in wire) {
+    stringArray(wire.observations, endpoint, `${path}.observations`)
+    if (!Array.isArray(wire.task_candidates))
+      invalid(endpoint, `${path}.task_candidates`, '需要任务候选数组')
+    const candidates = wire.task_candidates.map((item, i) => {
+      const candidate = object(item, endpoint, `${path}.task_candidates[${i}]`)
+      strings(
+        candidate,
+        ['title'],
+        endpoint,
+        `${path}.task_candidates[${i}]`,
+        true,
+      )
+      return candidate
+    })
+    if (!Array.isArray(wire.evidence))
+      invalid(endpoint, `${path}.evidence`, '需要证据数组')
+    const evidence = wire.evidence.map((item, i) => {
+      const source = object(item, endpoint, `${path}.evidence[${i}]`)
+      strings(source, ['text'], endpoint, `${path}.evidence[${i}]`, true)
+      return source.text
+    })
+    string(wire.provider, endpoint, `${path}.provider`, true)
+    value = {
+      ...wire,
+      elderId: wire.elder_id,
+      originalText: wire.raw_text,
+      fields: {
+        observation: (wire.observations as string[]).join('\n'),
+        followUp: candidates.map((item) => item.title).join('\n'),
+        contactTarget: '',
+      },
+      evidence,
+      taskCandidates: candidates,
+    }
+  }
   const row = object(value, endpoint, path)
   strings(row, ['id', 'elderId'], endpoint, path, true)
   strings(row, ['originalText'], endpoint, path)
@@ -255,7 +343,7 @@ export const parseLoginResponse: Parser<LoginResponse> = (
 ) => {
   const row = object(value, endpoint, path)
   strings(row, ['access_token'], endpoint, path, true)
-  optionalStrings(row, ['token_type'], endpoint, path, true)
+  optionalStrings(row, ['token_type', 'user_id'], endpoint, path, true)
   if (row.role !== undefined && normalizeRole(row.role) === null)
     invalid(endpoint, `${path}.role`, '未知角色')
   return value as LoginResponse

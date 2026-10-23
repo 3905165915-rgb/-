@@ -59,12 +59,12 @@ describe('existing API contracts', () => {
       draft,
     )
   })
-  it('encodes identifiers and keeps the completion payload intact', async () => {
+  it('encodes identifiers and puts the completion key only in the header', async () => {
     const api = createApi('/api')
     const payload = { result: '已联系', idempotencyKey: 'attempt-1' }
     api.client.defaults.adapter = async (config) => {
       expect(config.url).toBe('/tasks/a%2Fb/complete')
-      expect(JSON.parse(config.data)).toEqual(payload)
+      expect(JSON.parse(config.data)).toEqual({ result: payload.result })
       expect(config.headers['Idempotency-Key']).toBe('attempt-1')
       return { data: {}, status: 200, statusText: 'OK', headers: {}, config }
     }
@@ -106,14 +106,6 @@ const endpoints: {
     valid: seed.tasks,
     invalid: [{ ...seed.tasks[0], status: 'new_unknown_status' }],
     path: '$[0].status',
-  },
-  {
-    name: 'handover',
-    endpoint: 'GET /handover/:shiftId',
-    read: (api) => api.handover('private-shift/id'),
-    valid: seed.handover,
-    invalid: [{ ...seed.handover[0], title: null }],
-    path: '$[0].title',
   },
   {
     name: 'family',
@@ -230,16 +222,18 @@ describe('failure and write-response boundaries', () => {
     'passes through unconfirmed write responses without fabricating schemas: %s',
     async (data) => {
       const api = withResponse(data)
-      expect(await api.confirmRecord('draft/id', {})).toEqual(data)
+      await expect(api.confirmRecord('draft/id', {})).rejects.toThrow(
+        '确认结果结构不匹配',
+      )
       expect(
         await api.completeTask('task/id', {
           result: 'done',
           idempotencyKey: 'key',
         }),
       ).toEqual(data)
-      expect(
-        await api.receiveHandover('handover/id', { status: 'received' }),
-      ).toEqual(data)
+      await expect(
+        api.receiveHandover('handover/id', { status: 'received' }),
+      ).rejects.toThrow('请刷新交班明细')
     },
   )
   it('keeps parameter and route encoding behavior for reads', async () => {
@@ -256,7 +250,7 @@ describe('failure and write-response boundaries', () => {
     expect(seen).toEqual([
       { url: '/elders', params: { page: 1 } },
       { url: '/tasks', params: { status: 'cancelled' } },
-      { url: '/handover/a%2Fb', params: undefined },
+      { url: '/handovers', params: { shift_id: 'a/b' } },
       { url: '/items/a%2Fb/timeline', params: undefined },
     ])
   })

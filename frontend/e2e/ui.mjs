@@ -176,13 +176,21 @@ try {
             .getByRole('button', { name: '早班', exact: true })
             .click()
         await mobile.locator('.editor-footer').waitFor()
-        assert.equal(await mobile.locator('.van-tabbar').count(), 0)
+        const tabbar = mobile.locator('.van-tabbar')
+        assert.equal(await tabbar.count(), name === 'handover' ? 1 : 0)
         await noOverflow(mobile)
         const bounds = await mobile.locator('.editor-footer').boundingBox()
         assert.ok(
           bounds && bounds.x >= -1 && bounds.x + bounds.width <= width + 1,
         )
         assert.ok(bounds.y >= 0 && bounds.y + bounds.height <= 845)
+        if (name === 'handover') {
+          const navigationBounds = await tabbar.boundingBox()
+          assert.ok(
+            navigationBounds && bounds.y + bounds.height <= navigationBounds.y + 1,
+            JSON.stringify({ footer: bounds, navigation: navigationBounds }),
+          )
+        }
         await capture(mobile, `mobile-${name}-${width}`)
         if (name === 'handover' && width === 320) {
           await mobile.locator('.handover-source .van-checkbox').first().click()
@@ -237,8 +245,9 @@ try {
 
   await test('降低透明度可开关并在刷新后恢复', async () => {
     await mobile
-      .getByRole('button', { name: '账号与偏好', exact: true })
+      .getByRole('button', { name: '我的', exact: true })
       .click()
+    await mobile.waitForURL('**/mobile/account')
     const toggle = mobile.getByRole('switch', {
       name: '降低透明度',
       exact: true,
@@ -260,18 +269,28 @@ try {
       'true',
     )
     await mobile
-      .getByRole('button', { name: '账号与偏好', exact: true })
-      .click()
-    await mobile
       .getByRole('switch', { name: '降低透明度', exact: true })
       .click()
     assert.equal(
       await mobile.locator('html').getAttribute('data-reduce-transparency'),
       'false',
     )
+  })
+
+  await test('恢复日志入口可达且演示环境不读取正式日志', async () => {
+    await mobile.goto(`${base}/mobile/account`)
+    await mobile.getByRole('link', { name: '恢复日志' }).click()
+    await mobile.getByRole('heading', { name: '恢复日志', exact: true }).waitFor()
     await mobile
-      .getByRole('button', { name: '关闭账号菜单', exact: true })
-      .click()
+      .getByText(/仅在正式 API 环境中读取/)
+      .waitFor()
+    await admin.goto(`${base}/admin/recovery`)
+    await admin
+      .getByRole('heading', { name: '本机恢复日志', exact: true })
+      .waitFor()
+    await admin
+      .getByText(/仅在正式 API 环境中读取/)
+      .waitFor()
   })
 
   await test('管理端1280/1440px任务、档案、抽屉与表格', async () => {

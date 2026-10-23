@@ -1,7 +1,7 @@
 import axios from 'axios'
 import { clearSession, readSession } from '@hulao/shared'
 
-export function createApiClient(baseURL = '/api') {
+export function createApiClient(baseURL = '/api/v1') {
   const client = axios.create({ baseURL, timeout: 15000 })
 
   client.interceptors.request.use((config) => {
