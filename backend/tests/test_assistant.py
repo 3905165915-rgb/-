@@ -174,7 +174,7 @@ def test_shift_membership_and_task_scope(api, fake_ai):
     'historical_observation', 'invented_memory_quote', 'memory_quote_outside_observations',
     'fake_context_source', 'fake_context_quote', 'guessed_assignee', 'guessed_time', 'guessed_expiry', 'different_scene',
 ])
-def test_invented_or_mixed_ai_output_rejected_without_saving(api, fake_ai, problem):
+def test_invented_or_mixed_ai_output_saves_only_failed_original(api, fake_ai, problem):
     _, store, _ = api
     create_memory(api)
     before = store.read()
@@ -200,7 +200,12 @@ def test_invented_or_mixed_ai_output_rejected_without_saving(api, fake_ai, probl
     fake_ai['hook'] = change
     result = generate(api, expected=503)
     assert result['detail'] == 'AI provider unavailable; use manual entry'
-    assert store.read() == before
+    after = store.read()
+    for collection in ('care_records', 'care_tasks', 'care_memories'):
+        assert after[collection] == before[collection]
+    failed = next(row for row in after['ai_drafts'] if row['id'] == result['draft_id'])
+    assert failed['status'] == 'failed' and failed['raw_text'] == CURRENT_INPUT
+    assert not failed['observations'] and not failed['task_candidates'] and not failed['memory_candidates']
 
 
 @pytest.mark.parametrize('change,expected', [('memory', 409), ('source', 409), ('task', 409), ('account', 403), ('discharge', 409)])
@@ -319,7 +324,8 @@ def test_provider_failure_leaves_manual_entry_available_and_never_falls_back(api
     monkeypatch.setattr(assistant_service, 'get_ai_provider', lambda: Broken())
     result = generate(api, expected=503)
     assert 'private' not in result['detail']
-    assert not store.read()['ai_drafts']
+    assert store.read()['ai_drafts'][0]['status'] == 'failed'
+    assert store.read()['ai_drafts'][0]['raw_text'] == CURRENT_INPUT
     assert client.post('/api/v1/records/manual', headers=headers(), json={
         'elder_id': 'E1', 'raw_text': CURRENT_INPUT,
     }).status_code == 201
@@ -344,7 +350,9 @@ def test_alternate_adapter_cannot_rewrite_the_sources_used_for_validation(api, m
             return output_for(text, context)
     monkeypatch.setattr(assistant_service, 'get_ai_provider', lambda: MutatingAdapter())
     generate(api, expected=503)
-    assert not store.read()['ai_drafts']
+    failed = store.read()['ai_drafts'][0]
+    assert failed['status'] == 'failed' and not failed['context_notes']
+    assert failed['context_snapshot'] is None and failed['raw_text'] == CURRENT_INPUT
 
 
 def test_mock_is_explicit_and_legacy_extraction_still_works(api, monkeypatch):

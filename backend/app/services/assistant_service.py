@@ -23,10 +23,12 @@ def _snapshot(data, elder_id, shift_id, scene, user_id, role):
     care_eligible(data, elder_id)
     open_shift(data, shift_id, user_id, role)
     memories = context_from_data(data, elder_id, scene)
+    member_shifts = {row['id'] for row in data['shifts'] if user_id in row['caregiver_ids']}
     tasks = [row for row in data['care_tasks'] if row['elder_id'] == elder_id
              and row['status'] in {'pending', 'in_progress', 'not_done', 'overdue'}
              and (shift_id is None or row.get('shift_id') == shift_id)
-             and (role != 'caregiver' or row.get('assigned_to') in {None, user_id})]
+             and (role != 'caregiver' or (row.get('assigned_to') in {None, user_id} and
+                  (row.get('shift_id') is None or row.get('shift_id') in member_shifts)))]
     if len(memories['memories']) > 30 or len(tasks) > 30:
         raise DomainError('assistant_scope_too_large', 422)
     sources = []
@@ -77,6 +79,10 @@ def _snapshot(data, elder_id, shift_id, scene, user_id, role):
     return context
 
 
+def get_context(store, elder_id, shift_id, scene, user_id, role):
+    return _snapshot(store.read(), elder_id, shift_id, scene, user_id, role)
+
+
 def _fingerprint(context):
     stable = {key: value for key, value in context.items() if key != 'as_of'}
     return hashlib.sha256(json.dumps(stable, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
@@ -116,8 +122,9 @@ def create_draft(store, payload, user_id, role):
         warnings.append('当前为演示结果，非真实AI推理。')
     draft = AIDraft(
         id=identifier('AI'), elder_id=payload.elder_id, shift_id=payload.shift_id, raw_text=payload.text,
-        **{key: value for key, value in output.items() if key != 'warnings'}, warnings=warnings,
-        provider=provider.name, created_at=now(), created_by=user_id, generation_kind='context_record',
+        **{key: value for key, value in output.items() if key not in {'warnings', 'model_status'}}, warnings=warnings,
+        provider=provider.name, model_status='demo' if provider.name == 'mock' else 'available',
+        created_at=now(), created_by=user_id, generation_kind='context_record',
         context_snapshot={**inputs, 'fingerprint': fingerprint, 'requested_by': user_id, 'requested_role': role},
     )
     def mutate(data):

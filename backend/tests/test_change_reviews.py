@@ -507,7 +507,8 @@ def test_schema_four_migration_preserves_data_and_backups(tmp_path, version_numb
     backup = store.migrate()
     assert backup.read_bytes() == original
     upgraded = store.read()
-    assert upgraded['schema_version'] == 4 and upgraded['change_reviews'] == []
+    from app.storage.json_store import CURRENT_SCHEMA_VERSION
+    assert upgraded['schema_version'] == CURRENT_SCHEMA_VERSION and upgraded['change_reviews'] == []
     for key, value in data.items():
         if key != 'schema_version':
             assert upgraded[key] == value

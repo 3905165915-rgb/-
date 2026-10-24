@@ -5,7 +5,7 @@ from fastapi import APIRouter, Header, Query
 from app.api.deps import ManagementUser, StaffUser, Store
 from app.schemas.memory import (
     MemoryContextResponse, MemoryCreateRequest, MemoryResponse, MemoryReviewRequest,
-    MemoryRevisionRequest, MemoryScene, MemoryStatus, MemoryFromDraftRequest,
+    MemoryRevisionRequest, MemoryScene, MemoryStatus, MemoryFromDraftRequest, MemoryRefusalRequest,
 )
 from app.services import memory_service
 
@@ -53,3 +53,9 @@ def revise(memory_id: str, payload: MemoryRevisionRequest, current: StaffUser, s
 @router.post('/{memory_id}/review', response_model=MemoryResponse)
 def review(memory_id: str, payload: MemoryReviewRequest, current: ManagementUser, store: Store, idempotency_key: IdempotencyKey = None):
     return memory_service.review(store, memory_id, payload, current['sub'], current['role'], idempotency_key)
+
+
+@router.post('/{memory_id}/refusals', response_model=MemoryResponse)
+def refusal(memory_id: str, payload: MemoryRefusalRequest, current: StaffUser, store: Store,
+            idempotency_key: IdempotencyKey = None):
+    return memory_service.report_refusal(store, memory_id, payload, current['sub'], current['role'], idempotency_key)

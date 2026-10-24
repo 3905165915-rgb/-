@@ -68,21 +68,21 @@ def metrics(store, start, end, user_id, role):
     feedbacks = [r for r in data['family_cases'] if r.get('kind') == 'feedback' and within(r['created_at'])]
     return {'as_of': instant.isoformat(), 'timezone': 'Asia/Shanghai',
         'window': {'start_inclusive': lower.isoformat(), 'end_exclusive': upper.isoformat()},
-        'interpretation': '区间选取业务批次，状态取当前快照；不是历史时点回放。未生成的计划服务不在分母中，不能当作全机构计划履约率。',
+        'interpretation': '按所选时间范围统计，显示当前处理结果，不代表历史时点的处理状态。只计算已生成且已到服务时间的计划任务；未生成的服务不在统计范围内，不能代表全机构计划履约率。',
         'generated_plan_occurrences': {
             'completion': ratio(len(done), len(latest)), 'on_time_completion': ratio(len(on_time), len(latest)),
             'cancelled': sum(r['status'] == 'cancelled' for r in latest),
             'not_done': sum(r['status'] == 'not_done' for r in latest), 'open_overdue': len(overdue),
             'excluded_future_task_rows': future, 'invalid_schedule_rows': invalid,
-            'definition': '按计划scheduled_at选取已到服务时刻的已生成唯一occurrence_key；补发链只算末项，取消保留分母。'},
+            'definition': '按计划服务时间筛选已到时间的计划事项。同一事项如有补发，仅统计最后一项；取消事项仍计入统计总数。'},
         'manual_task_rows_created': sum(not r.get('occurrence_key') and within(r.get('created_at')) for r in data['care_tasks']),
         'handover_receipt': {**ratio(sum(r['status'] == 'received' for r in handover_items), len(handover_items)),
-            'definition': '按交班submitted_at入区间，全部提交条目为分母，当前received为分子，澄清未结束仍未接收。'},
+            'definition': '按交班提交时间选取，全部提交事项计入统计总数，已接收事项计入达成数量；仍在澄清的事项暂不视为已接收。'},
         'incidents': {'reported': len(incidents), 'closed': sum(r['status'] == 'closed' for r in incidents),
             'open_rectifications_overdue': sum(r['status'] != 'closed' and stamp(r['due_at']) is not None and stamp(r['due_at']) < instant for r in rects),
-            'definition': '按occurred_at入区间；未关闭且due_at早于as_of为整改超期。'},
+            'definition': '按事件实际发生时间选取；整改未关闭且截止时间已过，计为整改逾期。'},
         'family_feedback': {'created': len(feedbacks), 'closed': sum(r['status'] == 'closed' for r in feedbacks),
-            'definition': '按created_at入区间，closed表示主管已回复，不代表家属满意。'}}
+            'definition': '按反馈提交时间选取；已关闭表示主管已回复，不代表家属满意。'}}
 
 
 def export_case(store, elder_id, include_text, reason, user_id, role):

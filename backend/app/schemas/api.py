@@ -56,13 +56,47 @@ class RecordExtractRequest(BaseModel):
 
 class RecordConfirmRequest(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra='forbid')
+    expected_revision: int | None = Field(default=None, ge=1)
     observations: list[Text] | None = Field(default=None, min_length=1, max_length=50)
     task_candidates: list[dict] | None = None
+
+
+class DraftUpdateRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra='forbid')
+    expected_revision: int = Field(ge=1)
+    observations: list[Text] | None = Field(default=None, min_length=1, max_length=50)
+    task_candidates: list[dict] | None = Field(default=None, max_length=50)
+    reason: Annotated[str, Field(min_length=1, max_length=1000)]
 
 
 class TaskCompleteRequest(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra='forbid')
     result: str = Field(min_length=1, max_length=2000)
+
+
+class TaskCreateRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra='forbid')
+
+    elder_id: Annotated[str, Field(min_length=1, max_length=100)]
+    title: Annotated[str, Field(min_length=1, max_length=300)]
+    shift_id: Annotated[str, Field(min_length=1, max_length=100)]
+    assigned_to: Annotated[str, Field(min_length=1, max_length=100)]
+    due_at: AwareTime
+    completion_criteria: Annotated[str, Field(min_length=1, max_length=2000)]
+    condition: Annotated[str, Field(max_length=1000)] | None = None
+    due_text: Annotated[str, Field(max_length=500)] | None = None
+    source_type: Literal['manual', 'record'] = 'manual'
+    source_id: Annotated[str, Field(min_length=1, max_length=100)] | None = None
+    source_revision: int | None = Field(default=None, ge=1)
+
+    @model_validator(mode='after')
+    def source_is_explicit(self):
+        if self.source_type == 'manual':
+            if self.source_id is not None or self.source_revision is not None:
+                raise ValueError('Manual tasks cannot include a source object')
+        elif not self.source_id or self.source_revision is None:
+            raise ValueError('A non-manual task requires source_id and source_revision')
+        return self
 
 
 class ManualRecordRequest(BaseModel):
@@ -77,6 +111,7 @@ class ManualRecordRequest(BaseModel):
 
 class RejectDraftRequest(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra='forbid')
+    expected_revision: int | None = Field(default=None, ge=1)
     reason: Annotated[str, Field(min_length=1, max_length=1000)]
 
 
@@ -85,6 +120,17 @@ class CorrectRecordRequest(BaseModel):
     observations: list[Text] = Field(min_length=1, max_length=50)
     reason: Annotated[str, Field(min_length=1, max_length=1000)]
     expected_revision: int = Field(ge=1)
+
+
+class VerifiedCorrectionRequest(CorrectRecordRequest):
+    expected_impact_fingerprint: str = Field(pattern=r'^[0-9a-f]{64}$')
+
+
+class RecordImpactReviewRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra='forbid')
+    expected_fingerprint: str = Field(pattern=r'^[0-9a-f]{64}$')
+    decision: Literal['verified', 'needs_followup']
+    note: Annotated[str, Field(min_length=1, max_length=2000)]
 
 
 class TaskUpdateRequest(BaseModel):

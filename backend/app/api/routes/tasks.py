@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Query
 
 from app.api.deps import StaffUser, ManagementUser, Store
-from app.schemas.api import CareTask, TaskCompleteRequest, TaskUpdateRequest, TaskTransitionRequest
+from app.schemas.api import CareTask, TaskCompleteRequest, TaskCreateRequest, TaskUpdateRequest, TaskTransitionRequest
 from app.services import task_service
 from app.api.routes.records import IdempotencyKey
 from app.services.workflow import find
@@ -12,6 +12,11 @@ from app.services import task_condition_service
 
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
+
+
+@router.post("", response_model=CareTask, status_code=201)
+def create(payload: TaskCreateRequest, current: StaffUser, store: Store, idempotency_key: IdempotencyKey = None):
+    return task_service.create(store, payload, current['sub'], current['role'], idempotency_key)
 
 
 @router.get("", response_model=list[CareTask])

@@ -4,7 +4,6 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -13,7 +12,7 @@ from app.core.config import settings
 from app.schemas.api import HealthResponse
 from app.storage.json_store import CURRENT_SCHEMA_VERSION, JsonStore
 from app.services.workflow import DomainError
-from app.api.routes import family, incidents, reports, insights
+from app.api.routes import family, incidents, reports, insights, impressions
 
 
 @asynccontextmanager
@@ -43,17 +42,35 @@ async def private_api_responses(request: Request, call_next):
 
 @app.exception_handler(RequestValidationError)
 async def validation_error_handler(request: Request, exc: RequestValidationError):
-    if request.url.path.startswith(('/api/v1/staff', '/api/v1/family/accounts', '/api/v1/auth/login')):
-        # Pydantic model-level errors can contain the full raw body, including a
-        # password, even when the model declares SecretStr. Never echo that input.
-        errors = [{field: row[field] for field in ('type', 'loc', 'msg')} for row in exc.errors()]
-        return JSONResponse(status_code=422, content={'detail': errors})
-    return await request_validation_exception_handler(request, exc)
+    # Validation errors can echo complete clinical narratives or credentials in
+    # input/ctx. Keep field locations and messages; do not return the submitted body.
+    errors = [{field: row[field] for field in ('type', 'loc', 'msg')} for row in exc.errors()]
+    return JSONResponse(status_code=422, content={'detail': errors, 'error_code': 'invalid_request',
+                        'safe_message': '请检查必填内容、字段类型和时间格式', 'retryable': False})
 
 
 @app.exception_handler(DomainError)
 async def domain_error_handler(_, exc: DomainError):
-    return JSONResponse(status_code=exc.status_code, content={'detail': exc.code})
+    messages = {
+        'stale_revision': '内容已被更新，请刷新后核对',
+        'record_impact_changed_refresh': '影响范围已变化，请重新预览并核对',
+        'not_a_shift_member': '当前账号未加入该班次，请选择正确班次或联系主管',
+        'assistant_context_changed': '相关照护资料已更新，请重新整理并核对',
+        'idempotency_key_payload_mismatch': '本次提交标识已用于其他内容，请核对提交状态',
+        'impression_no_records': '这位老人还没有已确认记录，请先登记日常照护情况',
+        'impression_sources_changed': '历史记录已新增或更正，请重新整理印象后核对',
+        'impression_history_too_large': '当前示范版最多整理240条、16万字记录，未截断或忽略历史，请联系管理员分期整理',
+        'impression_record_too_long': '单条记录过长，暂无法完整整理，请先核对记录内容',
+        'impression_historical_review': '这是历史版本或已到复核时间，请先重新整理当前印象',
+        'impression_point_requires_review': '请先由主管核对这条印象，再确认加入照护记忆',
+        'impression_not_long_term_preference': '仅多日支持的生活偏好可加入长期记忆；临时意愿、分歧和专业照护关注请另行核实',
+        'impression_memory_evidence_mismatch': '所选原文或版本与印象依据不一致，请刷新后重新选择',
+        'impression_memory_already_created': '这条印象已加入照护记忆，请在记忆管理中查看或修订，不要重复创建',
+    }
+    return JSONResponse(status_code=exc.status_code, content={
+        'detail': exc.code, 'error_code': exc.code, 'retryable': False,
+        'safe_message': messages.get(exc.code, '操作未完成，请核对当前状态、权限和提交内容'),
+    })
 
 app.add_middleware(
     CORSMiddleware,
@@ -87,3 +104,4 @@ app.include_router(family.router, prefix="/api/v1")
 app.include_router(incidents.router, prefix="/api/v1")
 app.include_router(reports.router, prefix="/api/v1")
 app.include_router(insights.router, prefix="/api/v1")
+app.include_router(impressions.router, prefix="/api/v1")

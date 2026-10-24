@@ -1,6 +1,12 @@
+import copy
+
 from app.services.workflow import DomainError
 
 LABELS = {
+    'edit_ai_draft': '人工核对草稿', 'save_failed_ai_draft': '保留待人工整理的原文',
+    'memory_keep': '复核后保留个性化信息', 'memory_suspend': '暂停个性化信息',
+    'memory_resume': '恢复个性化信息', 'report_memory_refusal': '登记本次拒绝供复核',
+    'review_record_impact': '复核记录更正的影响',
     'create_ai_draft': 'AI草稿', 'confirm_ai_draft': '人工确认', 'reject_ai_draft': '放弃草稿',
     'create_manual_record': '人工记录', 'correct_record': '记录更正', 'create_task': '生成任务',
     'update_task': '调整任务', 'complete_task': '任务完成', 'task_start': '开始执行',
@@ -183,7 +189,10 @@ def timeline(store, item_id, limit=200, offset=0, user_id=None, role='supervisor
                 event.update(generation_kind='context_record', context_notes=draft.get('context_notes', []),
                              memory_candidates=draft.get('memory_candidates', []), context_snapshot=draft.get('context_snapshot'))
         if 'correction' in row:
-            event['correction'] = row['correction']
+            correction = copy.deepcopy(row['correction'])
+            if role not in {'admin', 'supervisor'}:
+                correction.pop('impact_review', None)
+            event['correction'] = correction
         for field in ('before', 'after', 'decision', 'issue_id', 'memory_change', 'reference', 'task_revision',
                       'case_revision', 'change_action', 'observation', 'condition_change'):
             if field in row:

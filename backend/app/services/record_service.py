@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import copy
 
 from pydantic import ValidationError
 
@@ -39,6 +40,30 @@ def draft_detail(store: JsonStore, draft_id: str, user_id: str, role: str) -> AI
     return AIDraft.model_validate(item)
 
 
+def save_failed_draft(store: JsonStore, elder_id: str, shift_id: str | None, text: str,
+                      user_id: str, role: str, generation_kind: str = 'record', expected_state=None) -> AIDraft:
+    """Keep the submitted original text when AI is unavailable; never fabricate output."""
+    def mutate(data):
+        current_staff(data, user_id, role)
+        elder = care_eligible(data, elder_id)
+        if expected_state is not None and care_state(elder) != expected_state:
+            raise DomainError('draft_elder_state_changed')
+        open_shift(data, shift_id, user_id, role)
+        draft = AIDraft(
+            id=identifier('AI'), elder_id=elder_id, shift_id=shift_id, raw_text=text,
+            status='failed', observations=[], task_candidates=[], evidence=[], warnings=['AI暂不可用，请使用人工录入'],
+            missing=['未生成结构化观察和待办'], ambiguity=[], suggestion=['保留原文，改用人工记录'],
+            model_status='failed', provider='unavailable', created_at=now(), created_by=user_id,
+            generation_kind=generation_kind,
+            elder_state_snapshot=care_state(elder),
+        )
+        data['ai_drafts'].append(draft.model_dump())
+        audit(data, 'save_failed_ai_draft', draft.id, user_id, elder_id=elder_id, shift_id=shift_id,
+              detail='AI失败，保留原文供人工录入', generation_kind=generation_kind)
+        return draft
+    return store.mutate(mutate)
+
+
 def create_tasks(data: dict, record: CareRecord, candidates: list[dict], user_id: str, role='supervisor') -> list[CareTask]:
     tasks = []
     if len(candidates) > 50:
@@ -60,7 +85,8 @@ def create_tasks(data: dict, record: CareRecord, candidates: list[dict], user_id
             id=identifier('TASK'), elder_id=record.elder_id, shift_id=record.shift_id,
             title=candidate.title, due_at=candidate.due_at.isoformat() if candidate.due_at else None,
             assigned_to=candidate.assigned_to, condition=candidate.condition, due_text=candidate.due_text,
-            source_record_id=record.id, created_by=user_id, created_at=now(), updated_at=now(),
+            source_record_id=record.id, source_type='record', source_id=record.id,
+            source_revision=record.revision, created_by=user_id, created_at=now(), updated_at=now(),
         )
         tasks.append(task)
     data['care_tasks'].extend(item.model_dump() for item in tasks)
@@ -70,7 +96,7 @@ def create_tasks(data: dict, record: CareRecord, candidates: list[dict], user_id
     return tasks
 
 
-def confirm(store: JsonStore, draft_id: str, user_id: str, observations, candidates, role='supervisor'):
+def confirm(store: JsonStore, draft_id: str, user_id: str, observations, candidates, role='supervisor', expected_revision=None):
     def mutate(data):
         current_staff(data, user_id, role)
         draft = find(data, 'ai_drafts', draft_id, 'draft_not_found')
@@ -99,6 +125,10 @@ def confirm(store: JsonStore, draft_id: str, user_id: str, observations, candida
             return CareRecord.model_validate(record), [CareTask.model_validate(item) for item in data['care_tasks'] if item.get('source_record_id') == record['id']]
         if draft['status'] != 'pending_review':
             raise DomainError('draft_is_not_pending_review')
+        if expected_revision is None and draft.get('revision', 1) > 1:
+            raise DomainError('stale_revision')
+        if expected_revision is not None and draft.get('revision', 1) != expected_revision:
+            raise DomainError('stale_revision')
         elder = care_eligible(data, draft['elder_id'])
         if draft.get('generation_kind') != 'context_record':
             snapshot = draft.get('elder_state_snapshot')
@@ -116,14 +146,18 @@ def confirm(store: JsonStore, draft_id: str, user_id: str, observations, candida
         )
         tasks = create_tasks(data, record, normalized, user_id, role)
         data['care_records'].append(record.model_dump())
-        draft.update(status='confirmed', confirmed_at=now(), confirmed_by=user_id, confirmation_fingerprint=fingerprint)
+        before = {name: copy.deepcopy(draft.get(name)) for name in ('observations', 'task_candidates', 'revision', 'status')}
+        draft.update(status='confirmed', revision=draft.get('revision', 1) + 1,
+                     confirmed_at=now(), confirmed_by=user_id, confirmation_fingerprint=fingerprint)
         audit(data, 'confirm_ai_draft', draft_id, user_id, elder_id=record.elder_id, record_id=record.id,
-              detail='人工确认AI草稿', observations=values)
+              detail='人工确认AI草稿', observations=values, before=before,
+              after={'observations': values, 'task_candidates': normalized,
+                     'revision': draft['revision'], 'status': 'confirmed'})
         return record, tasks
     return store.mutate(mutate)
 
 
-def reject(store: JsonStore, draft_id: str, user_id: str, role: str, reason: str) -> AIDraft:
+def reject(store: JsonStore, draft_id: str, user_id: str, role: str, reason: str, expected_revision=None) -> AIDraft:
     def mutate(data):
         current_staff(data, user_id, role)
         draft = find(data, 'ai_drafts', draft_id, 'draft_not_found')
@@ -132,10 +166,47 @@ def reject(store: JsonStore, draft_id: str, user_id: str, role: str, reason: str
             return AIDraft.model_validate(draft)
         if draft['status'] != 'pending_review':
             raise DomainError('draft_is_not_pending_review')
-        draft.update(status='rejected', rejected_by=user_id, rejected_at=now(), rejection_reason=reason)
+        if expected_revision is not None and draft.get('revision', 1) != expected_revision:
+            raise DomainError('stale_revision')
+        draft.update(status='rejected', revision=draft.get('revision', 1) + 1,
+                     rejected_by=user_id, rejected_at=now(), rejection_reason=reason)
         audit(data, 'reject_ai_draft', draft_id, user_id, elder_id=draft['elder_id'], detail=reason)
         return AIDraft.model_validate(draft)
     return store.mutate(mutate)
+
+
+def update_draft(store, draft_id, payload, user_id, role, key=None):
+    def mutate(data):
+        current_staff(data, user_id, role)
+        draft = find(data, 'ai_drafts', draft_id, 'draft_not_found')
+        editable(data, draft, user_id, role)
+
+        def operation():
+            if draft['status'] != 'pending_review':
+                raise DomainError('draft_is_not_pending_review')
+            if draft.get('revision', 1) != payload.expected_revision:
+                raise DomainError('stale_revision')
+            care_eligible(data, draft['elder_id'])
+            open_shift(data, draft.get('shift_id'), user_id, role)
+            changes = payload.model_dump(mode='json', exclude_unset=True, exclude={'expected_revision', 'reason'})
+            if not changes or any(value is None for value in changes.values()):
+                raise DomainError('draft_changes_required', 422)
+            if 'task_candidates' in changes:
+                try:
+                    # Ownership, shift membership and dates are rechecked at formal confirmation.
+                    changes['task_candidates'] = [TaskCandidate.model_validate(row).model_dump(mode='json')
+                                                  for row in changes['task_candidates']]
+                except ValidationError as exc:
+                    raise DomainError('invalid_task_candidate', 422) from exc
+            before = {field: copy.deepcopy(draft.get(field)) for field in changes}
+            before['revision'] = draft.get('revision', 1)
+            draft.update(changes, revision=draft.get('revision', 1) + 1)
+            audit(data, 'edit_ai_draft', draft_id, user_id, elder_id=draft['elder_id'], detail=payload.reason,
+                  before=before, after={**copy.deepcopy(changes), 'revision': draft['revision']})
+            return AIDraft.model_validate(draft).model_dump()
+        return replayable(data, user_id, 'edit_ai_draft', key,
+                          {'draft_id': draft_id, **payload.model_dump(mode='json')}, operation)
+    return AIDraft.model_validate(store.mutate(mutate))
 
 
 def manual(store: JsonStore, payload: ManualRecordRequest, user_id: str, role: str, key=None) -> dict:
@@ -161,7 +232,8 @@ def manual(store: JsonStore, payload: ManualRecordRequest, user_id: str, role: s
     return store.mutate(mutate)
 
 
-def correct(store: JsonStore, record_id: str, payload: CorrectRecordRequest, user_id: str, role: str, key=None) -> CareRecord:
+def correct(store: JsonStore, record_id: str, payload: CorrectRecordRequest, user_id: str, role: str, key=None,
+            expected_impact_fingerprint: str | None = None) -> CareRecord:
     def mutate(data):
         current_staff(data, user_id, role)
         record = find(data, 'care_records', record_id, 'record_not_found')
@@ -170,17 +242,26 @@ def correct(store: JsonStore, record_id: str, payload: CorrectRecordRequest, use
             revision = record.get('revision', 1)
             if payload.expected_revision != revision:
                 raise DomainError('stale_revision')
+            from app.services.record_impact_service import preview_from_data
+            impact = preview_from_data(data, record, payload)
+            if expected_impact_fingerprint is not None and impact['fingerprint'] != expected_impact_fingerprint:
+                raise DomainError('record_impact_changed_refresh')
             correction = {
                 'id': identifier('CORR'), 'reason': payload.reason, 'created_by': user_id,
                 'created_at': now(), 'previous_observations': list(record['observations']),
                 'observations': payload.observations, 'previous_revision': revision, 'revision': revision + 1,
+                'impact_review': {'preview_fingerprint': impact['fingerprint'],
+                                  'preview_checked': expected_impact_fingerprint is not None,
+                                  'explicit_references': impact['explicit_references']},
             }
             record.setdefault('corrections', []).append(correction)
             record.update(observations=payload.observations, status='corrected', revision=revision + 1, updated_at=now())
             from app.services.memory_service import invalidate_record_source
             invalidate_record_source(data, record_id, user_id, payload.reason)
             audit(data, 'correct_record', record_id, user_id, elder_id=record['elder_id'], record_id=record_id,
-                  detail=payload.reason, correction=correction)
+                  detail=payload.reason, correction=correction, actor_role=role)
             return CareRecord.model_validate(record).model_dump()
-        return replayable(data, user_id, 'correct_record', key, {'record_id': record_id, **payload.model_dump()}, operation)
+        return replayable(data, user_id, 'correct_record', key,
+                          {'record_id': record_id, **payload.model_dump(),
+                           'expected_impact_fingerprint': expected_impact_fingerprint}, operation)
     return CareRecord.model_validate(store.mutate(mutate))

@@ -14,7 +14,8 @@ with httpx.Client(base_url=args.base_url + '/', timeout=60) as client:
     assert client.get('elders').status_code == 401
     assert client.post('auth/login', json={'username': 'admin', 'password': 'demo123'}).status_code == 401
     def headers(username):
-        user = accounts[username]
+        alias = {'supervisor': 'manager', 'caregiver': 'nurse'}.get(username, username)
+        user = accounts.get(username) or accounts[alias]
         r = client.post('auth/login', json={'username': user['username'], 'password': user['password']})
         r.raise_for_status()
         return {'Authorization': 'Bearer ' + r.json()['access_token']}

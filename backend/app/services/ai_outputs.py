@@ -29,6 +29,10 @@ class Extraction(StrictOutput):
     task_candidates: list[ExtractedTask] = Field(max_length=50)
     evidence: list[Evidence] = Field(min_length=1, max_length=100)
     warnings: list[ShortText] = Field(max_length=50)
+    missing: list[ShortText] = Field(default_factory=list, max_length=50)
+    ambiguity: list[ShortText] = Field(default_factory=list, max_length=50)
+    suggestion: list[ShortText] = Field(default_factory=list, max_length=50)
+    model_status: Literal['available', 'demo'] = 'available'
 
 
 class Citation(StrictOutput):

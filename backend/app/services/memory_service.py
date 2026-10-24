@@ -4,7 +4,7 @@ from __future__ import annotations
 import copy
 from pydantic import ValidationError
 
-from app.schemas.memory import MemoryContent, MemoryCreateRequest, MemoryFromDraftRequest, MemoryRevisionRequest, MemoryReviewRequest
+from app.schemas.memory import MemoryContent, MemoryCreateRequest, MemoryFromDraftRequest, MemoryRefusalRequest, MemoryRevisionRequest, MemoryReviewRequest
 from app.services.workflow import DomainError, audit, current_staff, editable, find, identifier, now, parse_time, replayable
 from app.storage.json_store import JsonStore
 
@@ -55,6 +55,20 @@ def _content(data, elder_id, payload: MemoryContent):
 
 
 def _source_current(data, item):
+    provenance = item.get('candidate_source') or {}
+    if provenance.get('impression_id'):
+        report = next((r for r in data['elder_impressions'] if r['id'] == provenance['impression_id']), None)
+        point = next((p for p in (report or {}).get('points', []) if p['id'] == provenance.get('point_id')), None)
+        if (not report or report['elder_id'] != item['elder_id'] or not point or
+                point['status'] != 'confirmed' or point['revision'] != provenance.get('point_revision')):
+            return False
+        for citation in provenance.get('citations', []):
+            record = next((r for r in data['care_records'] if r['id'] == citation['source_id']), None)
+            if (not record or record['elder_id'] != item['elder_id'] or
+                    record.get('status') not in {'confirmed', 'corrected'} or
+                    record.get('revision', 1) != provenance.get('source_versions', {}).get(record['id']) or
+                    not any(citation['quote'] in text for text in record.get('observations', []))):
+                return False
     source = item['source']
     record = next((row for row in data['care_records'] if row['id'] == source['record_id']), None)
     if not record or record['elder_id'] != item['elder_id'] or record.get('revision', 1) != source['revision']:
@@ -84,9 +98,35 @@ def _view(data, item, at=None):
     elder = next((row for row in data['elders'] if row['id'] == item['elder_id']), None)
     if not elder or elder.get('status') == 'discharged':
         reasons.append('elder_inactive')
+    review_reasons = []
+    events = [row for row in data['audit_logs'] if row['object_id'] == item['id']]
+    last_review = max((i for i, event in enumerate(events) if event['action'] in {
+        'memory_confirm', 'memory_keep', 'memory_resume', 'revise_memory'}), default=-1)
+    refusals = [event for event in events[last_review + 1:] if event['action'] == 'report_memory_refusal']
+    # Only current evidence is counted; corrected observations stay in audit history.
+    current_refusals = []
+    for event in refusals:
+        source = event['refusal_source']
+        record = next((r for r in data['care_records'] if r['id'] == source['record_id']), None)
+        if record and record.get('revision', 1) == source['revision']:
+            current_refusals.append(event)
+    count = len({event['refusal_source']['record_id'] for event in current_refusals})
+    due = bool(item['review_due_at'] and parse_time(item['review_due_at']) <= instant)
+    # A completed human review resolves the due reminder without rewriting its historical date.
+    last_revision = max((i for i, event in enumerate(events) if event['action'] == 'revise_memory'), default=-1)
+    if due and not any(event['action'] in {'memory_keep', 'memory_resume'} and
+                       parse_time(event['created_at']) >= parse_time(item['review_due_at']) for event in events[last_revision + 1:]):
+        review_reasons.append('review_due')
+    if count >= 3:
+        review_reasons.append('repeated_refusal_reported')
+    if not current:
+        review_reasons.append('source_changed')
+    if item['status'] == 'review_required':
+        review_reasons.append('explicit_review_required')
     result = copy.deepcopy({key: value for key, value in item.items() if key != 'history'})
     result.update(effective=not reasons, source_current=current, blocked_reasons=reasons,
-                  review_due=bool(item['review_due_at'] and parse_time(item['review_due_at']) <= instant))
+                  review_due=due, refusal_count=count, review_triggered=count >= 3,
+                  review_state='pending' if review_reasons else 'not_required', review_reasons=review_reasons)
     return result
 
 
@@ -222,7 +262,8 @@ def revise(store, memory_id, payload: MemoryRevisionRequest, user_id, role, key=
             if item['status'] in TERMINAL:
                 raise DomainError('memory_is_terminal')
             before = _snapshot(item)
-            item.update(_content(data, item['elder_id'], payload), status='candidate', confirmed_by=None, confirmed_at=None)
+            item.update(_content(data, item['elder_id'], payload), status='candidate', confirmed_by=None, confirmed_at=None,
+                        candidate_source=None)  # The new human revision has its own source; history retains old provenance.
             _change(data, item, before, 'revise_memory', payload.reason, user_id)
             return _view(data, item)
         return replayable(data, user_id, 'revise_memory', key, {'memory_id': memory_id, **payload.model_dump(mode='json')}, operation)
@@ -240,11 +281,13 @@ def review(store, memory_id, payload: MemoryReviewRequest, user_id, role, key=No
                 raise DomainError('stale_revision')
             allowed = {
                 'confirm': {'candidate', 'review_required'}, 'request_review': {'confirmed'},
-                'reject': {'candidate', 'review_required'}, 'retire': {'confirmed', 'review_required'},
+                'reject': {'candidate', 'review_required'}, 'retire': {'confirmed', 'review_required', 'suspended'},
+                'keep': {'confirmed', 'review_required'}, 'suspend': {'confirmed', 'review_required'},
+                'resume': {'suspended'},
             }
             if item['status'] not in allowed[payload.action]:
                 raise DomainError('invalid_memory_transition')
-            if payload.action == 'confirm':
+            if payload.action in {'confirm', 'keep', 'resume'}:
                 current = _view(data, item)
                 if not current['source_current']:
                     raise DomainError('memory_source_revision_changed')
@@ -252,12 +295,46 @@ def review(store, memory_id, payload: MemoryReviewRequest, user_id, role, key=No
                     raise DomainError('memory_not_confirmable')
             before = _snapshot(item)
             item['status'] = {'confirm': 'confirmed', 'request_review': 'review_required',
-                              'reject': 'rejected', 'retire': 'retired'}[payload.action]
-            if payload.action == 'confirm':
+                              'reject': 'rejected', 'retire': 'retired', 'keep': 'confirmed',
+                              'suspend': 'suspended', 'resume': 'confirmed'}[payload.action]
+            if payload.action in {'confirm', 'keep', 'resume'}:
                 item.update(confirmed_by=user_id, confirmed_at=now())
             _change(data, item, before, 'memory_' + payload.action, payload.reason, user_id)
             return _view(data, item)
         return replayable(data, user_id, 'review_memory', key, {'memory_id': memory_id, **payload.model_dump(mode='json')}, operation)
+    return store.mutate(mutate)
+
+
+def report_refusal(store, memory_id, payload: MemoryRefusalRequest, user_id, role, key=None):
+    def mutate(data):
+        current_staff(data, user_id, role)
+        item = find(data, 'care_memories', memory_id, 'memory_not_found')
+        def operation():
+            if item['status'] != 'confirmed':
+                raise DomainError('memory_not_confirmed')
+            record = find(data, 'care_records', payload.record_id, 'record_not_found')
+            if role == 'caregiver' and record.get('created_by') != user_id:
+                if not record.get('shift_id'):
+                    raise DomainError('refusal_evidence_not_accessible', 403)
+                shift = find(data, 'shifts', record['shift_id'], 'shift_not_found')
+                if user_id not in shift['caregiver_ids']:
+                    raise DomainError('refusal_evidence_not_accessible', 403)
+            if record['elder_id'] != item['elder_id']:
+                raise DomainError('memory_source_elder_mismatch', 422)
+            source = _source(data, item['elder_id'], MemoryContent(
+                content=item['content'], category='observation', scenes=item['scenes'],
+                source_record_id=record['id'], source_revision=payload.record_revision,
+                source_field=payload.source_field, source_quote=payload.source_quote))
+            # One source record is one observation, even if retried with a fresh key.
+            if not any(row['action'] == 'report_memory_refusal' and row['object_id'] == memory_id and
+                       row['refusal_source']['record_id'] == record['id'] and
+                       row['refusal_source']['revision'] == payload.record_revision for row in data['audit_logs']):
+                audit(data, 'report_memory_refusal', memory_id, user_id, elder_id=item['elder_id'],
+                      actor_role=role, detail=payload.note, refusal_source=source,
+                      happened_at=record.get('happened_at') or record['created_at'])
+            return _view(data, item)
+        return replayable(data, user_id, 'report_memory_refusal', key,
+                          {'memory_id': memory_id, **payload.model_dump(mode='json')}, operation)
     return store.mutate(mutate)
 
 
@@ -267,5 +344,6 @@ def invalidate_record_source(data, record_id, user_id, reason):
         if item['source']['record_id'] != record_id or item['status'] in TERMINAL:
             continue
         before = _snapshot(item)
-        item['status'] = 'review_required'
+        if item['status'] != 'suspended':
+            item['status'] = 'review_required'
         _change(data, item, before, 'memory_source_changed', reason, user_id)

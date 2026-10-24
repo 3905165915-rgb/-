@@ -72,7 +72,9 @@ def test_failed_ai_still_allows_manual_entry(api, manual_payload, monkeypatch):
     monkeypatch.setattr(store_service, 'get_ai_provider', lambda: BrokenProvider())
     failed = client.post('/api/v1/records/extract', json={'elder_id': 'E1', 'text': '观察'}, headers=headers())
     assert failed.status_code == 503
-    assert not store.read()['ai_drafts']
+    assert store.read()['ai_drafts'][0]['status'] == 'failed'
+    assert store.read()['ai_drafts'][0]['raw_text'] == '观察'
+    assert not store.read()['care_records'] and not store.read()['care_tasks']
     assert client.post('/api/v1/records/manual', json=manual_payload, headers=headers()).status_code == 201
 
 

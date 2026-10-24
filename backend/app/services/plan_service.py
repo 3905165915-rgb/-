@@ -180,6 +180,8 @@ def _new_task(data, plan, item, instant, occurrence, shift_id, assigned_to, user
                  'expected_assessment_revision', 'approved_at', 'approved_by')}
     snapshot['item'] = copy.deepcopy(item)
     task = CareTask(id=identifier('TASK'), elder_id=plan['elder_id'], title=item['title'],
+                    completion_criteria=item['instruction'], source_type='care_plan', source_id=plan['id'],
+                    source_revision=plan['revision'],
                     due_at=(instant + timedelta(minutes=item['window_minutes'])).isoformat(),
                     assigned_to=assigned_to, shift_id=shift_id, condition=item.get('condition'),
                     created_at=at, updated_at=at, created_by=user_id,

@@ -13,7 +13,7 @@ from filelock import FileLock
 
 
 T = TypeVar("T")
-CURRENT_SCHEMA_VERSION = 4
+CURRENT_SCHEMA_VERSION = 5
 
 
 EMPTY_STORE: dict[str, Any] = {
@@ -39,6 +39,7 @@ EMPTY_STORE: dict[str, Any] = {
     "quality_checks": [],
     "care_memories": [],
     "change_reviews": [],
+    "elder_impressions": [],
 }
 
 
@@ -73,9 +74,15 @@ class JsonStore:
         self._validate(restored)
         self.ensure()
         with self.lock:
-            with self.path.open(encoding='utf-8') as stream:
-                current = json.load(stream)
-            self._validate(current)
+            try:
+                with self.path.open(encoding='utf-8') as stream:
+                    current = json.load(stream)
+                self._validate(current)
+            except (OSError, ValueError, TypeError, RuntimeError):
+                # A corrupt live file must not prevent an explicitly requested
+                # restore. There are no trustworthy current credentials to carry
+                # forward, so invalidate the restored snapshot's sessions below.
+                current = {'users': []}
             restored['users'] = copy.deepcopy(current['users'])
             # Restoring an old business snapshot must not resurrect revoked family
             # grants or replay stale cached responses. Require fresh authorization.
@@ -110,9 +117,11 @@ class JsonStore:
             if version == CURRENT_SCHEMA_VERSION:
                 self._validate(data)
                 return None
-            if version not in {1, 2, 3}:
+            if version not in {1, 2, 3, 4}:
                 raise RuntimeError(f'Unsupported migration source: {version}')
-            added = {'change_reviews'}
+            added = {'elder_impressions'}
+            if version in {1, 2, 3}:
+                added.add('change_reviews')
             if version in {1, 2}:
                 added.add('care_memories')
             if version == 1:
@@ -146,6 +155,8 @@ class JsonStore:
                 data = json.load(stream)
             self._validate(data)
             result = callback(data)
+            # Reject malformed callback output before it can replace the valid live file.
+            self._validate(data)
             data["updated_at"] = _utc_now()
             self._atomic_write(data)
             return result

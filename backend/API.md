@@ -209,3 +209,61 @@ const result = await response.json();
 单进程同时最多2段、每用户同时1段、每用户每分钟6次；上传读取限20秒，厂商响应默认45秒。配套Nginx仅对该上传路径允许3MiB正文、关闭请求体磁盘缓冲；其他接口保持64KiB限制。部署须同步Nginx，否则原64KiB限制会阻止上传。
 
 测试页是backend内独立入口，不代表前端分支快速记录页的语音按钮已经接入。
+
+## 本轮新增的核验接口
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| POST | `/tasks` | 独立创建人工或正式记录来源任务；使用 `Idempotency-Key` 可安全重试 |
+| POST | `/memories/{memory_id}/refusals` | 登记一次拒绝；同一记录去重，重复拒绝只生成复核提示 |
+| GET | `/records/context` | 服务端根据老人、场景、班次和护理员权限生成上下文来源清单 |
+| PATCH | `/records/drafts/{draft_id}` | 人工编辑待核对草稿；使用 `expected_revision`，记录前后差异和理由 |
+| POST | `/records/{record_id}/corrections/preview` | 只读列出明确引用该记录的记忆、任务、交班项目和家属摘要，返回预览指纹 |
+| POST | `/records/{record_id}/corrections/apply` | 使用预览指纹应用更正；依赖变化时要求重新预览 |
+| GET | `/records/{record_id}/impact-reviews` | 查看记录更正影响核验清单 |
+| POST | `/records/{record_id}/corrections/{correction_id}/review` | 管理人员提交影响核验结果，不自动完成任务或重写历史 |
+
+业务错误同时返回 `detail`、`error_code`、`safe_message` 和 `retryable`；供应商错误正文、密码和护理原文不会写入错误响应。AI失败保留 `draft_id`，原文进入失败草稿并可改用人工录入。
+# 老人印象
+
+老人印象从单一老人的已确认／已更正照护记录中，整理兴趣喜好、生活习惯、活动规律、沟通方式和照护关注。AI输出必须带记录编号和逐字引用，来源以当前有效的`observations`为准。系统保留批次覆盖数、发生／录入时间、来源指纹和模型来源。输入有上限（240条、16万字），超限完整拒绝；分批整理并合并，不静默丢弃早期记录。模型或引用校验失败时返回503且不保存。
+
+```text
+GET  /api/v1/elders/{elder_id}/impressions
+POST /api/v1/elders/{elder_id}/impressions/generate
+GET  /api/v1/elders/{elder_id}/impressions/{report_id}
+POST /api/v1/elders/{elder_id}/impressions/{report_id}/points/{point_id}/review
+```
+
+以上均仅限已登录的管理员、主管或护理员；家属不可访问。整理结果为候选，绝不自动改写照护计划、正式记忆或任务。管理员和主管可填写理由逐条确认或拒绝；护理员可查看、生成，不能确认。AI候选即使经人工核对也只表示已核对，不等同专业要求。
+
+若来源记录新增或更正，旧版标为需刷新并阻止新确认。历史版本只读；30天到建议复核时须先重整当前版本；到期提示不自动令既有偏好失效。三处日期及原文证据只是展示下限，不代表统计频率或科学结论。
+
+用`backend/scripts/seed_impression_demo.py --apply`可在`APP_ENV=demo`向唯一现有的张阿姨追加84条、约12周的虚构记录。脚本先备份现存store，使用正常人工记录服务、模拟发生时间和真实录入时间，保留用户/其他业务数据并以幂等键避免重复。绝不用于真实环境。
+
+## 将已核对印象加入照护记忆（2026-10-24）
+
+`POST /api/v1/elders/{elder_id}/impressions/{report_id}/points/{point_id}/activate-memory`
+
+仅管理员或主管可提交。请求为 `MemoryContent` 的全部适用字段，并增加 `expected_revision`（印象条目版本）和 `reason`（本次人工确认原因）。示例只用于解释字段，不可替代真实原文核对：
+
+```json
+{
+  "expected_revision": 2,
+  "reason": "已与本人核实，当前仍适用，每次服务前仍询问当次意愿",
+  "content": "午后活动前询问是否愿意听吕剧",
+  "category": "stable_preference",
+  "scenes": ["activity"],
+  "attributed_to": "elder",
+  "source_record_id": "使用所选引用的实际记录编号",
+  "source_revision": 1,
+  "source_field": "observations",
+  "source_quote": "使用该印象条目中的逐字引用"
+}
+```
+
+可携带 `Idempotency-Key`；返回 `MemoryResponse`。仅 `trend` 且不属于 `attention` 的已核对条目可加入，仅支持 `stable_preference` 或 `communication`，还须通过记忆来源校验。该操作将建立并明确人工确认一条记忆；不是模型自动确认，不调用模型，不创建任务或计划。
+
+同一报告同一条目只允许建立一条关联记忆；完全相同的重复请求返回已有结果，不同内容的重复请求报409。条目未核对、临时意愿或证据不匹配报422；旧版、过期或来源已变报409；无权角色报403。条目返回可选 `care_memory: {id, status, effective}`，供页面刷新后显示关联状态。
+
+新建时绑定该条目全部引用记录的版本。任何被引用来源更正、撤回或条目被撤回核对，记忆均不再进入 `GET /memories/context` 或上下文助手。单纯新增一条无直接引用关系的记录会要求重新整理印象，不直接作废既有已确认记忆。

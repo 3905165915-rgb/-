@@ -253,7 +253,8 @@ def test_version_two_migration_preserves_all_collections_and_backups(tmp_path):
     backup = store.migrate()
     assert backup.read_bytes() == before
     upgraded = store.read()
-    assert upgraded['schema_version'] == 4 and upgraded['care_memories'] == [] and upgraded['change_reviews'] == []
+    from app.storage.json_store import CURRENT_SCHEMA_VERSION
+    assert upgraded['schema_version'] == CURRENT_SCHEMA_VERSION and upgraded['care_memories'] == [] and upgraded['change_reviews'] == []
     for key, value in original.items():
         if key != 'schema_version':
             assert upgraded[key] == value

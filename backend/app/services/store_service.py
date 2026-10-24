@@ -45,10 +45,12 @@ def create_draft(store: JsonStore, elder_id: str, shift_id: str | None, text: st
     except AIProviderError:
         if not settings.ai_fallback_mock or isinstance(provider, MockAIProvider):
             raise
-        draft = MockAIProvider().extract(elder_id, shift_id, text)
+        provider = MockAIProvider()
+        draft = provider.extract(elder_id, shift_id, text)
         draft.warnings.insert(0, "真实AI不可用，当前结果来自演示降级，请人工核对")
 
     draft.created_by = user_id
+    draft.model_status = 'demo' if isinstance(provider, MockAIProvider) else 'available'
     draft.elder_state_snapshot = elder_snapshot
     def mutate(data: dict[str, Any]) -> None:
         from app.services.workflow import open_shift, audit

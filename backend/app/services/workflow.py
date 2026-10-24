@@ -35,6 +35,8 @@ def find(data: dict, collection: str, object_id: str, code: str) -> dict:
 
 
 def audit(data: dict, action: str, object_id: str, user_id: str, **details: Any) -> None:
+    actor = next((row for row in data['users'] if row['id'] == user_id), None)
+    details.setdefault('actor_role', actor.get('role') if actor else 'system')
     data['audit_logs'].append({
         'id': identifier('AUDIT'), 'action': action, 'object_id': object_id,
         'user_id': user_id, 'created_at': now(), **details,

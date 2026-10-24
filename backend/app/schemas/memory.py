@@ -9,7 +9,7 @@ from app.schemas.api import AwareTime, Text
 
 MemoryCategory = Literal['stable_preference', 'temporary_wish', 'communication', 'observation']
 MemoryScene = Literal['bathing', 'dining', 'activity', 'communication', 'rest', 'other']
-MemoryStatus = Literal['candidate', 'confirmed', 'review_required', 'rejected', 'retired']
+MemoryStatus = Literal['candidate', 'confirmed', 'review_required', 'suspended', 'rejected', 'retired']
 
 
 class MemoryContent(BaseModel):
@@ -51,9 +51,19 @@ class MemoryRevisionRequest(MemoryContent):
 
 class MemoryReviewRequest(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra='forbid')
-    action: Literal['confirm', 'request_review', 'reject', 'retire']
+    action: Literal['confirm', 'request_review', 'reject', 'retire', 'keep', 'suspend', 'resume']
     expected_revision: int = Field(ge=1)
     reason: Annotated[str, Field(min_length=1, max_length=1000)]
+
+
+class MemoryRefusalRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra='forbid')
+
+    record_id: Annotated[str, Field(min_length=1, max_length=100)]
+    record_revision: int = Field(ge=1)
+    source_field: Literal['raw_text', 'observations'] = 'observations'
+    source_quote: Text
+    note: Text
 
 
 class MemoryFromDraftRequest(BaseModel):
@@ -99,6 +109,10 @@ class MemoryResponse(BaseModel):
     source_current: bool
     review_due: bool
     blocked_reasons: list[str]
+    refusal_count: int = 0
+    review_triggered: bool = False
+    review_state: Literal['not_required', 'pending'] = 'not_required'
+    review_reasons: list[str] = Field(default_factory=list)
     candidate_source: dict | None = None
 
 

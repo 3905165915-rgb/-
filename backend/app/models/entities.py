@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 Role = Literal["admin", "supervisor", "caregiver", "family"]
@@ -41,6 +41,7 @@ class Elder(BaseModel):
 
 class AIDraft(BaseModel):
     id: str
+    revision: int = 1
     elder_id: str
     shift_id: str | None = None
     raw_text: str
@@ -49,6 +50,10 @@ class AIDraft(BaseModel):
     task_candidates: list[dict] = Field(default_factory=list)
     evidence: list[dict] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+    missing: list[str] = Field(default_factory=list)
+    ambiguity: list[str] = Field(default_factory=list)
+    suggestion: list[str] = Field(default_factory=list)
+    model_status: Literal['available', 'demo', 'failed'] = 'available'
     provider: str = "mock"
     created_at: str
     created_by: str | None = None
@@ -80,15 +85,26 @@ class CareRecord(BaseModel):
     revision: int = 1
     corrections: list[dict] = Field(default_factory=list)
 
+    @field_validator('corrections', mode='before')
+    @classmethod
+    def hide_management_impact_checklist(cls, value):
+        # Full cross-module references are available only through management endpoints.
+        return [{key: item for key, item in row.items() if key != 'impact_review'} for row in value]
+
 
 class CareTask(BaseModel):
     id: str
     elder_id: str
     title: str
+    completion_criteria: str | None = None
     due_at: str | None = None
     assigned_to: str | None = None
     status: TaskStatus = "pending"
     source_record_id: str | None = None
+    source_type: Literal['manual', 'record', 'care_plan', 'handover'] = 'manual'
+    source_id: str | None = None
+    source_revision: int | None = None
+    source_handover_item_id: str | None = None
     continuity_key: str | None = None
     result: str | None = None
     updated_at: str

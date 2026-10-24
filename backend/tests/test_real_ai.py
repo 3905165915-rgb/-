@@ -189,6 +189,55 @@ def test_real_configuration_failure_retains_manual_entry(real_ai, monkeypatch):
     client, store, headers = real_ai
     monkeypatch.setattr(ai_service, 'settings', replace(ai_service.settings, deepseek_api_key=''))
     failed = client.post(ROOT + '/records/extract', json={'elder_id': 'E1', 'text': '仅用于缺密钥错误处理验收'}, headers=headers())
-    assert failed.status_code == 503 and not store.read()['ai_drafts']
+    assert failed.status_code == 503
+    body = failed.json()
+    assert body['draft_preserved'] is True
+    drafts = store.read()['ai_drafts']
+    assert len(drafts) == 1 and drafts[0]['id'] == body['draft_id']
+    assert drafts[0]['status'] == 'failed' and drafts[0]['model_status'] == 'failed'
+    assert drafts[0]['raw_text'] == '仅用于缺密钥错误处理验收'
+    assert not drafts[0]['observations'] and not drafts[0]['task_candidates']
     manual = client.post(ROOT + '/records/manual', json={'elder_id': 'E1', 'raw_text': 'AI不可用时仍可人工登记。'}, headers=headers())
     assert manual.status_code == 201 and len(store.read()['care_records']) == 1
+
+
+def test_real_impression_review_activation_and_scene_hint(real_ai):
+    """Exercise the complete new chain with synthetic records, never live data."""
+    from test_impressions import PATH, records
+
+    client, store, headers = real_ai
+    rows = records(real_ai, 6)
+    before_tasks = store.read()['care_tasks']
+    generated = client.post(PATH + '/generate', headers=headers())
+    assert generated.status_code == 200, generated.text
+    report = generated.json()
+    evidence('impression', report)
+    assert report['provider'] == 'deepseek:deepseek-flash'
+    assert report['coverage']['record_count'] == 6 and report['source_current']
+    assert not store.read()['care_memories']
+    eligible = [p for p in report['points'] if p['kind'] == 'trend' and p['category'] != 'attention']
+    assert eligible, 'Six dated fictional preference statements should yield a grounded repeated pattern'
+    point = eligible[0]
+    endpoint = PATH + f'/{report["id"]}/points/{point["id"]}'
+    reviewed = client.post(endpoint + '/review', headers=headers('manager'), json={
+        'expected_revision': point['revision'], 'decision': 'confirmed',
+        'note': '仅为虚构接口验收：已核实生活偏好，当次意愿优先'})
+    assert reviewed.status_code == 200, reviewed.text
+    point = next(p for p in reviewed.json()['points'] if p['id'] == point['id'])
+    citation = point['citations'][0]
+    source = next(r for r in rows if r['id'] == citation['source_id'])
+    body = {'expected_revision': point['revision'], 'reason': '虚构验收：主管明确同意加入活动提示',
+        'content': '午后活动前询问是否愿意听吕剧，当次意愿优先',
+        'category': 'stable_preference', 'scenes': ['activity'], 'attributed_to': 'elder',
+        'source_record_id': source['id'], 'source_revision': source['revision'],
+        'source_field': 'observations', 'source_quote': citation['quote']}
+    activated = client.post(endpoint + '/activate-memory', headers={
+        **headers('manager'), 'Idempotency-Key': 'real-synthetic-memory'}, json=body)
+    assert activated.status_code == 200, activated.text
+    memory = activated.json()
+    assert memory['effective'] and memory['status'] == 'confirmed'
+    scene = client.get('/api/v1/memories/context?elder_id=E1&scene=activity', headers=headers()).json()
+    assert [m['id'] for m in scene['memories']] == [memory['id']]
+    assert client.get('/api/v1/memories/context?elder_id=E1&scene=dining', headers=headers()).json()['memories'] == []
+    assert store.read()['care_tasks'] == before_tasks
+    evidence('impression-scene-hint', {'memory': memory, 'scene': scene})
