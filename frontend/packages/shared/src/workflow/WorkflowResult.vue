@@ -74,7 +74,7 @@ const omit = new Set([
               'snapshot_text',
             ].includes(String(key)),
           }"
-          >{{ display(item) }}</strong
+          >{{ display(item, String(key)) }}</strong
         >
       </div>
     </template>

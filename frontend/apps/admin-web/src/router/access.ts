@@ -60,7 +60,7 @@ export const navigation: NavigationItem[] = [
   },
   {
     path: '/workflows/records',
-    label: '照护记录与AI助手',
+    label: '记录',
     group: '当班工作',
     roles: internalRoles,
   },
@@ -72,7 +72,7 @@ export const navigation: NavigationItem[] = [
   },
   {
     path: '/workflows/handovers',
-    label: '跨班交接与AI摘要',
+    label: '跨班交接',
     group: '当班工作',
     roles: internalRoles,
   },

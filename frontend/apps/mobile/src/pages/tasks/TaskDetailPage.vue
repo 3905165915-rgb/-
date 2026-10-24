@@ -4,7 +4,7 @@ import WorkflowPanel from '@hulao/shared/workflow'
 import TaskCareContext from '@hulao/shared/task-care-context'
 import { computed } from 'vue'
 import { Clock3, Save, Send, Paperclip } from 'lucide-vue-next'
-import { isKnownStatus, resolveStatus, taskStatusMeta } from '@hulao/shared'
+import { compactReference, isKnownStatus, resolveStatus, taskStatusMeta } from '@hulao/shared'
 import {
   onBeforeRouteLeave,
   onBeforeRouteUpdate,
@@ -117,7 +117,7 @@ async function saveAsNew() {
     />
     <div v-if="task" class="task-overview surface-band">
       <div class="task-reference">
-        <span>任务 {{ task.id }}</span
+        <span>任务 {{ compactReference(task.id) }}</span
         ><span class="status-label" :data-tone="status.tone">{{
           taskStatusLabels[task.status]
         }}</span>

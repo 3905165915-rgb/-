@@ -5,7 +5,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { Save, Send } from 'lucide-vue-next'
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute } from 'vue-router'
 import { showConfirmDialog } from 'vant'
-import { loadDemoState } from '@hulao/shared'
+import { compactReference, loadDemoState } from '@hulao/shared'
 import {
   useElders,
   useTasks,
@@ -160,7 +160,7 @@ async function restoreDraft() {
   <WorkflowPanel
     v-if="serverWorkflow"
     group="records"
-    title="照护记录"
+    title="记录"
     :context="typeof route.query.elder === 'string' ? { elder_id: route.query.elder } : {}"
     initial-action="/records/context-extract"
   />
@@ -311,7 +311,7 @@ async function restoreDraft() {
           <details class="evidence">
             <summary>提取时的原文证据</summary>
             <p>{{ editor.ai.sourceText }}</p>
-            <p>老人编号：{{ editor.ai.elderId }}</p>
+            <p>老人编号：{{ compactReference(editor.ai.elderId) }}</p>
             <p>观察：{{ editor.ai.draft.fields.observation }}</p>
             <p>后续：{{ editor.ai.draft.fields.followUp }}</p>
             <p>联系对象：{{ editor.ai.draft.fields.contactTarget }}</p>

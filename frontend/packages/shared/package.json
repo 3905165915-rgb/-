@@ -14,6 +14,7 @@
     },
     "./workflow": "./src/workflow/WorkflowPanel.vue",
     "./workflow-journals": "./src/workflow/WorkflowJournals.vue",
-    "./task-care-context": "./src/workflow/TaskCareContext.vue"
+    "./task-care-context": "./src/workflow/TaskCareContext.vue",
+    "./elder-impression": "./src/workflow/ElderImpression.vue"
   }
 }

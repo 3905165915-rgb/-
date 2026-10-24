@@ -142,6 +142,12 @@ describe('business form contracts', () => {
       request('/records/extract', 'post', { text: '虚构原文' }),
     ).rejects.toThrow('AI暂不可用')
   })
+  it('explains mismatched quality scopes in Chinese if the server rejects them', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({ detail: 'quality_scope_mismatch' }), { status: 422 },
+    )))
+    await expect(request('/quality/checks', 'post', {})).rejects.toThrow('所选班次必须是该交班单的交出班次')
+  })
 })
 describe('cloud audio format', () => {
   it('encodes mono PCM16 WAV with the cloud endpoint sample rate', async () => {

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { compactReference } from '@hulao/shared'
 import { useTasks, useTimeline, mode } from '../../services/data'
 import FeedbackState from '../../components/FeedbackState.vue'
 const route = useRoute()
@@ -36,14 +37,14 @@ function select(value: string) {
         v-if="itemId && !items.some((item) => item.id === itemId)"
         :value="itemId"
       >
-        {{ itemId }}
+        {{ compactReference(itemId) }}
       </option>
       <option
         v-for="item in items"
         :key="item.id"
         :value="item.id"
       >
-        {{ item.title }} · {{ item.id }}
+        {{ item.title }} · {{ compactReference(item.id) }}
       </option>
     </select></label><FeedbackState
       :loading="tasks.isPending.value"
@@ -54,7 +55,7 @@ function select(value: string) {
       description="请选择有事项编号的任务"
     /><template v-if="itemId">
       <p class="muted">
-        事项编号：{{ itemId }}
+        事项编号：{{ compactReference(itemId) }}
       </p>
       <FeedbackState
         :loading="timeline.isPending.value"

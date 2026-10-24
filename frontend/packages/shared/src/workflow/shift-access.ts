@@ -29,8 +29,31 @@ function canExecute(task: Row, catalogs: Record<string, Row[]>, session: Fronten
     (!task.shift_id || writableShifts(catalogs.shifts || [], session).some(row => row.id === task.shift_id)))
 }
 
+export function isQualityScan(op: Operation): boolean {
+  return op.method === 'post' && op.path === '/quality/checks'
+}
+
+// A quality scan reads historical evidence; it does not execute shift work.
+export function qualityScopeOptions(body: Row, catalogs: Record<string, Row[]>): Record<string, Row[]> {
+  return {
+    shift_id: catalogs.shifts || [],
+    handover_id: (catalogs.handovers || []).filter(row => !body.shift_id || row.source_shift_id === body.shift_id),
+  }
+}
+
+export function updateQualityScope(previous: Row, next: Row, catalogs: Record<string, Row[]>): Row {
+  const body = { ...next }
+  const handover = (catalogs.handovers || []).find(row => row.id === body.handover_id)
+  if (body.handover_id && body.handover_id !== previous.handover_id && handover?.source_shift_id)
+    body.shift_id = handover.source_shift_id
+  else if (body.shift_id !== previous.shift_id && handover && body.shift_id && handover.source_shift_id !== body.shift_id)
+    body.handover_id = ''
+  return body
+}
+
 export function shiftFieldOptions(op: Operation, catalogs: Record<string, Row[]>, session: FrontendSession | null): Record<string, Row[]> {
   if (op.method === 'get') return {}
+  if (isQualityScan(op)) return qualityScopeOptions({}, catalogs)
   const shifts = catalogs.shifts || []
   const result: Record<string, Row[]> = {
     shift_id: writableShifts(shifts, session),
@@ -48,6 +71,15 @@ export function shiftFieldOptions(op: Operation, catalogs: Record<string, Row[]>
 export function submissionIssue(op: Operation, params: Row, payload: unknown, catalogs: Record<string, Row[]>, session: FrontendSession | null): string {
   if (op.method === 'get') return ''
   const body = payload && typeof payload === 'object' ? payload as Row : {}
+  if (isQualityScan(op)) {
+    const handover = (catalogs.handovers || []).find(row => row.id === body.handover_id)
+    if (body.handover_id && !handover) return '所选交班单不可用，请刷新可选数据后重新选择。'
+    if (handover && (!handover.source_shift_id || (body.shift_id && body.shift_id !== handover.source_shift_id)))
+      return '所选班次必须是该交班单的交出班次，请重新选择。'
+    if (body.shift_id && !(catalogs.shifts || []).some(row => row.id === body.shift_id))
+      return '所选统计班次不可用，请刷新可选数据后重新选择。'
+    return ''
+  }
   const choices = shiftFieldOptions(op, catalogs, session)
   for (const field of ['shift_id', 'source_shift_id', 'target_shift_id']) {
     if (body[field] && !choices[field]?.some(row => row.id === body[field]))

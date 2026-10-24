@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import RecordEvidencePicker from './RecordEvidencePicker.vue'
 import {
   type Schema,
   type Row,
@@ -8,7 +9,7 @@ import {
   label,
   display,
   resourceFor,
-  rowName,
+  optionLabel,
 } from './model'
 const props = defineProps<{
   schema: Schema
@@ -40,11 +41,19 @@ const object = computed(
       ? props.modelValue
       : {}) as Row,
 )
+const memoryEvidence = computed(() => schema.value.type === 'object' && !!schema.value.properties?.source_record_id && !!schema.value.properties?.source_quote && !!schema.value.properties?.elder_id)
+const evidenceFields = new Set(['source_revision', 'source_field', 'source_quote'])
 const array = computed(() =>
   Array.isArray(props.modelValue) ? props.modelValue : [],
 )
 function updateField(key: string, value: unknown) {
   const next = { ...object.value, [key]: value }
+  if (key === 'elder_id' && memoryEvidence.value) {
+    next.source_record_id = ''
+    next.source_revision = ''
+    next.source_quote = ''
+    next.source_field = 'observations'
+  }
   if (key === 'record_id') {
     const source = props.catalogs.records?.find((row) => row.id === value)
     if (source) {
@@ -110,9 +119,16 @@ const primitiveOptions = computed(
     :data-field="fieldPath"
   >
     <legend>{{ label(field) }}<span v-if="required"> *</span></legend>
+    <template v-for="(child, key) in schema.properties" :key="key">
+    <RecordEvidencePicker
+      v-if="memoryEvidence && key === 'source_record_id'"
+      :model-value="object"
+      :records="catalogs.records || []"
+      :path="fieldPath"
+      @update:model-value="emit('update:modelValue', $event)"
+    />
     <WorkflowField
-      v-for="(child, key) in schema.properties"
-      :key="key"
+      v-else-if="!memoryEvidence || !evidenceFields.has(String(key))"
       :schema="child"
       :field="String(key)"
       :path="fieldPath + '.' + key"
@@ -122,6 +138,7 @@ const primitiveOptions = computed(
       :option-overrides="optionOverrides"
       @update:model-value="updateField(String(key), $event)"
     />
+    </template>
   </fieldset>
   <fieldset
     v-else-if="schema.type === 'array'"
@@ -186,8 +203,7 @@ const primitiveOptions = computed(
         disabled
       >原选项不可用于本次操作，请重新选择</option>
       <option v-for="row in options" :key="String(row.id)" :value="row.id">
-        {{ rowName(row) }}{{ row.bed_label ? ' · ' + row.bed_label : '' }} · {{ row.id
-        }}{{ row.status ? ' · ' + display(row.status) : '' }}
+        {{ optionLabel(field, row, options) }}
       </option>
     </select>
     <select

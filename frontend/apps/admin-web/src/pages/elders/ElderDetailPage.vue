@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import WorkflowPanel from '@hulao/shared/workflow'
+import ElderImpression from '@hulao/shared/elder-impression'
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useElders, useTasks } from '../../services/data'
@@ -37,7 +38,16 @@ const related = computed(
     /><template v-if="elder && !elders.error.value">
       <div class="page-title-row">
         <h1>{{ elder.name }}</h1>
-        <el-button type="primary" @click="$router.push({ path: '/tasks', query: { create: '1', elder: elder.id } })">新建任务</el-button>
+        <el-button
+          type="primary"
+          @click="
+            $router.push({
+              path: '/tasks',
+              query: { create: '1', elder: elder.id },
+            })
+          "
+          >新建任务</el-button
+        >
         <span
           class="status-label"
           :class="elder.status === '入住' ? 'status-success' : 'status-neutral'"
@@ -81,6 +91,7 @@ const related = computed(
           <ListChecks :size="17" aria-hidden="true" />查看全部任务
         </el-button>
       </div>
+      <ElderImpression :elder-id="elder.id" />
       <div class="data-section">
         <div class="profile-section">
           <div class="section-title">

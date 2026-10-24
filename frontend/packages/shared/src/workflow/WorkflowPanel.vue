@@ -2,13 +2,42 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { clearSession, readSession } from '../session'
 import { onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router'
-import { WorkflowRecovery, recoveryKey, supportsReplay, withoutSecrets, withSubmissionLock, type PendingWrite } from './recovery'
+import {
+  WorkflowRecovery,
+  recoveryKey,
+  supportsReplay,
+  withoutSecrets,
+  withSubmissionLock,
+  type PendingWrite,
+} from './recovery'
 import { toCloudWav } from './audio'
 import { validateCatalog } from './catalogs'
-import { manualFallback, taskCreationInitial, taskCreationPayload, taskCreationSchema } from './task-create'
-import { shiftFieldOptions, submissionIssue, writableShifts } from './shift-access'
+import {
+  manualFallback,
+  taskCreationInitial,
+  taskCreationPayload,
+  taskCreationSchema,
+} from './task-create'
+import {
+  isQualityScan,
+  qualityScopeOptions,
+  shiftFieldOptions,
+  submissionIssue,
+  updateQualityScope,
+  writableShifts,
+} from './shift-access'
 import WorkflowField from './WorkflowField.vue'
 import WorkflowResult from './WorkflowResult.vue'
+import WorkflowMenu from './WorkflowMenu.vue'
+import RecordResults from './RecordResults.vue'
+import ServiceCareHints from './ServiceCareHints.vue'
+import { submissionFeedback } from './submission-feedback'
+import {
+  areaId,
+  operationTitle,
+  recordModeValue,
+  workflowAreas,
+} from './navigation'
 import {
   operations,
   schemas,
@@ -35,14 +64,24 @@ const props = withDefaults(
     autoRead?: boolean
     taskCreation?: boolean
   }>(),
-  { title: '', context: () => ({}), initialAction: '', autoRead: false, taskCreation: false },
+  {
+    title: '',
+    context: () => ({}),
+    initialAction: '',
+    autoRead: false,
+    taskCreation: false,
+  },
 )
 const emit = defineEmits<{ changed: []; select: [Row] }>()
 const role = readSession()?.role
 const allowed = computed(() =>
   operations.filter(
-    (op) => op.group === props.group && role && op.roles.includes(role) &&
-      (!props.taskCreation || (op.path === '/records/manual' && op.method === 'post')),
+    (op) =>
+      op.group === props.group &&
+      role &&
+      op.roles.includes(role) &&
+      (!props.taskCreation ||
+        (op.path === '/records/manual' && op.method === 'post')),
   ),
 )
 const activeId = ref('')
@@ -50,13 +89,47 @@ const active = computed(
   () =>
     allowed.value.find((op) => op.id === activeId.value) || allowed.value[0],
 )
+const areas = computed(() => workflowAreas(allowed.value))
+const activeArea = computed(() => (active.value ? areaId(active.value) : ''))
+const activeAreaInfo = computed(() =>
+  areas.value.find((area) => area.id === activeArea.value),
+)
+const hasMenu = computed(() => !props.taskCreation && allowed.value.length > 1)
+const menuDialog = ref<HTMLDialogElement>()
+const recordHistory = ref<unknown>(null)
+const historyError = ref('')
+const reviewSource = ref<Row | null>(null)
+const recordComposer = computed(
+  () => props.group === 'records' && activeArea.value === 'new',
+)
+const recordDetail = computed(
+  () =>
+    props.group === 'records' &&
+    activeArea.value === 'records' &&
+    active.value?.path !== '/records',
+)
+const draftDetail = computed(
+  () =>
+    props.group === 'records' &&
+    activeArea.value === 'drafts' &&
+    active.value?.path !== '/records/drafts',
+)
 const params = ref<Row>({})
 const body = ref<Row>({})
 const catalogs = ref<Record<string, Row[]>>({})
-const fieldOptions = computed(() => active.value
-  ? shiftFieldOptions(active.value, catalogs.value, readSession()) : {})
-const noWritableShift = computed(() => role === 'caregiver' && catalogs.value.shifts &&
-  writableShifts(catalogs.value.shifts, readSession()).length === 0)
+const fieldOptions = computed(() =>
+  active.value
+    ? isQualityScan(active.value)
+      ? qualityScopeOptions(body.value, catalogs.value)
+      : shiftFieldOptions(active.value, catalogs.value, readSession())
+    : {},
+)
+const noWritableShift = computed(
+  () =>
+    role === 'caregiver' &&
+    catalogs.value.shifts &&
+    writableShifts(catalogs.value.shifts, readSession()).length === 0,
+)
 const selected = ref<Row>({ ...props.context })
 const result = ref<unknown>(null)
 const error = ref('')
@@ -74,19 +147,55 @@ const serverMode = readSession()?.mode === 'api'
 let restoring = false
 let recovery: WorkflowRecovery | undefined
 const frozen = computed(() => phase.value !== 'editing')
-const uncertainExtraction = computed(() => phase.value === 'pending' && ['/records/extract', '/records/context-extract'].includes(active.value?.path || ''))
+const readOnly = computed(() => active.value?.method === 'get')
+const feedback = computed(() => submissionFeedback(active.value?.path || '', active.value?.method || 'get'))
+const uncertainExtraction = computed(
+  () =>
+    phase.value === 'pending' &&
+    ['/records/extract', '/records/context-extract'].includes(
+      active.value?.path || '',
+    ),
+)
 function formKey() {
-  return recoveryKey(readSession()?.accountKey || '', props.taskCreation ? 'task-create' : props.group, props.context)
+  return recoveryKey(
+    readSession()?.accountKey || '',
+    props.taskCreation ? 'task-create' : props.group,
+    props.context,
+  )
 }
-function restoreForm() {
+function restoreForm(preferredArea?: string) {
   if (busy.value || recording.value || transcribing.value) return
   restoring = true
   try {
     const saved = recovery?.restore()
-    if (saved && allowed.value.some(op => op.id === saved.operation)) {
+    reviewSource.value = null
+    const savedOperation = allowed.value.find(
+      (op) => op.id === saved?.operation,
+    )
+    // Queries are ephemeral. Keep existing write drafts untouched; an uncertain
+    // write must still be restored so switching to a query cannot hide it.
+    if (
+      saved &&
+      savedOperation &&
+      savedOperation.method !== 'get' &&
+      (!preferredArea || areaId(savedOperation) === preferredArea || saved.phase === 'pending') &&
+      (!readOnly.value || saved.phase === 'pending')
+    ) {
       activeId.value = saved.operation
       params.value = saved.params
       body.value = saved.body
+      if (
+        savedOperation.path === '/records/extract' &&
+        saved.phase === 'editing'
+      ) {
+        const unified = allowed.value.find(
+          (op) => op.path === '/records/context-extract',
+        )
+        if (unified) {
+          activeId.value = unified.id
+          body.value = recordModeValue(saved.body, 'assisted')
+        }
+      }
       phase.value = saved.phase
       pending.value = saved.pending
       result.value = saved.result ?? null
@@ -95,18 +204,25 @@ function restoreForm() {
     }
     saveIssue.value = ''
   } catch (failure) {
-    saveIssue.value = (failure as Error).message
+    if (!readOnly.value) saveIssue.value = (failure as Error).message
   } finally {
     restoring = false
   }
 }
 function persistForm() {
   if (!serverMode) return true
+  if (readOnly.value) return true
   if (restoring || !ready.value || !active.value || !recovery) return false
   try {
-    const saved = recovery.save({ operation: active.value.id,
-      params: withoutSecrets(params.value) as Row, body: withoutSecrets(body.value) as Row,
-      phase: phase.value, pending: pending.value, result: phase.value === 'succeeded' ? withoutSecrets(result.value) : undefined })
+    const saved = recovery.save({
+      operation: active.value.id,
+      params: withoutSecrets(params.value) as Row,
+      body: withoutSecrets(body.value) as Row,
+      phase: phase.value,
+      pending: pending.value,
+      result:
+        phase.value === 'succeeded' ? withoutSecrets(result.value) : undefined,
+    })
     savedAt.value = saved.updatedAt
     saveIssue.value = ''
     return true
@@ -116,9 +232,10 @@ function persistForm() {
   }
 }
 function checkOtherWindow(event: StorageEvent) {
-  if (event.key === recovery?.key && !recovery.isCurrent()) {
+  if (!readOnly.value && event.key === recovery?.key && !recovery.isCurrent()) {
     confirm.value = false
-    saveIssue.value = '其他窗口已修改此表单，请载入最新版本后核对。当前输入仍保留在本窗口。'
+    saveIssue.value =
+      '其他窗口已修改此表单，请载入最新版本后核对。当前输入仍保留在本窗口。'
   }
 }
 function beforeUnload(event: BeforeUnloadEvent) {
@@ -242,23 +359,44 @@ function pick(field: string, value: unknown) {
   const resource = resourceFor[field]
   return catalogs.value[resource || '']?.find((row) => row.id === value)
 }
-function hasValue(value: unknown) { return value !== '' && value !== undefined && value !== null }
+function hasValue(value: unknown) {
+  return value !== '' && value !== undefined && value !== null
+}
 const versionIssue = computed(() => {
-  const rootField = active.value?.parameters.find(p => p.in === 'path')?.name
+  const rootField = active.value?.parameters.find((p) => p.in === 'path')?.name
   const root = rootField ? pick(rootField, params.value[rootField]) : undefined
-  if (root && ((hasValue(body.value.expected_revision) && body.value.expected_revision !== root.revision) ||
-    (body.value.expected_fingerprint && root.fingerprint && body.value.expected_fingerprint !== root.fingerprint)))
+  if (
+    root &&
+    ((hasValue(body.value.expected_revision) &&
+      body.value.expected_revision !== root.revision) ||
+      (body.value.expected_fingerprint &&
+        root.fingerprint &&
+        body.value.expected_fingerprint !== root.fingerprint))
+  )
     return '服务器资料已变化，当前表单仍保留原版本。请刷新并核对差异，再采用当前版本。'
-  for (const [id, version] of [['task_id', 'expected_task_revision'], ['memory_id', 'expected_memory_revision'], ['source_record_id', 'source_revision']]) {
-    const row = pick(id, body.value[id] || params.value[id] || selected.value[id])
-    if (row && hasValue(body.value[version]) && row.revision !== body.value[version]) return '所引用资料已更新，请核对当前证据后重新确认。'
+  for (const [id, version] of [
+    ['task_id', 'expected_task_revision'],
+    ['memory_id', 'expected_memory_revision'],
+    ['source_record_id', 'source_revision'],
+  ]) {
+    const row = pick(
+      id,
+      body.value[id] || params.value[id] || selected.value[id],
+    )
+    if (
+      row &&
+      hasValue(body.value[version]) &&
+      row.revision !== body.value[version]
+    )
+      return '所引用资料已更新，请核对当前证据后重新确认。'
   }
   return ''
 })
 function syncVersions() {
   const form = body.value
   const assign = (field: string, value: unknown) => {
-    if (field in form && !hasValue(form[field]) && hasValue(value)) form[field] = value
+    if (field in form && !hasValue(form[field]) && hasValue(value))
+      form[field] = value
   }
   const rootParam = active.value?.parameters.find((x) => x.in === 'path')?.name
   const root = rootParam ? pick(rootParam, params.value[rootParam]) : undefined
@@ -295,14 +433,13 @@ function syncVersions() {
     assign('expected_task_revision', root?.revision)
   if ('expected_record_revision' in form) {
     const row = pick('record_id', selected.value.record_id)
-    if (hasValue(row?.revision)) assign('expected_record_revision', row?.revision)
+    if (hasValue(row?.revision))
+      assign('expected_record_revision', row?.revision)
   }
   const source = pick('record_id', form.source_record_id)
   if (source && 'source_revision' in form) {
     assign('source_revision', source.revision)
     if (!form.source_field) form.source_field = 'observations'
-    if (!form.source_quote)
-      form.source_quote = (source.observations as string[])?.[0] || ''
   }
   const occurrence = catalogs.value.occurrences?.find(
     (row) => row.occurrence_key === form.occurrence_key,
@@ -325,7 +462,10 @@ function syncVersions() {
   if ('expected_incident_revision' in form && incident)
     assign('expected_incident_revision', incident.revision)
   if ('expected_rectification_revision' in form && incident)
-    assign('expected_rectification_revision', (incident.rectification as Row)?.revision)
+    assign(
+      'expected_rectification_revision',
+      (incident.rectification as Row)?.revision,
+    )
 }
 function reset() {
   const op = active.value
@@ -336,7 +476,11 @@ function reset() {
       selected.value[p.name] || initial(p.schema, p.name),
     ]),
   )
-  body.value = bodySchema.value ? (props.taskCreation ? taskCreationInitial(bodySchema.value) : initial(bodySchema.value) as Row) : {}
+  body.value = bodySchema.value
+    ? props.taskCreation
+      ? taskCreationInitial(bodySchema.value)
+      : (initial(bodySchema.value) as Row)
+    : {}
   for (const key of Object.keys(body.value))
     if (selected.value[key]) body.value[key] = selected.value[key]
   syncVersions()
@@ -345,9 +489,11 @@ function reset() {
   message.value = ''
 }
 function acceptCurrentVersions() {
-  if (frozen.value || busy.value || recording.value || transcribing.value) return
+  if (frozen.value || busy.value || recording.value || transcribing.value)
+    return
   for (const field of Object.keys(body.value))
-    if (/^(expected_.*(?:revision|fingerprint)|source_revision)$/.test(field)) body.value[field] = ''
+    if (/^(expected_.*(?:revision|fingerprint)|source_revision)$/.test(field))
+      body.value[field] = ''
   syncVersions()
   confirm.value = false
   message.value = '已载入当前版本，请重新核对内容和原文证据后再提交。'
@@ -507,37 +653,76 @@ function setParam(field: string, value: unknown) {
   if (frozen.value || busy.value) return
   params.value[field] = value
   selected.value[field] = value
+  if (field === 'record_id') {
+    recordHistory.value = null
+    historyError.value = ''
+  }
+  if (field === 'draft_id') reviewSource.value = null
   for (const name of Object.keys(body.value))
-    if (/^expected_.*(?:revision|fingerprint)$/.test(name)) body.value[name] = ''
+    if (/^expected_.*(?:revision|fingerprint)$/.test(name))
+      body.value[name] = ''
   syncVersions()
 }
 function setBody(value: unknown) {
   if (frozen.value || busy.value) return
-  body.value = value as Row
+  body.value =
+    active.value && isQualityScan(active.value)
+      ? updateQualityScope(body.value, value as Row, catalogs.value)
+      : (value as Row)
   syncVersions()
 }
 async function run() {
-  if (busy.value || !active.value || saveIssue.value || phase.value === 'succeeded') return
+  if (
+    busy.value ||
+    !active.value ||
+    (!readOnly.value && saveIssue.value) ||
+    phase.value === 'succeeded'
+  )
+    return
   const op = active.value
   error.value = ''
   message.value = ''
   let path: string, payload: unknown, signature: string
   try {
     if (phase.value === 'pending' && pending.value) {
-      if (!pending.value.retryable) throw new Error('此接口没有可确认的安全重放契约，请先核查服务器结果并联系主管；不要清空或重新创建同一操作。')
+      if (!pending.value.retryable)
+        throw new Error(
+          '此接口没有可确认的安全重放契约，请先核查服务器结果并联系主管；不要清空或重新创建同一操作。',
+        )
       path = pending.value.path
       payload = pending.value.payload
       signature = pending.value.signature
     } else {
       path = materialize(op, params.value)
-      payload = bodySchema.value ? (props.taskCreation ? taskCreationPayload(bodySchema.value, body.value) : requestBody(op.path, bodySchema.value, body.value)) : undefined
-      signature = JSON.stringify([readSession()?.accountKey, op.method, path, withoutSecrets(payload)])
+      payload = bodySchema.value
+        ? props.taskCreation
+          ? taskCreationPayload(bodySchema.value, body.value)
+          : requestBody(op.path, bodySchema.value, body.value)
+        : undefined
+      signature = JSON.stringify([
+        readSession()?.accountKey,
+        op.method,
+        path,
+        withoutSecrets(payload),
+      ])
       if (versionIssue.value) throw new Error(versionIssue.value)
-      if (op.method !== 'get' && catalogErrors.value.length) throw new Error('所需目录未完整读取，请刷新可选数据并处理异常后再提交。')
+      if (op.method !== 'get' && catalogErrors.value.length)
+        throw new Error(
+          '所需目录未完整读取，请刷新可选数据并处理异常后再提交。',
+        )
     }
     // A request with an uncertain response must be allowed to ask the backend
     // for its idempotent result even if a successful transfer changed ownership.
-    const issue = phase.value === 'pending' ? '' : submissionIssue(op, params.value, payload, catalogs.value, readSession())
+    const issue =
+      phase.value === 'pending'
+        ? ''
+        : submissionIssue(
+            op,
+            params.value,
+            payload,
+            catalogs.value,
+            readSession(),
+          )
     if (issue) throw new Error(issue)
   } catch (failure) {
     error.value = (failure as Error).message
@@ -551,10 +736,18 @@ async function run() {
   try {
     if (op.method !== 'get') {
       await withSubmissionLock(formKey(), () => {
-        if (!recovery?.isCurrent()) throw new Error('其他窗口已修改表单，请载入最新版本。')
+        if (!recovery?.isCurrent())
+          throw new Error('其他窗口已修改表单，请载入最新版本。')
         if (phase.value !== 'pending') {
-          pending.value = { signature, key: crypto.randomUUID(), path, method: op.method,
-            payload: withoutSecrets(payload), retryable: supportsReplay(path, op.method) && !('password' in body.value) }
+          pending.value = {
+            signature,
+            key: crypto.randomUUID(),
+            path,
+            method: op.method,
+            payload: withoutSecrets(payload),
+            retryable:
+              supportsReplay(path, op.method) && !('password' in body.value),
+          }
           phase.value = 'pending'
         }
         if (!persistForm()) throw new Error(saveIssue.value)
@@ -592,7 +785,9 @@ async function run() {
       phase.value = 'succeeded'
       if (!persistForm()) {
         phase.value = 'pending'
-        throw new Error('服务器已返回成功，但本机回执保存失败。请核查服务器结果，不要重新创建同一操作。')
+        throw new Error(
+          '服务器已返回成功，但本机回执保存失败。请核查服务器结果，不要重新创建同一操作。',
+        )
       }
     }
     if (data && typeof data === 'object' && !Array.isArray(data)) {
@@ -611,16 +806,26 @@ async function run() {
       }
     }
     confirm.value = false
+    message.value = submissionFeedback(op.path, op.method).success
     if (op.method !== 'get') {
-      await loadCatalogs()
+      // The write has already been acknowledged and persisted locally. Directory
+      // refresh must never keep the save button stuck in its submitting state.
+      void loadCatalogs()
       emit('changed')
     }
-    message.value =
-      op.method === 'get' ? '已读取服务器当前数据。' : '服务器已确认操作成功。'
+    if (
+      props.group === 'records' &&
+      /^\/records\/\{record_id\}(?:\/corrections)?$/.test(op.path)
+    )
+      await loadRecordHistory(String(params.value.record_id || ''))
   } catch (failure) {
     error.value = (failure as Error).message
-    if (failure instanceof WorkflowRequestError && ((failure.status >= 400 && failure.status < 500) ||
-      (failure.status === 503 && ['/records/extract', '/records/context-extract'].includes(op.path)))) {
+    if (
+      failure instanceof WorkflowRequestError &&
+      ((failure.status >= 400 && failure.status < 500) ||
+        (failure.status === 503 &&
+          ['/records/extract', '/records/context-extract'].includes(op.path)))
+    ) {
       phase.value = 'editing'
       pending.value = undefined
       confirm.value = false
@@ -630,60 +835,215 @@ async function run() {
     busy.value = false
   }
 }
-function choose(op: Operation) {
-  if (busy.value || recording.value || transcribing.value || phase.value === 'pending' || op.id === active.value?.id) return
-  const retained = op.path === '/records/manual' && ['/records/extract', '/records/context-extract'].includes(active.value?.path || '') ? manualFallback(body.value) : null
+function choose(op: Operation, resumeSaved = true) {
+  if (
+    busy.value ||
+    recording.value ||
+    transcribing.value ||
+    phase.value === 'pending' ||
+    op.id === active.value?.id
+  )
+    return
+  const wasReadOnly = readOnly.value
+  if (wasReadOnly && op.method !== 'get') {
+    try {
+      if (recovery?.restore()?.phase === 'pending') {
+        restoreForm()
+        return
+      }
+    } catch (failure) {
+      saveIssue.value = (failure as Error).message
+      return
+    }
+  }
+  if (!wasReadOnly && !persistForm()) return
+  const retained =
+    op.path === '/records/manual' &&
+    ['/records/extract', '/records/context-extract'].includes(
+      active.value?.path || '',
+    )
+      ? manualFallback(body.value)
+      : null
   restoring = true
   activeId.value = op.id
   phase.value = 'editing'
   pending.value = undefined
+  saveIssue.value = ''
+  savedAt.value = ''
+  result.value = null
+  reviewSource.value = null
+  if (
+    props.group === 'records' &&
+    op.path !== '/records/{record_id}/corrections'
+  ) {
+    recordHistory.value = null
+    historyError.value = ''
+  }
   reset()
   if (retained) Object.assign(body.value, retained)
   restoring = false
+  if (wasReadOnly && op.method !== 'get' && resumeSaved) restoreForm(areaId(op))
   persistForm()
 }
+async function selectMenu(op: Operation) {
+  choose(op)
+  menuDialog.value?.close()
+  if (
+    props.group === 'records' &&
+    active.value?.id === op.id &&
+    op.method === 'get'
+  )
+    await run()
+}
+function openMenu() {
+  menuDialog.value?.showModal()
+}
+async function goRecordOperation(path: string) {
+  const op = allowed.value.find((item) => item.path === path)
+  if (op) {
+    choose(op, false)
+    if (active.value?.id === op.id && op.method === 'get') await run()
+  }
+}
+function switchRecordMode(mode: 'manual' | 'assisted') {
+  if (
+    busy.value ||
+    recording.value ||
+    transcribing.value ||
+    phase.value === 'pending'
+  )
+    return
+  const target =
+    mode === 'manual' ? '/records/manual' : '/records/context-extract'
+  const op = allowed.value.find((item) => item.path === target)
+  if (!op || op.id === active.value?.id) return
+  if (phase.value === 'succeeded') {
+    message.value = '本次操作已完成。请先开始新记录，避免重复保存同一内容。'
+    return
+  }
+  if (
+    mode === 'assisted' &&
+    (body.value.happened_at ||
+      (body.value.observations as unknown[])?.length ||
+      (body.value.task_candidates as unknown[])?.length) &&
+    !window.confirm(
+      '切换后保留原文、老人和班次；发生时间、人工观察和待办需重新核对填写。继续切换？',
+    )
+  )
+    return
+  const retained = recordModeValue(body.value, mode)
+  choose(op, false)
+  if (active.value?.id !== op.id) return
+  body.value = { ...body.value, ...retained }
+  persistForm()
+}
+async function selectResult(row: Row) {
+  remember(row)
+  if (props.group !== 'records' || phase.value === 'pending' || busy.value)
+    return
+  const id = String(row.id || '')
+  const path = id.startsWith('REC-')
+    ? '/records/{record_id}'
+    : id.startsWith('AI-')
+      ? '/records/drafts/{draft_id}'
+      : ''
+  const op = allowed.value.find((item) => item.path === path)
+  if (!op) return
+  choose(op, false)
+  if (active.value?.id === op.id) await run()
+}
+async function loadRecordHistory(recordId: string) {
+  if (!recordId) return
+  historyError.value = ''
+  try {
+    recordHistory.value = await request(
+      `/records/${encodeURIComponent(recordId)}/history`,
+    )
+  } catch {
+    historyError.value = '更正历史暂未读取成功，可重试；当前记录仍保留。'
+  }
+}
 function freshForm() {
-  if (busy.value || recording.value || transcribing.value || phase.value === 'pending' || !window.confirm('确认开始新操作？本机编辑内容将清空，服务器历史不会删除。')) return
+  if (
+    busy.value ||
+    recording.value ||
+    transcribing.value ||
+    phase.value === 'pending' ||
+    !window.confirm('确认开始新操作？本机编辑内容将清空，服务器历史不会删除。')
+  )
+    return
   restoring = true
   phase.value = 'editing'
   pending.value = undefined
+  result.value = null
+  reviewSource.value = null
+  recordHistory.value = null
+  historyError.value = ''
   reset()
   restoring = false
   persistForm()
 }
 function fallbackAfterUncertainAI() {
-  if (!uncertainExtraction.value || busy.value || !pending.value || saveIssue.value ||
-    !window.confirm('AI请求结果仍待核实，可能留下未确认草稿，但尚未由此入口确认正式记录。保留该请求记录并使用原文进行人工记录？请勿再确认同一AI草稿。')) return
-  const manual = allowed.value.find(op => op.path === '/records/manual' && op.method === 'post')
+  if (
+    !uncertainExtraction.value ||
+    busy.value ||
+    !pending.value ||
+    saveIssue.value ||
+    !window.confirm(
+      'AI请求结果仍待核实，可能留下未确认草稿，但尚未由此入口确认正式记录。保留该请求记录并使用原文进行人工记录？请勿再确认同一AI草稿。',
+    )
+  )
+    return
+  const manual = allowed.value.find(
+    (op) => op.path === '/records/manual' && op.method === 'post',
+  )
   if (!manual) return
   try {
-    localStorage.setItem(formKey() + ':unresolved-ai:' + pending.value.key, JSON.stringify({
-      pending: pending.value, source: withoutSecrets(body.value), updatedAt: new Date().toISOString(),
-    }))
+    localStorage.setItem(
+      formKey() + ':unresolved-ai:' + pending.value.key,
+      JSON.stringify({
+        pending: pending.value,
+        source: withoutSecrets(body.value),
+        updatedAt: new Date().toISOString(),
+      }),
+    )
   } catch {
     error.value = '未能保留待核实AI请求，请先释放本机存储空间；原文未清空。'
     return
   }
   phase.value = 'editing'
   choose(manual)
-  message.value = '已保留未核实AI请求并带入原文。请人工填写；不要再确认对应AI草稿，避免重复建立正式记录。'
+  message.value =
+    '已保留未核实AI请求并带入原文。请人工填写；不要再确认对应AI草稿，避免重复建立正式记录。'
 }
 function downloadJournal() {
   try {
     const journal = recovery?.journal()
-    if (!journal) { error.value = '没有可导出的本窗口恢复日志。'; return }
+    if (!journal) {
+      error.value = '没有可导出的本窗口恢复日志。'
+      return
+    }
     exportJSON(withoutSecrets(journal), '本窗口编辑恢复日志.json')
-  } catch (failure) { error.value = (failure as Error).message }
+  } catch (failure) {
+    error.value = (failure as Error).message
+  }
 }
 async function inspectPending() {
   if (busy.value) return
   error.value = ''
   try {
-    const root = pending.value?.path.split('?')[0].match(/^\/(tasks|handovers|records)\/([^/]+)/)
-    result.value = root && !['manual', 'extract', 'context-extract'].includes(root[2])
-      ? await request(`/${root[1]}/${root[2]}`) : await request(paths[props.group] || '/records')
-    message.value = '仅读取当前服务器数据，尚未判定本次写入结果；不会自动解除待核实保护。'
-  } catch (failure) { error.value = (failure as Error).message }
+    const root = pending.value?.path
+      .split('?')[0]
+      .match(/^\/(tasks|handovers|records)\/([^/]+)/)
+    result.value =
+      root && !['manual', 'extract', 'context-extract'].includes(root[2])
+        ? await request(`/${root[1]}/${root[2]}`)
+        : await request(paths[props.group] || '/records')
+    message.value =
+      '仅读取当前服务器数据，尚未判定本次写入结果；不会自动解除待核实保护。'
+  } catch (failure) {
+    error.value = (failure as Error).message
+  }
 }
 function useDraft() {
   if (busy.value) return
@@ -691,7 +1051,9 @@ function useDraft() {
   const op = allowed.value.find((x) => x.path === '/records/{draft_id}/confirm')
   if (!op || !data?.id) return
   selected.value.draft_id = data.id
-  choose(op)
+  choose(op, false)
+  if (active.value?.id !== op.id) return
+  reviewSource.value = data
   body.value.observations = JSON.parse(JSON.stringify(data.observations || []))
   body.value.task_candidates = JSON.parse(
     JSON.stringify(data.task_candidates || []),
@@ -705,7 +1067,7 @@ function useAISummary() {
   )
   if (!op || !data) return
   const ai = data.ai_summary as Row | undefined
-  choose(op)
+  choose(op, false)
   if (typeof ai?.text === 'string') body.value.summary = ai.text
   else if (typeof ai?.summary === 'string') body.value.summary = ai.summary
   body.value.approve_ai_summary = false
@@ -721,7 +1083,9 @@ function exportJSON(value: unknown, filename: string) {
   link.click()
   URL.revokeObjectURL(link.href)
 }
-function download() { exportJSON(result.value, '照护证据链.json') }
+function download() {
+  exportJSON(result.value, '照护证据链.json')
+}
 let recorder: MediaRecorder | undefined
 let stream: MediaStream | undefined
 let recordingDeadline: ReturnType<typeof setTimeout> | undefined
@@ -760,7 +1124,8 @@ async function transcribeAudio(blob: Blob) {
         '语音识别失败，可重试或手工录入：' + JSON.stringify(data.detail),
       )
     }
-    if (typeof data.text !== 'string' || !data.text.trim()) throw new Error('转写响应缺少有效原文，请保留录音并手工录入。')
+    if (typeof data.text !== 'string' || !data.text.trim())
+      throw new Error('转写响应缺少有效原文，请保留录音并手工录入。')
     const target = 'text' in body.value ? 'text' : 'raw_text'
     body.value[target] = [body.value[target], data.text]
       .filter(Boolean)
@@ -829,16 +1194,24 @@ async function initializeRecovery() {
   ready.value = false
   restoring = true
   selected.value = { ...props.context }
+  reviewSource.value = null
+  recordHistory.value = null
+  historyError.value = ''
   phase.value = 'editing'
   pending.value = undefined
   result.value = null
   reset()
   try {
     let writer = sessionStorage.getItem('hulao:workflow-writer')
-    if (!writer) { writer = crypto.randomUUID(); sessionStorage.setItem('hulao:workflow-writer', writer) }
+    if (!writer) {
+      writer = crypto.randomUUID()
+      sessionStorage.setItem('hulao:workflow-writer', writer)
+    }
     recovery = new WorkflowRecovery(formKey(), localStorage, writer)
     restoreForm()
-  } catch (failure) { saveIssue.value = (failure as Error).message }
+  } catch (failure) {
+    if (!readOnly.value) saveIssue.value = (failure as Error).message
+  }
   restoring = false
   ready.value = true
   await loadCatalogs()
@@ -851,9 +1224,16 @@ watch(
     await initializeRecovery()
   },
 )
-watch([params, body], () => {
-  if (!restoring) { confirm.value = false; persistForm() }
-}, { deep: true, flush: 'sync' })
+watch(
+  [params, body],
+  () => {
+    if (!restoring) {
+      confirm.value = false
+      persistForm()
+    }
+  },
+  { deep: true, flush: 'sync' },
+)
 onMounted(async () => {
   if (!serverMode) return
   activeId.value =
@@ -868,13 +1248,17 @@ onMounted(async () => {
   window.addEventListener('beforeunload', beforeUnload)
   window.addEventListener('storage', checkOtherWindow)
   await initializeRecovery()
-  if (props.autoRead && active.value?.method === 'get') await run()
+  if (
+    (props.autoRead || props.group === 'records') &&
+    active.value?.method === 'get'
+  )
+    await run()
 })
 </script>
 <template>
   <section class="workflow-panel">
     <header class="wf-header">
-      <h2>{{ title || '业务办理' }}</h2>
+      <h2 v-if="title">{{ title }}</h2>
       <button
         v-if="serverMode"
         type="button"
@@ -885,184 +1269,459 @@ onMounted(async () => {
         {{ loading ? '正在读取目录…' : '刷新可选数据' }}
       </button>
     </header>
-    <p v-if="!serverMode" class="wf-notice">此业务需要服务器测试账号和已授权数据。当前为本机演示，不会发送业务请求或模拟提交成功。</p>
+    <p v-if="!serverMode" class="wf-notice">
+      此业务需要服务器测试账号和已授权数据。当前为本机演示，不会发送业务请求或模拟提交成功。
+    </p>
     <p v-else-if="!allowed.length" class="wf-muted">当前身份没有此业务入口。</p>
     <template v-else-if="active">
-      <nav v-if="allowed.length > 1" class="wf-actions" aria-label="业务操作">
+      <div v-if="hasMenu" class="wf-mobile-menu-bar">
         <button
-          v-for="op in allowed"
-          :key="op.id"
           type="button"
-          :class="['wf-action', { selected: active.id === op.id }]"
-          :disabled="busy || recording || transcribing || phase === 'pending'"
-          @click="choose(op)"
+          class="wf-secondary"
+          aria-haspopup="dialog"
+          @click="openMenu"
         >
-          {{ op.title }}
+          ☰ 功能菜单
         </button>
-      </nav>
-      <p v-if="catalogErrors.length" class="wf-error" role="alert">
-        部分目录读取失败：{{ catalogErrors.join('；') }}。可刷新重试。
-      </p>
-      <p v-if="saveIssue" class="wf-error" role="alert">
-        {{ saveIssue }}
-        <button type="button" class="wf-secondary" :disabled="busy" @click="restoreForm">载入最新本机版本</button>
-        <button type="button" class="wf-secondary" :disabled="busy" @click="persistForm">重试本机保存</button>
-        <button type="button" class="wf-secondary" :disabled="busy" @click="downloadJournal">导出本窗口恢复日志</button>
-      </p>
-      <p v-else-if="savedAt" class="wf-muted" role="status">
-        {{ phase === 'pending' ? '结果待核实，已保留原请求' : phase === 'succeeded' ? '服务器已确认，本机回执已保存' : '已保存到本机，尚未提交服务器' }} · {{ new Date(savedAt).toLocaleString() }}
-      </p>
-      <p v-if="phase === 'pending'" class="wf-notice" role="alert">
-        本次写入结果待核实，不能修改内容或重新创建同一操作。
-        <button type="button" class="wf-secondary" :disabled="busy" @click="inspectPending">核查服务器当前数据</button>
-        {{ pending?.retryable ? '可使用原请求安全核实，始终复用相同请求编号。' : '此接口不支持已确认的幂等重放，请联系主管核对。' }}
-        <button v-if="uncertainExtraction" type="button" class="wf-secondary" :disabled="busy || !!saveIssue" @click="fallbackAfterUncertainAI">保留待核实AI请求并转人工</button>
-      </p>
-      <p v-if="versionIssue && phase === 'editing'" class="wf-notice" role="alert">
-        {{ versionIssue }}
-        <button type="button" class="wf-secondary" :disabled="busy || loading" @click="acceptCurrentVersions">采用当前版本并重新核对</button>
-      </p>
-      <form class="wf-form" @submit.prevent="run">
-        <h3>{{ taskCreation ? '任务内容' : active.title }}</h3>
-        <p v-if="taskCreation" class="wf-notice">将创建一条人工来源记录和一个待办。请手工确定负责人、截止时间及完成标准；完成标准随来源记录保存，不会修改老人偏好。</p>
-        <p v-if="noWritableShift && active.method !== 'get'" class="wf-notice">
-          当前没有分配给你的开放班次，请联系主管在班次管理中安排。已关闭或其他人的班次不能用于当班提交。
-        </p>
-        <p
-          v-if="/extract|ai-summary|quality/.test(active.path)"
-          class="wf-notice"
-        >
-          AI生成内容仅供核对，原文证据会保留。生成摘要、候选或质检提示，不会自动确认记录、执行任务或发布交班。
-        </p>
-        <fieldset
-          :disabled="busy || frozen || recording || transcribing"
-          class="wf-inputs"
-        >
-          <WorkflowField
-            v-for="param in active.parameters"
-            :key="param.name"
-            :schema="param.schema"
-            :field="param.name"
-            :required="param.required"
-            :model-value="params[param.name]"
-            :catalogs="catalogs"
-            :option-overrides="fieldOptions"
-            @update:model-value="setParam(param.name, $event)"
+        <span>{{ activeAreaInfo?.title }}</span>
+      </div>
+      <div class="wf-workspace" :class="{ 'wf-with-menu': hasMenu }">
+        <aside v-if="hasMenu" class="wf-desktop-menu">
+          <WorkflowMenu
+            :areas="areas"
+            :active-area="activeArea"
+            :active-id="active.id"
+            :records="group === 'records'"
+            :disabled="busy || recording || transcribing || phase === 'pending'"
+            @choose="selectMenu"
           />
-          <WorkflowField
-            v-if="bodySchema"
-            :schema="bodySchema"
-            field="填写办理内容"
-            :model-value="body"
-            :catalogs="catalogs"
-            :option-overrides="fieldOptions"
-            @update:model-value="setBody"
-          />
-        </fieldset>
-        <div
-          v-if="
-            active.method !== 'get' && ('text' in body || 'raw_text' in body)
-          "
-          class="wf-toolbar"
+        </aside>
+        <dialog
+          v-if="hasMenu"
+          ref="menuDialog"
+          class="wf-menu-dialog"
+          aria-label="功能菜单"
+          @click="$event.target === menuDialog && menuDialog?.close()"
         >
-          <button
-            type="button"
-            class="wf-secondary"
-            :disabled="busy || frozen || transcribing"
-            @click="toggleRecording"
-          >
+          <header class="wf-menu-dialog-header">
+            <strong>功能菜单</strong
+            ><button
+              type="button"
+              class="wf-secondary"
+              autofocus
+              aria-label="关闭功能菜单"
+              @click="menuDialog?.close()"
+            >
+              关闭
+            </button>
+          </header>
+          <WorkflowMenu
+            :areas="areas"
+            :active-area="activeArea"
+            :active-id="active.id"
+            :records="group === 'records'"
+            :disabled="busy || recording || transcribing || phase === 'pending'"
+            @choose="selectMenu"
+          />
+        </dialog>
+        <div class="wf-workspace-content">
+          <p v-if="activeAreaInfo?.description" class="wf-muted">
+            {{ activeAreaInfo.description }}
+          </p>
+          <div v-if="recordDetail" class="wf-toolbar wf-context-actions">
+            <button
+              type="button"
+              class="wf-secondary"
+              :disabled="busy || phase === 'pending'"
+              @click="goRecordOperation('/records')"
+            >
+              返回记录列表
+            </button>
+            <button
+              v-if="active.path !== '/records/{record_id}/corrections'"
+              type="button"
+              class="wf-secondary"
+              :disabled="busy"
+              @click="goRecordOperation('/records/{record_id}/corrections')"
+            >
+              追加更正
+            </button>
+            <button
+              v-else
+              type="button"
+              class="wf-secondary"
+              :disabled="busy || phase === 'pending'"
+              @click="goRecordOperation('/records/{record_id}')"
+            >
+              查看原记录
+            </button>
+          </div>
+          <div v-if="draftDetail" class="wf-toolbar wf-context-actions">
+            <button
+              type="button"
+              class="wf-secondary"
+              :disabled="busy || phase === 'pending'"
+              @click="goRecordOperation('/records/drafts')"
+            >
+              返回草稿列表
+            </button>
+            <button
+              v-if="
+                active.path === '/records/drafts/{draft_id}' &&
+                (result as Row)?.status === 'pending_review'
+              "
+              type="button"
+              class="wf-secondary"
+              :disabled="busy"
+              @click="goRecordOperation('/records/drafts/{draft_id}/reject')"
+            >
+              放弃草稿
+            </button>
+          </div>
+          <p v-if="catalogErrors.length" class="wf-error" role="alert">
+            部分目录读取失败：{{ catalogErrors.join('；') }}。可刷新重试。
+          </p>
+          <p v-if="saveIssue && !readOnly" class="wf-error" role="alert">
+            {{ saveIssue }}
+            <button
+              type="button"
+              class="wf-secondary"
+              :disabled="busy"
+              @click="restoreForm()"
+            >
+              载入最新本机版本
+            </button>
+            <button
+              type="button"
+              class="wf-secondary"
+              :disabled="busy"
+              @click="persistForm"
+            >
+              重试本机保存
+            </button>
+            <button
+              type="button"
+              class="wf-secondary"
+              :disabled="busy"
+              @click="downloadJournal"
+            >
+              导出本窗口恢复日志
+            </button>
+          </p>
+          <p v-else-if="savedAt && !readOnly" class="wf-muted" role="status">
             {{
-              recording
-                ? '结束录音并转写'
-                : transcribing
-                  ? '云端转写中…'
-                  : '语音录入'
-            }}</button
-          ><label class="wf-secondary"
-            >上传录音<input
-              aria-label="上传录音"
-              type="file"
-              accept="audio/*"
-              :disabled="busy || frozen || recording || transcribing"
-              @change="uploadAudio" /></label
-          ><span class="wf-muted">最多60秒，转写后可编辑，不自动保存。</span>
-        </div>
-        <p v-if="confirm" class="wf-notice">
-          请核对以上内容和当前版本，确认后写入服务器。{{
-            active.path.includes('/confirm')
-              ? '待办候选将随正式记录生成任务。'
-              : ''
-          }}
-        </p>
-        <div class="wf-toolbar">
-          <button
-            type="submit"
-            class="wf-primary"
-            :disabled="busy || loading || !!saveIssue || phase === 'succeeded' || (phase === 'pending' && !pending?.retryable) || recording || transcribing"
-          >
-            {{
-              busy
-                ? '正在提交，请勿重复操作…'
-                : phase === 'pending'
-                  ? '使用原请求核实结果'
+              phase === 'pending'
+                ? '结果待核实，已保留原请求'
                 : phase === 'succeeded'
-                  ? '本次操作已完成'
-                : confirm
-                  ? '确认提交'
-                  : active.method === 'get'
-                    ? '读取当前数据'
-                    : '核对并继续'
-            }}</button
-          ><button
-            v-if="confirm"
-            type="button"
-            class="wf-secondary"
-            :disabled="busy"
-            @click="confirm = false"
+                  ? '服务器已确认，本机回执已保存'
+                  : '已保存到本机，尚未提交服务器'
+            }}
+            · {{ new Date(savedAt).toLocaleString() }}
+          </p>
+          <p v-if="phase === 'pending'" class="wf-notice" role="alert">
+            本次写入结果待核实，不能修改内容或重新创建同一操作。
+            <button
+              type="button"
+              class="wf-secondary"
+              :disabled="busy"
+              @click="inspectPending"
+            >
+              核查服务器当前数据
+            </button>
+            {{
+              pending?.retryable
+                ? '可使用原请求安全核实，始终复用相同请求编号。'
+                : '此接口不支持已确认的幂等重放，请联系主管核对。'
+            }}
+            <button
+              v-if="uncertainExtraction"
+              type="button"
+              class="wf-secondary"
+              :disabled="busy || !!saveIssue"
+              @click="fallbackAfterUncertainAI"
+            >
+              保留待核实AI请求并转人工
+            </button>
+          </p>
+          <p
+            v-if="versionIssue && phase === 'editing'"
+            class="wf-notice"
+            role="alert"
           >
-            返回修改</button
-          ><button
-            type="button"
-            class="wf-secondary"
-            :disabled="busy || phase === 'pending' || !!saveIssue || recording || transcribing"
-            @click="freshForm"
+            {{ versionIssue }}
+            <button
+              type="button"
+              class="wf-secondary"
+              :disabled="busy || loading"
+              @click="acceptCurrentVersions"
+            >
+              采用当前版本并重新核对
+            </button>
+          </p>
+          <form class="wf-form" @submit.prevent="run">
+            <h3>{{ taskCreation ? '任务内容' : operationTitle(active) }}</h3>
+            <p v-if="group === 'incidents'" class="wf-notice">
+              安全事件用于登记跌倒、噎食、走失等需要跟进的问题，并追踪整改和复查。日常食欲变化或一次拒绝服务不自动认定为事件。请先保存事实记录，再选择“上报事件”关联依据，由主管分类和分级。
+            </p>
+            <div
+              v-if="recordComposer"
+              class="wf-record-modes"
+              role="group"
+              aria-label="记录方式"
+            >
+              <button
+                type="button"
+                :class="[
+                  'wf-secondary',
+                  { selected: active.path !== '/records/manual' },
+                ]"
+                :aria-pressed="active.path !== '/records/manual'"
+                :disabled="busy || frozen || recording || transcribing"
+                @click="switchRecordMode('assisted')"
+              >
+                整理后核对
+              </button>
+              <button
+                type="button"
+                :class="[
+                  'wf-secondary',
+                  { selected: active.path === '/records/manual' },
+                ]"
+                :aria-pressed="active.path === '/records/manual'"
+                :disabled="busy || frozen || recording || transcribing"
+                @click="switchRecordMode('manual')"
+              >
+                直接填写
+              </button>
+            </div>
+            <p v-if="recordComposer" class="wf-muted">
+              {{
+                active.path === '/records/manual'
+                  ? '直接保存人工填写的内容，无需调用模型。'
+                  : '结合当前老人、场景与已确认偏好整理内容，核对后才成为正式记录。'
+              }}
+            </p>
+            <details
+              v-if="
+                active.path === '/records/{draft_id}/confirm' &&
+                (reviewSource || pick('draft_id', params.draft_id))
+              "
+              class="wf-result-details"
+            >
+              <summary>查看原文与整理依据</summary>
+              <WorkflowResult
+                :value="reviewSource || pick('draft_id', params.draft_id)"
+              />
+            </details>
+            <p v-if="isQualityScan(active)" class="wf-muted">
+              选择交班单后自动采用其交出班次；更换班次会清除不匹配的交班单。历史已关闭班次也可检查。
+            </p>
+            <p v-if="taskCreation" class="wf-notice">
+              将创建一条人工来源记录和一个待办。请手工确定负责人、截止时间及完成标准；完成标准随来源记录保存，不会修改老人偏好。
+            </p>
+            <p
+              v-if="noWritableShift && active.method !== 'get'"
+              class="wf-notice"
+            >
+              当前没有分配给你的开放班次，请联系主管在班次管理中安排。已关闭或其他人的班次不能用于当班提交。
+            </p>
+            <p
+              v-if="/extract|ai-summary|quality/.test(active.path)"
+              class="wf-notice"
+            >
+              整理结果仅供核对，原文证据会保留。未经人工确认，不会生成正式记录、执行任务或发布交班。
+            </p>
+            <fieldset
+              :disabled="busy || frozen || recording || transcribing"
+              class="wf-inputs"
+            >
+              <WorkflowField
+                v-for="param in active.parameters"
+                :key="param.name"
+                :schema="param.schema"
+                :field="param.name"
+                :required="param.required"
+                :model-value="params[param.name]"
+                :catalogs="catalogs"
+                :option-overrides="fieldOptions"
+                @update:model-value="setParam(param.name, $event)"
+              />
+              <WorkflowField
+                v-if="bodySchema"
+                :schema="bodySchema"
+                field="填写办理内容"
+                :model-value="body"
+                :catalogs="catalogs"
+                :option-overrides="fieldOptions"
+                @update:model-value="setBody"
+              />
+            </fieldset>
+            <ServiceCareHints v-if="recordComposer && active.path === '/records/context-extract'" :elder-id="String(body.elder_id || '')" :scene="String(body.scene || '')" />
+            <div
+              v-if="
+                active.method !== 'get' &&
+                ('text' in body || 'raw_text' in body)
+              "
+              class="wf-toolbar"
+            >
+              <button
+                type="button"
+                class="wf-secondary"
+                :disabled="busy || frozen || transcribing"
+                @click="toggleRecording"
+              >
+                {{
+                  recording
+                    ? '结束录音并转写'
+                    : transcribing
+                      ? '云端转写中…'
+                      : '语音录入'
+                }}</button
+              ><label class="wf-secondary"
+                >上传录音<input
+                  aria-label="上传录音"
+                  type="file"
+                  accept="audio/*"
+                  :disabled="busy || frozen || recording || transcribing"
+                  @change="uploadAudio" /></label
+              ><span class="wf-muted"
+                >最多60秒，转写后可编辑，不自动保存。</span
+              >
+            </div>
+            <p v-if="confirm" class="wf-notice">
+              {{ feedback.assisted ? '确认后整理为待核对草稿，不会直接保存正式记录。' : '请核对以上内容，确认后保存到服务器。' }}{{
+                active.path.includes('/confirm')
+                  ? '待办候选将随正式记录生成任务。'
+                  : ''
+              }}
+            </p>
+            <p v-if="busy" class="wf-notice" role="status">{{ feedback.waiting }}</p>
+            <p v-else-if="loading && phase === 'succeeded'" class="wf-muted" role="status">本次操作已完成，正在后台更新列表。</p>
+            <div class="wf-toolbar">
+              <button
+                type="submit"
+                class="wf-primary"
+                :disabled="
+                  busy ||
+                  loading ||
+                  (!readOnly && !!saveIssue) ||
+                  phase === 'succeeded' ||
+                  (phase === 'pending' && !pending?.retryable) ||
+                  recording ||
+                  transcribing
+                "
+              >
+                {{
+                  busy
+                    ? feedback.button
+                    : phase === 'pending'
+                      ? '使用原请求核实结果'
+                      : phase === 'succeeded'
+                        ? '本次操作已完成'
+                        : confirm
+                          ? '确认提交'
+                          : active.method === 'get'
+                            ? '读取当前数据'
+                            : '核对并继续'
+                }}</button
+              ><button
+                v-if="confirm"
+                type="button"
+                class="wf-secondary"
+                :disabled="busy"
+                @click="confirm = false"
+              >
+                返回修改</button
+              ><button
+                type="button"
+                class="wf-secondary"
+                :disabled="
+                  busy ||
+                  phase === 'pending' ||
+                  (!readOnly && !!saveIssue) ||
+                  recording ||
+                  transcribing
+                "
+                @click="freshForm"
+              >
+                {{ recordComposer ? '开始新记录' : '清空表单，开始新操作' }}
+              </button>
+            </div>
+          </form>
+          <p v-if="error" class="wf-error" role="alert">{{ error }}</p>
+          <p v-if="message" class="wf-success" role="status">{{ message }}</p>
+          <section v-if="result !== null" class="wf-results">
+            <h3>
+              {{
+                group === 'records'
+                  ? recordComposer && active.path !== '/records/manual'
+                    ? '整理结果与原文依据'
+                    : '记录内容与依据'
+                  : '办理结果与原文依据'
+              }}
+            </h3>
+            <div class="wf-toolbar">
+              <button
+                v-if="
+                  (result as Row)?.generation_kind &&
+                  (result as Row)?.status === 'pending_review'
+                "
+                class="wf-primary"
+                type="button"
+                :disabled="busy"
+                @click="useDraft"
+              >
+                核对并保存记录</button
+              ><button
+                v-if="(result as Row)?.ai_summary"
+                class="wf-primary"
+                type="button"
+                :disabled="busy"
+                @click="useAISummary"
+              >
+                核对摘要并准备交班</button
+              ><button
+                v-if="active.path.endsWith('/export')"
+                class="wf-secondary"
+                type="button"
+                @click="download"
+              >
+                下载证据链
+              </button>
+            </div>
+            <RecordResults
+              v-if="group === 'records'"
+              :value="result"
+              :catalogs="catalogs"
+              @select="selectResult"
+            />
+            <WorkflowResult v-else :value="result" @select="selectResult" />
+          </section>
+          <section
+            v-if="recordDetail && (recordHistory !== null || historyError)"
+            class="wf-record-history"
           >
-            清空表单，开始新操作
-          </button>
+            <details :open="!!historyError">
+              <summary>更正历史</summary>
+              <p class="wf-muted">
+                原记录及历次更正保留，可在这里核对变更依据。
+              </p>
+              <p v-if="historyError" class="wf-error" role="alert">
+                {{ historyError
+                }}<button
+                  type="button"
+                  class="wf-secondary"
+                  :disabled="busy"
+                  @click="loadRecordHistory(String(params.record_id || ''))"
+                >
+                  重试读取历史
+                </button>
+              </p>
+              <WorkflowResult v-else :value="recordHistory" />
+            </details>
+          </section>
         </div>
-      </form>
-      <p v-if="error" class="wf-error" role="alert">{{ error }}</p>
-      <p v-if="message" class="wf-success" role="status">{{ message }}</p>
-      <section v-if="result !== null" class="wf-results">
-        <h3>服务器结果与原文证据</h3>
-        <div class="wf-toolbar">
-          <button
-            v-if="(result as Row)?.generation_kind"
-            class="wf-primary"
-            type="button"
-            :disabled="busy"
-            @click="useDraft"
-          >
-            人工核对此AI草稿</button
-          ><button
-            v-if="(result as Row)?.ai_summary"
-            class="wf-primary"
-            type="button"
-            :disabled="busy"
-            @click="useAISummary"
-          >
-            核对摘要并准备交班</button
-          ><button
-            v-if="active.path.endsWith('/export')"
-            class="wf-secondary"
-            type="button"
-            @click="download"
-          >
-            下载证据链
-          </button>
-        </div>
-        <WorkflowResult :value="result" @select="remember" />
-      </section>
+      </div>
     </template>
   </section>
 </template>

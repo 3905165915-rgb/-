@@ -1,6 +1,7 @@
 <script setup lang="ts">
 const serverWorkflow = ['api'].includes(import.meta.env.VITE_APP_MODE || 'api')
 import WorkflowPanel from '@hulao/shared/workflow'
+import { compactReference } from '@hulao/shared'
 import { ref, watch } from 'vue'
 import {
   onBeforeRouteLeave,
@@ -107,7 +108,7 @@ onBeforeRouteUpdate(() => (mode === 'api' ? true : leave()))
       @retry="tasks.refetch()"
     /><van-empty v-if="!shift" description="请选择或输入班次编号" />
     <template v-else>
-      <p class="muted">班次编号：{{ shift }}</p>
+      <p class="muted">班次编号：{{ compactReference(shift) }}</p>
       <van-tabs v-model:active="tab" :lazy-render="false">
         <van-tab title="交班" name="send">
           <HandoverEditor

@@ -262,6 +262,31 @@ export const labels: Record<string, string> = {
   possible_relations: '可能相关（需人工判断）',
   possible_related_objects: '可能相关对象（非明确引用）',
   completion_criteria: '完成标准',
+  timezone: '显示时区',
+  window: '统计时段',
+  start_inclusive: '统计开始时间（含）',
+  end_exclusive: '统计截止时间（不含）',
+  interpretation: '统计口径说明',
+  generated_plan_occurrences: '已生成且已到服务时间的计划任务',
+  completion: '完成情况',
+  on_time_completion: '按时完成情况',
+  numerator: '已达成数量',
+  denominator: '纳入统计数量',
+  ratio: '达成比例',
+  cancelled: '已取消数量',
+  not_done: '未执行数量',
+  open_overdue: '未完成且已逾期数量',
+  excluded_future_task_rows: '尚未到服务时间的任务（暂不计入）',
+  invalid_schedule_rows: '服务时间异常的任务',
+  definition: '计算规则',
+  manual_task_rows_created: '本时段新建的非计划任务',
+  handover_receipt: '交班事项接收情况',
+  incidents: '不良事件情况',
+  reported: '已上报数量',
+  closed: '已关闭数量',
+  open_rectifications_overdue: '未关闭且已逾期的整改',
+  family_feedback: '家属反馈情况',
+  created: '新增数量',
 }
 export const valueLabels: Record<string, string> = {
   admin: '管理员',
@@ -364,9 +389,42 @@ export const valueLabels: Record<string, string> = {
 export function label(name: string) {
   return labels[name] || name
 }
-export function display(value: unknown): string {
+export function display(value: unknown, field?: string): string {
+  if (field === 'ratio') {
+    if (value === null || value === undefined) return '暂无可统计数据'
+    if (typeof value === 'number' && Number.isFinite(value))
+      return new Intl.NumberFormat('zh-CN', {
+        style: 'percent',
+        maximumFractionDigits: 1,
+      }).format(value)
+  }
   if (value === null || value === undefined || value === '') return '未提供'
   if (typeof value === 'boolean') return value ? '是' : '否'
+  if (value === 'Asia/Shanghai') return '北京时间（UTC+8）'
+  if (
+    typeof value === 'string' &&
+    field &&
+    /(?:_at$|_until$|_from$|_inclusive$|_exclusive$|^as_of$)/.test(field) &&
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(value) &&
+    /(?:Z|[+-]\d{2}:\d{2})$/.test(value)
+  ) {
+    const date = new Date(value)
+    if (Number.isFinite(date.valueOf())) {
+      const parts = new Intl.DateTimeFormat('zh-CN', {
+        timeZone: 'Asia/Shanghai',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hourCycle: 'h23',
+      }).formatToParts(date)
+      const part = (type: string) =>
+        parts.find((p) => p.type === type)?.value || ''
+      return `${part('year')}年${part('month')}月${part('day')}日 ${part('hour')}:${part('minute')}:${part('second')}（北京时间）`
+    }
+  }
   if (typeof value === 'string') return valueLabels[value] || value
   return String(value)
 }
@@ -413,7 +471,8 @@ export function clean(
     return undefined
   }
   if (s.type === 'object') {
-    if (typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label(field)}格式不正确`)
+    if (typeof value !== 'object' || Array.isArray(value))
+      throw new Error(`${label(field)}格式不正确`)
     const row = value as Row
     const props = s.properties || {}
     const entries = Object.entries(props).map(([key, child]) => [
@@ -439,21 +498,34 @@ export function clean(
       throw new Error(`${label(field)}不能小于${s.minimum}`)
     if (s.maximum !== undefined && n > s.maximum)
       throw new Error(`${label(field)}不能大于${s.maximum}`)
-    if (s.enum && !s.enum.includes(n)) throw new Error(`请选择有效的${label(field)}`)
+    if (s.enum && !s.enum.includes(n))
+      throw new Error(`请选择有效的${label(field)}`)
     return n
   }
-  if (s.type === 'boolean' && typeof value !== 'boolean') throw new Error(`请选择有效的${label(field)}`)
+  if (s.type === 'boolean' && typeof value !== 'boolean')
+    throw new Error(`请选择有效的${label(field)}`)
   if (s.type === 'string') {
     if (typeof value !== 'string') throw new Error(`${label(field)}必须为文本`)
-    if ((required || (s.minLength ?? 0) > 0) && !value.trim()) throw new Error(`请填写${label(field)}`)
-    if (s.minLength !== undefined && value.length < s.minLength) throw new Error(`${label(field)}至少${s.minLength}字`)
-    if (s.maxLength !== undefined && value.length > s.maxLength) throw new Error(`${label(field)}不能超过${s.maxLength}字`)
-    if (s.pattern && !new RegExp(s.pattern).test(value)) throw new Error(`${label(field)}格式不正确`)
+    if ((required || (s.minLength ?? 0) > 0) && !value.trim())
+      throw new Error(`请填写${label(field)}`)
+    if (s.minLength !== undefined && value.length < s.minLength)
+      throw new Error(`${label(field)}至少${s.minLength}字`)
+    if (s.maxLength !== undefined && value.length > s.maxLength)
+      throw new Error(`${label(field)}不能超过${s.maxLength}字`)
+    if (s.pattern && !new RegExp(s.pattern).test(value))
+      throw new Error(`${label(field)}格式不正确`)
   }
-  if (s.enum && !s.enum.includes(value as string | number)) throw new Error(`请选择有效的${label(field)}`)
-  if (s.const !== undefined && value !== s.const) throw new Error(`${label(field)}与当前操作不符`)
-  if (s.format === 'date' && (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value) ||
-    !Number.isFinite(Date.parse(value)) || new Date(value).toISOString().slice(0, 10) !== value))
+  if (s.enum && !s.enum.includes(value as string | number))
+    throw new Error(`请选择有效的${label(field)}`)
+  if (s.const !== undefined && value !== s.const)
+    throw new Error(`${label(field)}与当前操作不符`)
+  if (
+    s.format === 'date' &&
+    (typeof value !== 'string' ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(value) ||
+      !Number.isFinite(Date.parse(value)) ||
+      new Date(value).toISOString().slice(0, 10) !== value)
+  )
     throw new Error(`请填写有效的${label(field)}`)
   if (s.format === 'date-time') {
     const time = new Date(String(value))
@@ -498,12 +570,13 @@ export async function request(
   method = 'get',
   body?: unknown,
   key?: string,
+  timeoutMs = 90000,
 ): Promise<unknown> {
   const current = readSession()
   if (!current?.accessToken || current.mode !== 'api')
     throw new Error('请使用服务器测试账号登录')
   const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 90000)
+  const timeout = setTimeout(() => controller.abort(), timeoutMs)
   try {
     const res = await fetch(
       (import.meta.env.VITE_API_BASE_URL || '/api/v1').replace(/\/$/, '') +
@@ -528,11 +601,28 @@ export async function request(
       }
       const detail = data?.detail
       const errors: Record<string, string> = {
-        not_a_shift_member: '当前账号不是所选班次成员，请选择自己的开放班次，或请主管安排班次。',
-        shift_closed: '该班次已完成交班，请选择开放班次；跨班任务需先完成接班。',
+        not_a_shift_member:
+          '当前账号不是所选班次成员，请选择自己的开放班次，或请主管安排班次。',
+        impression_no_records:
+          '这位老人还没有已确认记录，请先登记日常照护情况。',
+        impression_sources_changed:
+          '历史记录已新增或更正，请重新整理印象后核对。',
+        impression_history_too_large:
+          '当前示范版最多整理240条、16万字记录，未截断或忽略历史，请联系管理员。',
+        impression_record_too_long: '单条记录过长，暂无法完整整理。',
+        impression_historical_review:
+          '这是历史版本或已到复核时间，请先重新整理当前印象。',
+        quality_scope_mismatch:
+          '所选班次必须是该交班单的交出班次，请重新选择。',
+        quality_sources_changed_retry_scan:
+          '检查期间来源资料发生变化，请刷新可选数据并重新检查。',
+        shift_closed:
+          '该班次已完成交班，请选择开放班次；跨班任务需先完成接班。',
         assignee_not_in_shift: '所选负责人不在该班次中，请核对班次成员。',
-        task_assigned_to_another_caregiver: '该任务由其他护理员负责，请由主管核对或转交。',
-        draft_already_confirmed_refresh_record: '该AI草稿已经确认，本次内容未覆盖原记录。请查看正式记录，需修改时使用追加更正。',
+        task_assigned_to_another_caregiver:
+          '该任务由其他护理员负责，请由主管核对或转交。',
+        draft_already_confirmed_refresh_record:
+          '该AI草稿已经确认，本次内容未覆盖原记录。请查看正式记录，需修改时使用追加更正。',
       }
       const message = Array.isArray(detail)
         ? detail
@@ -542,20 +632,30 @@ export async function request(
             )
             .join('；')
         : typeof detail === 'string'
-          ? errors[detail] || detail
+          ? errors[detail] || (typeof data?.safe_message === 'string' ? data.safe_message : detail)
           : JSON.stringify(detail || data)
-      throw new WorkflowRequestError(res.status,
+      throw new WorkflowRequestError(
+        res.status,
         `${res.status === 409 ? '资料或状态已变化，请刷新后核对。' : res.status === 503 ? 'AI暂不可用，可重试或转人工记录。' : ''}${message}`,
       )
     }
-    if (data === null && res.status !== 204) throw new WorkflowRequestError(502, '服务器响应格式异常，写入结果待核实，不能重新创建操作。')
+    if (data === null && res.status !== 204)
+      throw new WorkflowRequestError(
+        502,
+        '服务器响应格式异常，写入结果待核实，不能重新创建操作。',
+      )
     return data
   } finally {
     clearTimeout(timeout)
   }
 }
 export class WorkflowRequestError extends Error {
-  constructor(readonly status: number, message: string) { super(message) }
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message)
+  }
 }
 export async function listAll(path: string): Promise<Row[]> {
   const result: Row[] = []
@@ -622,4 +722,20 @@ export function rowName(row: Row) {
       row.id ||
       '',
   ).slice(0, 90)
+}
+
+export function optionLabel(field: string, row: Row, choices: Row[]): string {
+  const raw = rowName(row)
+  const index = Math.max(
+    0,
+    choices.findIndex((item) => item.id === row.id),
+  )
+  const name = raw && raw !== row.id ? raw : `${label(field)}${index + 1}`
+  if (resourceFor[field] === 'elders') {
+    const sameName = choices.filter((item) => rowName(item) === raw)
+    if (sameName.length < 2) return name
+    if (row.bed_label) return `${name} · ${row.bed_label}`
+    return `${name}（同名${sameName.findIndex((item) => item.id === row.id) + 1}）`
+  }
+  return name + (row.status ? ` · ${display(row.status)}` : '')
 }

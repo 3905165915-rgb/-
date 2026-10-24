@@ -6,6 +6,31 @@ import type { TaskEditor } from './task-editor'
 import { validateTaskEditor } from './task-editor'
 import type { HandoverEditor } from './handover-editor'
 
+/**
+ * Demo identifiers are deliberately short so they can be read during a live
+ * presentation. They are still unique within the current demo snapshot;
+ * browser-only UUIDs remain reserved for local draft locks and idempotency.
+ */
+export function nextDemoIdentifier(state: DemoStateV2, prefix: string) {
+  const values = [
+    ...state.elders.map((row) => row.id),
+    ...state.tasks.map((row) => row.id),
+    ...state.drafts.map((row) => row.id),
+    ...state.handover.map((row) => row.id),
+    ...state.timeline.map((row) => row.id),
+    ...state.familyCases.map((row) => row.id),
+    ...Object.values(state.confirmedDrafts).flatMap((row) => [
+      row.record_id,
+      ...row.task_ids,
+    ]),
+  ]
+  const used = new Set(values)
+  for (let number = 1; ; number += 1) {
+    const candidate = `${prefix}-${String(number).padStart(2, '0')}`
+    if (!used.has(candidate)) return candidate
+  }
+}
+
 function actor() {
   return readSession()?.accountKey ?? 'demo-caregiver'
 }
@@ -21,7 +46,7 @@ function event(
 ) {
   const now = new Date().toISOString()
   state.timeline.push({
-    id: crypto.randomUUID(),
+    id: nextDemoIdentifier(state, 'event'),
     itemId,
     source: 'demo',
     label,
@@ -41,11 +66,11 @@ function addRecord(
 ) {
   const existing = state.confirmedDrafts[id]
   if (existing) return existing
-  const recordId = `demo-record-${crypto.randomUUID()}`
+  const recordId = nextDemoIdentifier(state, 'record')
   const itemId = `item-${id}`
   const taskIds: string[] = []
   if (fields.followUp.trim()) {
-    const taskId = `demo-task-${crypto.randomUUID()}`
+    const taskId = nextDemoIdentifier(state, 'task')
     state.tasks.push({
       id: taskId,
       itemId,
@@ -156,7 +181,7 @@ export async function submitDemoHandover(editor: HandoverEditor) {
         .filter(Boolean)
         .join('\n')
       state.handover.push({
-        id: `handover-${crypto.randomUUID()}`,
+        id: nextDemoIdentifier(state, 'handover'),
         itemId: task.itemId,
         shiftId: editor.shiftId,
         batchId: editor.localId,
@@ -212,7 +237,7 @@ export function createDemoApi() {
       }
       const draft: RecordDraft = {
         ...preset,
-        id: `demo-draft-${crypto.randomUUID()}`,
+        id: nextDemoIdentifier(current, 'draft'),
         status: 'pending_review',
         fields: {
           observation: '午餐进食约一半',

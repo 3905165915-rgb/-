@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { FrontendSession } from '../session'
 import type { Operation, Row } from './model'
-import { actorId, shiftFieldOptions, submissionIssue, writableShifts } from './shift-access'
+import { actorId, qualityScopeOptions, shiftFieldOptions, submissionIssue, updateQualityScope, writableShifts } from './shift-access'
 
 const session: FrontendSession = { mode: 'api', accountKey: 'caregiver-name', role: 'caregiver', userId: 'U1' }
 const shifts: Row[] = [
@@ -49,5 +49,34 @@ describe('shift-aware submission forms', () => {
     expect(shiftFieldOptions(op, catalogs, session).task_id.map(r => r.id)).toEqual(['T1'])
     expect(submissionIssue(op, {task_id:'T2'}, {}, catalogs, session)).toContain('先完成接班')
     expect(submissionIssue(op, {task_id:'T1'}, {}, catalogs, session)).toBe('')
+  })
+})
+
+describe('quality scan evidence scope', () => {
+  const op = { path: '/quality/checks', method: 'post' } as Operation
+  const scoped = { ...catalogs, handovers: [
+    { id: 'HO1', source_shift_id: 'closed', target_shift_id: 'mine' },
+    { id: 'HO2', source_shift_id: 'mine', target_shift_id: 'other' },
+  ] }
+  it('allows inspecting historical closed shifts without allowing work on them', () => {
+    expect(shiftFieldOptions(op, scoped, session).shift_id.map(row => row.id)).toEqual(['mine', 'other', 'closed'])
+    expect(submissionIssue(op, {}, { shift_id: 'closed', handover_id: 'HO1' }, scoped, session)).toBe('')
+    expect(submissionIssue(write, {}, { shift_id: 'closed' }, scoped, session)).toContain('已关闭')
+  })
+  it('selects the source rather than the receiving shift when choosing a handover', () => {
+    expect(updateQualityScope({}, { handover_id: 'HO1' }, scoped)).toEqual({ handover_id: 'HO1', shift_id: 'closed' })
+  })
+  it('clears incompatible handovers when changing shift, preserving the chosen scope', () => {
+    expect(updateQualityScope({ shift_id: 'closed', handover_id: 'HO1' }, { shift_id: 'mine', handover_id: 'HO1' }, scoped))
+      .toEqual({ shift_id: 'mine', handover_id: '' })
+    expect(qualityScopeOptions({ shift_id: 'mine' }, scoped).handover_id.map(row => row.id)).toEqual(['HO2'])
+    expect(qualityScopeOptions({}, scoped).handover_id).toHaveLength(2)
+  })
+  it('blocks stale or unavailable restored evidence scopes before posting', () => {
+    expect(submissionIssue(op, {}, { shift_id: 'mine', handover_id: 'HO1' }, scoped, session)).toContain('交出班次')
+    expect(submissionIssue(op, {}, { handover_id: 'missing' }, scoped, session)).toContain('交班单不可用')
+    expect(submissionIssue(op, {}, { shift_id: 'missing' }, scoped, session)).toContain('统计班次不可用')
+    expect(submissionIssue(op, {}, { handover_id: 'HO1' }, scoped, session)).toBe('')
+    expect(submissionIssue(op, {}, {}, scoped, session)).toBe('')
   })
 })
