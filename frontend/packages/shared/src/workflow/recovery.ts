@@ -77,6 +77,9 @@ export async function withSubmissionLock<T>(key: string, run: () => T | Promise<
 export function supportsReplay(path: string, method: string) {
   if (method === 'patch') return /^\/(elders|beds)\/[^/]+$/.test(path)
   if (method !== 'post') return false
+  // Confirmation replays compare the original content fingerprint on the
+  // server. It is safe even though this endpoint does not cache arbitrary keys.
+  if (/^\/records\/[^/]+\/confirm$/.test(path.split('?')[0])) return true
   return /^(?:\/records\/manual|\/records\/[^/]+\/corrections|\/shifts|\/elders(?:\/[^/]+\/admissions)?|\/beds|\/admissions\/[^/]+\/actions|\/memories(?:\/from-draft|\/[^/]+\/(?:revisions|review))?|\/change-reviews\/(?:scan|[^/]+\/(?:assign|submit|review))|\/tasks\/[^/]+\/(?:transition|complete|memory-references(?:\/[^/]+\/withdraw)?|condition\/(?:configure|claim|check))|\/assessments(?:\/[^/]+\/review)?|\/care-plans(?:\/[^/]+\/(?:review|generate|reissue))?|\/family\/(?:bindings(?:\/[^/]+\/revoke)?|summaries(?:\/[^/]+\/review)?|me\/feedback|feedback\/[^/]+\/reply)|\/incidents(?:\/[^/]+\/(?:triage|reopen))?|\/rectifications\/[^/]+\/(?:assign|submit|review))$/.test(path.split('?')[0])
 }
 

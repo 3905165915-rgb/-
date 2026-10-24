@@ -12,6 +12,7 @@ const object = computed(() =>
     : null,
 )
 const omit = new Set([
+  'id',
   'password',
   'password_hash',
   'access_token',
@@ -36,11 +37,22 @@ const omit = new Set([
       type="button"
       @click="emit('select', object)"
     >
-      选择此项办理后续 · {{ object.id || object.occurrence_key }}
+      {{
+        object.status === 'draft' && Array.isArray(object.items)
+          ? Number(object.revision || 0) < 1
+            ? '刷新交班事项'
+            : '填写注意事项并提交交班'
+          : '选择此项办理后续'
+      }}
     </button>
     <template v-for="(item, key) in object" :key="key">
       <details
-        v-if="!omit.has(String(key)) && item && typeof item === 'object'"
+      v-if="
+        !omit.has(String(key)) &&
+        item &&
+        typeof item === 'object' &&
+        (!Array.isArray(item) || item.length > 0)
+      "
         :open="
           depth < 2 ||
           [

@@ -203,7 +203,7 @@ const primitiveOptions = computed(
         disabled
       >原选项不可用于本次操作，请重新选择</option>
       <option v-for="row in options" :key="String(row.id)" :value="row.id">
-        {{ optionLabel(field, row, options) }}
+        {{ optionLabel(field, row, options, catalogs) }}
       </option>
     </select>
     <select

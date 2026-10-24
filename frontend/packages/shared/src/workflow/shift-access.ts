@@ -61,6 +61,12 @@ export function shiftFieldOptions(op: Operation, catalogs: Record<string, Row[]>
     // The next shift may belong to a different caregiver.
     target_shift_id: shifts.filter(row => row.status === 'open'),
   }
+  if (session?.role === 'caregiver') {
+    const id = actorId(session)
+    result.assigned_to = id
+      ? (catalogs.staff || []).filter(row => row.id === id)
+      : []
+  }
   if (/^\/tasks\/\{task_id\}\/(transition|complete)$/.test(op.path)) {
     result.task_id = (catalogs.tasks || []).filter(row =>
       !['completed', 'cancelled'].includes(String(row.status)) && canExecute(row, catalogs, session))
@@ -92,5 +98,7 @@ export function submissionIssue(op: Operation, params: Row, payload: unknown, ca
     if (task && !canExecute(task, catalogs, session))
       return '该任务不属于你当前可办理的班次或负责人范围。请由主管核对分工，跨班任务须先完成接班。'
   }
+  if (op.path === '/tasks/{task_id}' && op.method === 'patch' && session?.role === 'caregiver')
+    return '安排其他护理员、修改责任人或截止时间需要主管或管理员处理。'
   return ''
 }

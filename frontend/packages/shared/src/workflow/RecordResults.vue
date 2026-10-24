@@ -13,12 +13,15 @@ const rows = computed(() => {
   return typeof obj.id === 'string' && /^(AI|REC)-/.test(obj.id) ? [obj] : null
 })
 const linkedTasks = computed(() => ((props.value as Row)?.tasks || []) as Row[])
+const savedRecord = computed(() => !!(props.value && typeof props.value === 'object' && !Array.isArray(props.value) && (props.value as Row).record))
 const isDraft = (row: Row) => String(row.id).startsWith('AI-')
 const elderName = (row: Row) =>
   String(
     props.catalogs.elders?.find((elder) => elder.id === row.elder_id)?.name ||
       '老人信息待核对',
   )
+const ownerName = (row: Row) => String(props.catalogs.staff?.find(staff => staff.id === row.assigned_to)?.display_name || '负责人待核对')
+const readableTask = (row: Row) => ({ ...Object.fromEntries(Object.entries(row).filter(([key]) => key !== 'assigned_to')), responsible_name: ownerName(row) })
 const observations = (row: Row) =>
   Array.isArray(row.observations) ? (row.observations as string[]) : []
 const content = (row: Row) =>
@@ -42,6 +45,9 @@ const evidenceFields = (row: Row) =>
 <template>
   <div v-if="rows" class="wf-record-cards">
     <p v-if="!rows.length" class="wf-muted">暂无记录</p>
+    <p v-if="savedRecord" class="wf-notice" role="status">
+      这条正式记录也已纳入该老人的印象资料。下次整理印象时，会结合历史记录一起分析；待办安排不等于服务已经发生，也不会直接改成长期偏好。
+    </p>
     <article v-for="row in rows" :key="String(row.id)" class="wf-record-card">
       <header class="wf-record-card-header">
         <strong>{{ elderName(row) }}</strong>
@@ -80,7 +86,7 @@ const evidenceFields = (row: Row) =>
         <p class="wf-muted">
           人工核对责任人、时限和执行前提后，才随正式记录生成待办。
         </p>
-        <WorkflowResult :value="row.task_candidates" />
+        <WorkflowResult :value="(row.task_candidates as Row[]).map(readableTask)" />
       </details>
       <details class="wf-result-details wf-record-metadata">
         <summary>记录详情与追溯信息</summary>
@@ -106,9 +112,15 @@ const evidenceFields = (row: Row) =>
         />
       </details>
     </article>
-    <details v-if="linkedTasks.length" class="wf-result-details">
-      <summary>本次关联待办（{{ linkedTasks.length }}）</summary>
-      <WorkflowResult :value="linkedTasks" />
+    <details v-if="linkedTasks.length" class="wf-result-details" open>
+      <summary>已随记录创建任务（{{ linkedTasks.length }}项）</summary>
+      <p class="wf-success">任务已正式生成，可在“任务”中先选老人再查看、执行和交班接续，无需重复创建。</p>
+      <article v-for="task in linkedTasks" :key="String(task.id)" class="wf-record-card">
+        <strong>{{ task.title }}</strong>
+        <p class="wf-muted">{{ elderName(task) }} · {{ ownerName(task) }} · {{ display(task.status) }}</p>
+        <p>截止时间：{{ display(task.due_at, 'due_at') }}</p>
+        <p v-if="task.condition" class="wf-notice">执行前提：{{ task.condition }}。执行前仍需核验。</p>
+      </article>
     </details>
   </div>
   <WorkflowResult v-else :value="value" @select="emit('select', $event)" />

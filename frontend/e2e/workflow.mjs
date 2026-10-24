@@ -77,7 +77,7 @@ async function menuButton(page, name) {
 async function navigateMenu(page, name) { await (await menuButton(page, name)).click() }
 async function submit(page) {
   await page.getByRole('button', { name: '核对并继续', exact: true }).click()
-  await page.getByRole('button', { name: '确认提交', exact: true }).click()
+  await page.getByRole('button', { name: /^(确认提交|仅保存记录|保存记录并创建\d+项任务)$/ }).click()
 }
 async function test(name, fn, role = 'caregiver') {
   const env = await setup(role)
@@ -100,7 +100,7 @@ try {
     await field(page, 'due_at').fill('2026-10-24T14:00')
     await field(page, 'completion_criteria').fill('虚构：回访并记录本人反馈')
     await submit(page)
-    await page.getByText('已保存，服务器已确认成功。', { exact: true }).waitFor()
+    await page.getByText(/^(已保存，服务器已确认成功。|记录已保存，本次未创建任务。)$/).waitFor()
     assert.equal(writes.length, 1)
     assert.equal(writes[0].path, '/records/manual')
     assert.equal(writes[0].body.elder_id, elder.id)
@@ -123,7 +123,7 @@ try {
     assert.equal(await field(page, 'raw_text').isDisabled(), true)
     await page.getByRole('button', { name: '使用原请求核实结果', exact: true }).click()
     await page.getByRole('button', { name: '使用原请求核实结果', exact: true }).click()
-    await page.getByText('已保存，服务器已确认成功。', { exact: true }).waitFor()
+    await page.getByText(/^(已保存，服务器已确认成功。|记录已保存，本次未创建任务。)$/).waitFor()
     assert.equal(writes.length, 2)
     assert.equal(writes[0].key, writes[1].key)
     assert.deepEqual(writes[0].body, writes[1].body)
@@ -195,7 +195,7 @@ try {
     assert.equal(writes.length, 1)
     assert.equal(await page.locator('[data-field="draft_id"] select').inputValue(), draft.id)
     await submit(page)
-    await page.getByText('已保存，服务器已确认成功。', { exact: true }).waitFor()
+    await page.getByText(/^(已保存，服务器已确认成功。|记录已保存，本次未创建任务。)$/).waitFor()
     assert.deepEqual(writes.map(row => row.path), ['/records/context-extract', '/records/AI-test/confirm'])
   })
   await test('记录详情与历史同处一页，更正通过当前记录上下文进入', async ({ page, requests }) => {
@@ -222,7 +222,7 @@ try {
     await page.getByRole('button', { name: '核对并保存记录', exact: true }).click()
     assert.equal(await page.locator('[data-field="draft_id"] select').inputValue(), draft.id)
     await submit(page)
-    await page.getByText('已保存，服务器已确认成功。', { exact: true }).waitFor()
+    await page.getByText(/^(已保存，服务器已确认成功。|记录已保存，本次未创建任务。)$/).waitFor()
     assert.deepEqual(writes.map(row => row.path), ['/records/AI-test/confirm'])
   })
   await test('旧原文提取的未知请求仍可恢复，不能通过合并入口重复保存', async ({ page, context }) => {

@@ -56,7 +56,7 @@ describe('formal workflow recovery', () => {
     expect(() => new WorkflowRecovery('test', unavailable, 'a').save(form())).toThrow('quota')
   })
   it('only permits mutation replay supported by the inspected backend routes', () => {
-    for (const path of ['/records/manual', '/tasks/T/complete', '/admissions/A/actions', '/assessments/A/review', '/care-plans/P/generate', '/family/me/feedback'])
+    for (const path of ['/records/manual', '/records/AI-test/confirm', '/tasks/T/complete', '/admissions/A/actions', '/assessments/A/review', '/care-plans/P/generate', '/family/me/feedback'])
       expect(supportsReplay(path, 'post'), path).toBe(true)
     for (const path of ['/records/extract', '/records/context-extract', '/handovers', '/handovers/H/submit', '/staff', '/care-plans/P/confirm', '/admissions/A/events'])
       expect(supportsReplay(path, 'post'), path).toBe(false)

@@ -489,3 +489,8 @@
 .wf-care-hints article + article { border-top: 1px solid #dbe5e0; padding-top: 8px; }
 .wf-care-hints h4 { margin: 0; }
 .wf-evidence-picker select { max-width: 100%; width: 100%; }
+.wf-task-review { min-width: 0; max-width: 100%; margin: 16px 0; }
+.wf-task-review h4 { margin: 0; }
+.wf-task-review-card { min-width: 0; margin: 12px 0; padding: 14px; border: 1px solid var(--wf-border); border-radius: 12px; background: var(--wf-surface); overflow-wrap: anywhere; }
+.wf-task-toggle { display: flex; align-items: start; gap: 10px; line-height: 1.7; }
+.wf-task-toggle input { flex: 0 0 22px; width: 22px; height: 22px; accent-color: var(--wf-brand); }

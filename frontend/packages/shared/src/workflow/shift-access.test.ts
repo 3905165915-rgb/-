@@ -44,6 +44,14 @@ describe('shift-aware submission forms', () => {
     expect(submissionIssue(write, {}, {}, catalogs, session)).toBe('')
     expect(submissionIssue(read, {}, {shift_id:'other'}, catalogs, session)).toBe('')
   })
+  it('only lets a caregiver assign a newly created task to themselves', () => {
+    const createTask = { path: '/records/manual', method: 'post' } as Operation
+    const options = shiftFieldOptions(createTask, { ...catalogs, staff: [
+      { id: 'U1', display_name: '护理员甲' },
+      { id: 'U2', display_name: '护理员乙' },
+    ] }, session)
+    expect(options.assigned_to.map(row => row.id)).toEqual(['U1'])
+  })
   it('filters task actions by shift membership and ownership', () => {
     const op = {...write, path:'/tasks/{task_id}/complete'}
     expect(shiftFieldOptions(op, catalogs, session).task_id.map(r => r.id)).toEqual(['T1'])

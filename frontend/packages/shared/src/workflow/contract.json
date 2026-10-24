@@ -3259,6 +3259,10 @@
     },
     "RecordConfirmRequest": {
       "properties": {
+        "expected_revision": {
+          "anyOf": [{ "type": "integer", "minimum": 1 }, { "type": "null" }],
+          "default": null
+        },
         "observations": {
           "anyOf": [
             {
@@ -4756,7 +4760,7 @@
       "title": "安排责任人和期限",
       "path": "/tasks/{task_id}",
       "method": "patch",
-      "roles": ["admin", "supervisor", "caregiver"],
+      "roles": ["admin", "supervisor"],
       "parameters": [
         {
           "name": "task_id",

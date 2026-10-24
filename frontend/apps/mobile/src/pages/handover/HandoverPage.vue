@@ -67,7 +67,7 @@ onBeforeRouteUpdate(() => (mode === 'api' ? true : leave()))
   <WorkflowPanel
     v-if="serverWorkflow"
     group="handovers"
-    title="交接班与AI摘要"
+    title="交接班"
     :context="{}"
     initial-action="/handovers"
   />

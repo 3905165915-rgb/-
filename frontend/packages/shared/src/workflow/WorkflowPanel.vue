@@ -30,6 +30,8 @@ import WorkflowField from './WorkflowField.vue'
 import WorkflowResult from './WorkflowResult.vue'
 import WorkflowMenu from './WorkflowMenu.vue'
 import RecordResults from './RecordResults.vue'
+import RecordTaskReview from './RecordTaskReview.vue'
+import { recordTaskOwners, reviewedRecordTasks, selectedRecordTasks, recordSavedMessage } from './record-tasks'
 import ServiceCareHints from './ServiceCareHints.vue'
 import { submissionFeedback } from './submission-feedback'
 import {
@@ -117,13 +119,41 @@ const draftDetail = computed(
 const params = ref<Row>({})
 const body = ref<Row>({})
 const catalogs = ref<Record<string, Row[]>>({})
-const fieldOptions = computed(() =>
-  active.value
-    ? isQualityScan(active.value)
-      ? qualityScopeOptions(body.value, catalogs.value)
-      : shiftFieldOptions(active.value, catalogs.value, readSession())
-    : {},
+const taskSelectionEnabled = computed(
+  () => props.group === 'tasks' && !!active.value?.parameters.some((parameter) => parameter.name === 'task_id'),
 )
+const selectedTaskElder = computed(() => {
+  const selectedTask = (catalogs.value.tasks || []).find((row) => row.id === params.value.task_id)
+  return String(selected.value.elder_id || selectedTask?.elder_id || '')
+})
+const fieldOptions = computed(() => {
+  if (!active.value) return {}
+  const options = isQualityScan(active.value)
+    ? qualityScopeOptions(body.value, catalogs.value)
+    : shiftFieldOptions(active.value, catalogs.value, readSession())
+  if (taskSelectionEnabled.value) {
+    const permitted = new Set((options.task_id || (catalogs.value.tasks || [])).map((row) => row.id))
+    options.task_id = (catalogs.value.tasks || []).filter(
+      (row) => permitted.has(row.id) && !!selectedTaskElder.value && row.elder_id === selectedTaskElder.value,
+    )
+  }
+  if (active.value.path === '/tasks/{task_id}' && active.value.method === 'patch') {
+    const task = catalogs.value.tasks?.find((row) => row.id === params.value.task_id)
+    const shift = catalogs.value.shifts?.find((row) => row.id === task?.shift_id)
+    if (Array.isArray(shift?.caregiver_ids)) {
+      const members = new Set(shift.caregiver_ids)
+      options.assigned_to = (options.assigned_to || catalogs.value.staff || []).filter((staff) => members.has(staff.id))
+    }
+  }
+  if (props.taskCreation && body.value.shift_id) {
+    const shift = catalogs.value.shifts?.find((row) => row.id === body.value.shift_id)
+    if (Array.isArray(shift?.caregiver_ids)) {
+      const members = new Set(shift.caregiver_ids)
+      options.assigned_to = (options.assigned_to || catalogs.value.staff || []).filter((staff) => members.has(staff.id))
+    }
+  }
+  return options
+})
 const noWritableShift = computed(
   () =>
     role === 'caregiver' &&
@@ -256,6 +286,22 @@ const bodySchema = computed(() => {
   const refName = active.value.schema.$ref?.split('/').pop()
   return refName ? schemas[refName] : active.value.schema
 })
+const recordTaskReview = computed(() => !props.taskCreation && ['/records/{draft_id}/confirm', '/records/manual'].includes(active.value?.path || ''))
+const reviewDraft = computed(() => reviewSource.value || (catalogs.value.drafts || []).find(row => row.id === params.value.draft_id))
+const reviewElderId = computed(() => active.value?.path === '/records/manual' ? body.value.elder_id : reviewDraft.value?.elder_id)
+const reviewShiftId = computed(() => active.value?.path === '/records/manual' ? body.value.shift_id : reviewDraft.value?.shift_id)
+const reviewElderName = computed(() => String((catalogs.value.elders || []).find(row => row.id === reviewElderId.value)?.name || ''))
+const reviewOwners = computed(() => recordTaskOwners(catalogs.value, readSession(), reviewShiftId.value))
+const recordTaskCount = computed(() => selectedRecordTasks(body.value.task_candidates).length)
+const visibleBodySchema = computed(() => {
+  if (!recordTaskReview.value || !bodySchema.value) return bodySchema.value
+  const schema = structuredClone(bodySchema.value)
+  delete schema.properties?.task_candidates
+  return schema
+})
+function setRecordTasks(value: Row[]) {
+  setBody({ ...body.value, task_candidates: value })
+}
 const paths: Record<string, string> = {
   elders: '/elders',
   beds: '/beds',
@@ -280,6 +326,7 @@ const paths: Record<string, string> = {
 }
 const paginated = new Set([
   'staff',
+  'tasks',
   'records',
   'drafts',
   'shifts',
@@ -653,22 +700,48 @@ function setParam(field: string, value: unknown) {
   if (frozen.value || busy.value) return
   params.value[field] = value
   selected.value[field] = value
+  if (field === 'task_id') {
+    const task = catalogs.value.tasks?.find((row) => row.id === value)
+    if (task) selected.value.elder_id = task.elder_id
+  }
   if (field === 'record_id') {
     recordHistory.value = null
     historyError.value = ''
   }
-  if (field === 'draft_id') reviewSource.value = null
+  if (field === 'draft_id') {
+    reviewSource.value = null
+    if (active.value?.path === '/records/{draft_id}/confirm') {
+      const draft = pick('draft_id', value)
+      body.value.observations = JSON.parse(JSON.stringify(draft?.observations || []))
+      body.value.task_candidates = JSON.parse(JSON.stringify(draft?.task_candidates || []))
+    }
+  }
+  confirm.value = false
   for (const name of Object.keys(body.value))
     if (/^expected_.*(?:revision|fingerprint)$/.test(name))
       body.value[name] = ''
   syncVersions()
 }
+function chooseTaskElder(elderId: string) {
+  if (busy.value || frozen.value) return
+  selected.value = { ...selected.value, elder_id: elderId, task_id: '' }
+  params.value.task_id = ''
+  message.value = ''
+}
 function setBody(value: unknown) {
   if (frozen.value || busy.value) return
+  const previousElder = body.value.elder_id
+  const previousTasks = body.value.task_candidates
   body.value =
     active.value && isQualityScan(active.value)
       ? updateQualityScope(body.value, value as Row, catalogs.value)
       : (value as Row)
+  // Generic form edits must not drop the separately reviewed task cards.
+  if (recordTaskReview.value && !Object.hasOwn(body.value, 'task_candidates'))
+    body.value.task_candidates = previousTasks || []
+  if (active.value?.path === '/records/manual' && previousElder && previousElder !== body.value.elder_id)
+    body.value.task_candidates = []
+  confirm.value = false
   syncVersions()
 }
 async function run() {
@@ -694,10 +767,15 @@ async function run() {
       signature = pending.value.signature
     } else {
       path = materialize(op, params.value)
+      const recordBody = recordTaskReview.value
+        ? { ...body.value, task_candidates: reviewedRecordTasks(body.value.task_candidates || [], reviewOwners.value) }
+        : body.value
+      if (recordTaskReview.value && !reviewElderName.value)
+        throw new Error('请先选择或成功载入本条记录对应的老人，再核对任务。')
       payload = bodySchema.value
         ? props.taskCreation
           ? taskCreationPayload(bodySchema.value, body.value)
-          : requestBody(op.path, bodySchema.value, body.value)
+          : requestBody(op.path, bodySchema.value, recordBody)
         : undefined
       signature = JSON.stringify([
         readSession()?.accountKey,
@@ -806,7 +884,7 @@ async function run() {
       }
     }
     confirm.value = false
-    message.value = submissionFeedback(op.path, op.method).success
+    message.value = recordSavedMessage(data) || submissionFeedback(op.path, op.method).success
     if (op.method !== 'get') {
       // The write has already been acknowledged and persisted locally. Directory
       // refresh must never keep the save button stuck in its submitting state.
@@ -939,8 +1017,30 @@ function switchRecordMode(mode: 'manual' | 'assisted') {
 }
 async function selectResult(row: Row) {
   remember(row)
-  if (props.group !== 'records' || phase.value === 'pending' || busy.value)
+  if (phase.value === 'pending' || busy.value)
     return
+  if (props.group === 'handovers' && row.status === 'draft') {
+    const nextPath = Number(row.revision || 0) < 1
+      ? '/handovers/{handover_id}/refresh'
+      : '/handovers/{handover_id}/submit'
+    const op = allowed.value.find((item) => item.path === nextPath)
+    if (!op) return
+    choose(op, false)
+    if (active.value?.id !== op.id) return
+    params.value.handover_id = row.id
+    selected.value.handover_id = row.id
+    if (nextPath.endsWith('/submit')) {
+      if (Number.isInteger(row.revision)) body.value.expected_revision = row.revision
+      body.value.summary = ''
+    }
+    syncVersions()
+    persistForm()
+    message.value = nextPath.endsWith('/refresh')
+      ? '先刷新交班事项，核对来源记录和未完成任务；刷新后可填写交班注意事项。'
+      : '已打开交班注意事项填写表单。交班事项由来源记录和未完成任务自动带入，请逐项核对。'
+    return
+  }
+  if (props.group !== 'records') return
   const id = String(row.id || '')
   const path = id.startsWith('REC-')
     ? '/records/{record_id}'
@@ -980,6 +1080,10 @@ function freshForm() {
   recordHistory.value = null
   historyError.value = ''
   reset()
+  if (props.taskCreation) {
+    selected.value = { ...props.context }
+    params.value = {}
+  }
   restoring = false
   persistForm()
 }
@@ -1058,6 +1162,7 @@ function useDraft() {
   body.value.task_candidates = JSON.parse(
     JSON.stringify(data.task_candidates || []),
   )
+  body.value.expected_revision = data.revision || 1
 }
 function useAISummary() {
   if (busy.value) return
@@ -1517,7 +1622,25 @@ onMounted(async () => {
               选择交班单后自动采用其交出班次；更换班次会清除不匹配的交班单。历史已关闭班次也可检查。
             </p>
             <p v-if="taskCreation" class="wf-notice">
-              将创建一条人工来源记录和一个待办。请手工确定负责人、截止时间及完成标准；完成标准随来源记录保存，不会修改老人偏好。
+              先选择老人，再填写任务。护理员只能安排给本人；需要分配给其他员工或调整既有任务，请由主管或管理员办理。
+            </p>
+            <p
+              v-if="group === 'handovers' && active.path === '/handovers' && active.method === 'post'"
+              class="wf-notice"
+            >
+              创建后，系统会带入交出班次的记录和未完成任务。需要补充交班注意事项时，打开“人工审核并提交交班”，在补充说明中填写并核对后提交。
+            </p>
+            <p
+              v-if="group === 'handovers' && active.path.endsWith('/submit')"
+              class="wf-muted"
+            >
+              下方“交班注意事项”用于补充需要接班人员关注的内容；提交前请核对系统带入的未完成事项和记录。
+            </p>
+            <p
+              v-if="group === 'tasks' && taskSelectionEnabled"
+              class="wf-muted"
+            >
+              先选择老人，再选择该老人的任务。护理员只会看到本人当前可办理的任务。
             </p>
             <p
               v-if="noWritableShift && active.method !== 'get'"
@@ -1535,6 +1658,18 @@ onMounted(async () => {
               :disabled="busy || frozen || recording || transcribing"
               class="wf-inputs"
             >
+              <label v-if="taskSelectionEnabled" class="wf-field">
+                <span>先选择老人<b> *</b></span>
+                <select
+                  :value="selectedTaskElder"
+                  @change="chooseTaskElder(($event.target as HTMLSelectElement).value)"
+                >
+                  <option value="">请选择老人</option>
+                  <option v-for="elder in catalogs.elders || []" :key="String(elder.id)" :value="String(elder.id)">
+                    {{ elder.name || elder.display_name || '老人' }}{{ elder.bed_label ? ' · ' + elder.bed_label : '' }}
+                  </option>
+                </select>
+              </label>
               <WorkflowField
                 v-for="param in active.parameters"
                 :key="param.name"
@@ -1547,13 +1682,20 @@ onMounted(async () => {
                 @update:model-value="setParam(param.name, $event)"
               />
               <WorkflowField
-                v-if="bodySchema"
-                :schema="bodySchema"
+                v-if="visibleBodySchema"
+                :schema="visibleBodySchema"
                 field="填写办理内容"
                 :model-value="body"
                 :catalogs="catalogs"
                 :option-overrides="fieldOptions"
                 @update:model-value="setBody"
+              />
+              <RecordTaskReview
+                v-if="recordTaskReview"
+                :model-value="body.task_candidates || []"
+                :elder-name="reviewElderName"
+                :owners="reviewOwners"
+                @update:model-value="setRecordTasks"
               />
             </fieldset>
             <ServiceCareHints v-if="recordComposer && active.path === '/records/context-extract'" :elder-id="String(body.elder_id || '')" :scene="String(body.scene || '')" />
@@ -1619,7 +1761,9 @@ onMounted(async () => {
                       : phase === 'succeeded'
                         ? '本次操作已完成'
                         : confirm
-                          ? '确认提交'
+                          ? recordTaskReview
+                            ? recordTaskCount ? `保存记录并创建${recordTaskCount}项任务` : '仅保存记录'
+                            : '确认提交'
                           : active.method === 'get'
                             ? '读取当前数据'
                             : '核对并继续'

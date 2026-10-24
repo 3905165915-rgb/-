@@ -23,6 +23,8 @@ export function operationTitle(op: Operation): string {
     '/records/{record_id}/corrections': '更正记录',
     '/speech/status': '语音服务设置',
     '/handovers/{handover_id}/ai-summary': '生成交班摘要',
+    '/handovers': op.method === 'post' ? '新建交班草稿' : '交班单列表',
+    '/handovers/{handover_id}/submit': '填写注意事项并提交交班',
     '/quality/checks': op.method === 'post' ? '执行质量检查' : '检查报告',
     '/memories/from-draft': '从整理结果选择记忆候选',
   }
@@ -66,9 +68,8 @@ function areaFor(op: Operation): [string, string, string] {
     '',
   ]
   if (op.group === 'tasks') {
-    if (/memory-references|plan-check/.test(path))
-      return named('basis', '个性化依据')
-    if (path.includes('/condition')) return named('conditions', '执行前提核验')
+    if (/memory-references|plan-check|condition/.test(path))
+      return named('more', '更多核验')
     if (/transition|complete/.test(path)) return named('execution', '任务执行')
     return named('tasks', '任务')
   }

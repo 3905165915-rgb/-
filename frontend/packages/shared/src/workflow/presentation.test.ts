@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { display, label, optionLabel } from './model'
+import { display, label, optionLabel, operations } from './model'
 
 describe('Chinese business presentation', () => {
   it('translates every operational report heading from the deployed response', () => {
@@ -7,8 +7,12 @@ describe('Chinese business presentation', () => {
       'generated_plan_occurrences','completion','on_time_completion','numerator','denominator',
       'ratio','cancelled','not_done','open_overdue','excluded_future_task_rows',
       'invalid_schedule_rows','definition','manual_task_rows_created','handover_receipt',
-      'incidents','reported','closed','open_rectifications_overdue','family_feedback','created']
+      'incidents','reported','closed','open_rectifications_overdue','family_feedback','created',
+      'clarifications','memory_references','condition_verification','condition_check','plan_check',
+      'source_plan_snapshot','source_plan_id','source_plan_revision','handover_id','source_shift_id',
+      'target_shift_id','task_count','record']
     for (const field of fields) expect(label(field)).not.toBe(field)
+    expect(label('summary')).toBe('交班注意事项')
   })
   it('shows Beijing time without rewriting quoted source text or request timestamps', () => {
     const iso = '2026-10-23T17:04:39.995534+00:00'
@@ -39,5 +43,21 @@ describe('Chinese business presentation', () => {
     const noBeds = rows.map(({id,name}) => ({id,name}))
     expect(optionLabel('elder_id', noBeds[0], noBeds)).toBe('张阿姨（同名1）')
     expect(optionLabel('elder_id', noBeds[1], noBeds)).toBe('张阿姨（同名2）')
+  })
+  it('shows task options by elder and readable task details without IDs', () => {
+    const tasks = [
+      { id: 'TASK-long-id-one', title: '午后陪同散步', elder_id: 'E1', status: 'pending' },
+      { id: 'TASK-long-id-two', title: '晚间测量体温', elder_id: 'E2', status: 'in_progress' },
+    ]
+    const elders = [
+      { id: 'E1', name: '张阿姨', bed_label: '305床' },
+      { id: 'E2', name: '李爷爷', bed_label: '306床' },
+    ]
+    expect(optionLabel('task_id', tasks[0], tasks, { elders })).toBe('张阿姨 · 305床 · 午后陪同散步 · 待处理')
+    expect(optionLabel('task_id', tasks[1], tasks, { elders })).not.toContain(tasks[1].id)
+  })
+  it('limits task assignment changes to managers, matching the backend', () => {
+    const update = operations.find((op) => op.path === '/tasks/{task_id}' && op.method === 'patch')
+    expect(update?.roles).toEqual(['admin', 'supervisor'])
   })
 })

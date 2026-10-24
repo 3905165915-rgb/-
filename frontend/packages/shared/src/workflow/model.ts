@@ -77,6 +77,9 @@ export const labels: Record<string, string> = {
   text: '本次记录内容',
   observations: '已核对观察',
   task_candidates: '待办候选（确认后才生成）',
+  review_notes: '任务安排核对提示',
+  object_review_required: '需要核对任务所属老人',
+  responsible_name: '负责人',
   title: '事项标题',
   assigned_to: '责任人',
   due_at: '截止时间',
@@ -104,7 +107,7 @@ export const labels: Record<string, string> = {
   field: '引用字段',
   snapshot_text: '当时原文快照',
   source_revision: '来源版本',
-  summary: '人工核对交班摘要',
+  summary: '交班注意事项',
   approve_ai_summary: '已逐项审核并采用AI摘要',
   ai_summary: 'AI摘要草稿',
   handover_id: '交班单',
@@ -223,6 +226,13 @@ export const labels: Record<string, string> = {
   sources: '证据来源',
   historical_snapshot: '扫描时的历史快照',
   uncovered_task_ids: 'AI摘要未引用的待办',
+  clarifications: '交接澄清记录',
+  memory_references: '已采用的个性化照护依据',
+  condition_verification: '执行前提核验记录',
+  condition_check: '执行前提当前状态',
+  plan_check: '照护计划依据核验',
+  source_plan_snapshot: '交班时的计划依据',
+  record: '照护记录',
   confirmed_by: '确认人',
   confirmed_at: '确认时间',
   source_fingerprint: '扫描时资料校验值',
@@ -317,6 +327,8 @@ export const valueLabels: Record<string, string> = {
   received: '已接收',
   clarifying: '待澄清',
   closed: '已关闭',
+  record: '照护记录',
+  task: '照护任务',
   start: '开始执行',
   transfer: '转交／换床',
   cancel: '取消',
@@ -601,8 +613,14 @@ export async function request(
       }
       const detail = data?.detail
       const errors: Record<string, string> = {
+        'Insufficient permissions':
+          '此操作仅限主管或管理员办理。护理员可查看并处理本人负责的任务。',
+        insufficient_permissions:
+          '此操作仅限主管或管理员办理。护理员可查看并处理本人负责的任务。',
         not_a_shift_member:
           '当前账号不是所选班次成员，请选择自己的开放班次，或请主管安排班次。',
+        management_required_to_assign_others:
+          '护理员只能为本人创建任务；安排其他责任人或调整期限请由主管或管理员处理。',
         impression_no_records:
           '这位老人还没有已确认记录，请先登记日常照护情况。',
         impression_sources_changed:
@@ -724,7 +742,12 @@ export function rowName(row: Row) {
   ).slice(0, 90)
 }
 
-export function optionLabel(field: string, row: Row, choices: Row[]): string {
+export function optionLabel(
+  field: string,
+  row: Row,
+  choices: Row[],
+  catalogs: Record<string, Row[]> = {},
+): string {
   const raw = rowName(row)
   const index = Math.max(
     0,
@@ -736,6 +759,13 @@ export function optionLabel(field: string, row: Row, choices: Row[]): string {
     if (sameName.length < 2) return name
     if (row.bed_label) return `${name} · ${row.bed_label}`
     return `${name}（同名${sameName.findIndex((item) => item.id === row.id) + 1}）`
+  }
+  if (resourceFor[field] === 'tasks') {
+    const elder = catalogs.elders?.find((item) => item.id === row.elder_id)
+    const elderName = elder ? rowName(elder) : ''
+    const bed = elder?.bed_label ? ` · ${elder.bed_label}` : ''
+    const taskName = row.title && row.title !== row.id ? String(row.title) : `任务${index + 1}`
+    return `${elderName ? `${elderName}${bed} · ` : ''}${taskName}${row.status ? ` · ${display(row.status)}` : ''}`
   }
   return name + (row.status ? ` · ${display(row.status)}` : '')
 }
