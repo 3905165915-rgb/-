@@ -7,6 +7,8 @@ from app.services import impression_service as service
 from app.services.ai_service import AIProviderError
 from app.storage.json_store import JsonStore, EMPTY_STORE
 from scripts.seed_impression_demo import append_demo
+from app.services import assistant_service, store_service
+from app.services.ai_service import DeepSeekAIProvider
 
 PATH = '/api/v1/elders/E1/impressions'
 
@@ -96,6 +98,79 @@ def test_new_records_and_old_history_are_visible(api, provider):
     records(api, 1)
     old = client.get(PATH + '/' + report['id'], headers=headers()).json()
     assert not old['source_current'] and old['new_record_count'] == 1
+
+
+@pytest.mark.parametrize('contextual', [False, True])
+def test_record_with_generated_tasks_remains_an_impression_source(api, provider, monkeypatch, contextual):
+    client, store, headers = api
+    records(api, 3)
+    previous = client.post(PATH + '/generate', headers=headers()).json()
+    observation = '张阿姨说午后听吕剧更容易放松。'
+    arrangement = '明天15:00由我负责联系家属。'
+    text = observation + arrangement
+    extractor = DeepSeekAIProvider('isolated-test-placeholder', 'https://example.invalid', 'test', 1)
+    output = {
+        'observations': [observation],
+        'task_candidates': [{'title': '联系家属', 'evidence_text': arrangement, 'due_text': '明天15:00'}],
+        'evidence': [{'text': observation, 'type': 'current_observation'}], 'warnings': [],
+        **({'memory_candidates': [], 'context_notes': []} if contextual else {}),
+    }
+    monkeypatch.setattr(extractor, '_request', lambda *args: copy.deepcopy(output))
+    monkeypatch.setattr(assistant_service if contextual else store_service, 'get_ai_provider', lambda: extractor)
+    extracted = client.post('/api/v1/records/' + ('context-extract' if contextual else 'extract'), headers=headers(), json={
+        'elder_id': 'E1', 'text': text, **({'scene': 'activity'} if contextual else {})})
+    assert extracted.status_code == 200, extracted.text
+    draft = extracted.json()
+    # A pending AI draft is not a confirmed source and creates no new profile.
+    before = client.get(PATH, headers=headers()).json()['latest']
+    assert before['source_current'] and before['new_record_count'] == 0
+    assert not store.read()['care_tasks']
+    body = {'expected_revision': draft['revision'], 'observations': draft['observations'], 'task_candidates': draft['task_candidates']}
+    url = f'/api/v1/records/{draft["id"]}/confirm'
+    saved = client.post(url, headers=headers(), json=body)
+    assert saved.status_code == 200, saved.text
+    receipt = saved.json()
+    assert len(receipt['tasks']) == 1
+    changed = client.get(PATH, headers=headers()).json()['latest']
+    assert changed['id'] == previous['id'] and not changed['source_current']
+    assert changed['new_record_count'] == 1
+    assert len(store.read()['elder_impressions']) == 1  # saving never waits for a second model call
+    assert not store.read()['care_memories']  # new facts are not automatically approved care instructions
+    # Retrying the formal upload must not inflate either tasks or profile evidence.
+    assert client.post(url, headers=headers(), json=body).json() == receipt
+    updated = client.post(PATH + '/generate', headers=headers()).json()
+    assert updated['coverage']['record_count'] == 4 and updated['source_current']
+    source = next(row for row in updated['sources'] if row['source_id'] == receipt['record']['id'])
+    assert source['revision'] == 1 and source['text'] == observation
+    assert arrangement not in source['text']  # a future task is not an observed service outcome
+    assert receipt['tasks'][0]['id'] not in {row['source_id'] for row in updated['sources']}
+    assert len(store.read()['care_records']) == 4 and len(store.read()['care_tasks']) == 1
+
+
+def test_cancelled_task_does_not_drop_record_from_profile_and_corrections_revalidate(api, provider):
+    client, store, headers = api
+    records(api, 3)
+    draft = client.post('/api/v1/records/extract', headers=headers(), json={
+        'elder_id': 'E1', 'text': '老人喜欢午后听吕剧，请联系家属反馈情况。'}).json()
+    assert draft['task_candidates']
+    # Removing the task is not deleting the observed preference or the record.
+    saved = client.post(f'/api/v1/records/{draft["id"]}/confirm', headers=headers(), json={
+        'observations': ['老人喜欢午后听吕剧'], 'task_candidates': []})
+    assert saved.status_code == 200, saved.text
+    record = saved.json()['record']
+    assert saved.json()['tasks'] == []
+    report = client.post(PATH + '/generate', headers=headers()).json()
+    assert report['coverage']['record_count'] == 4
+    assert next(row for row in report['sources'] if row['source_id'] == record['id'])['text'] == '老人喜欢午后听吕剧'
+    corrected = client.post(f'/api/v1/records/{record["id"]}/corrections', headers=headers(), json={
+        'expected_revision': 1, 'observations': ['老人今天希望安静休息，暂不听戏'], 'reason': '已向本人重新核实'})
+    assert corrected.status_code == 200, corrected.text
+    latest = client.get(PATH, headers=headers()).json()['latest']
+    assert not latest['source_current'] and latest['new_record_count'] == 0
+    updated = client.post(PATH + '/generate', headers=headers()).json()
+    source = next(row for row in updated['sources'] if row['source_id'] == record['id'])
+    assert source['revision'] == 2 and source['text'] == '老人今天希望安静休息，暂不听戏'
+    assert updated['coverage']['record_count'] == 4 and not store.read()['care_tasks']
 
 
 @pytest.mark.parametrize('bad', ['quote', 'source', 'shape'])

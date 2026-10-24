@@ -34,6 +34,8 @@ def create_draft(store: JsonStore, elder_id: str, shift_id: str | None, text: st
     from app.services.workflow import current_staff, open_shift
     from app.services.facility_service import care_eligible, care_state
     from app.services.workflow import DomainError
+    from app.services.workflow import now
+    reference_time = now()
     initial = store.read()
     elder_snapshot = care_state(care_eligible(initial, elder_id))
     if user_id:
@@ -50,6 +52,7 @@ def create_draft(store: JsonStore, elder_id: str, shift_id: str | None, text: st
         draft.warnings.insert(0, "真实AI不可用，当前结果来自演示降级，请人工核对")
 
     draft.created_by = user_id
+    draft.created_at = reference_time
     draft.model_status = 'demo' if isinstance(provider, MockAIProvider) else 'available'
     draft.elder_state_snapshot = elder_snapshot
     def mutate(data: dict[str, Any]) -> None:
@@ -59,6 +62,10 @@ def create_draft(store: JsonStore, elder_id: str, shift_id: str | None, text: st
             open_shift(data, shift_id, user_id, role)
         if care_state(care_eligible(data, elder_id)) != elder_snapshot:
             raise DomainError('draft_elder_state_changed')
+        from app.services.task_proposals import task_proposals
+        draft.task_candidates = task_proposals(
+            draft.task_candidates, data, elder_id=elder_id, shift_id=shift_id,
+            user_id=user_id, role=role, reference_time=reference_time)
         data["ai_drafts"].append(draft.model_dump())
         audit(data, 'create_ai_draft', draft.id, user_id or 'legacy', elder_id=elder_id, shift_id=shift_id,
               detail='AI生成待人工核对草稿', provider=draft.provider)

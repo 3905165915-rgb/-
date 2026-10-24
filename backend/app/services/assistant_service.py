@@ -101,6 +101,7 @@ def validate_draft_context(data, draft):
 
 
 def create_draft(store, payload, user_id, role):
+    reference_time = now()
     inputs = _snapshot(store.read(), payload.elder_id, payload.shift_id, payload.scene, user_id, role)
     fingerprint = _fingerprint(inputs)
     provider = get_ai_provider()
@@ -124,11 +125,15 @@ def create_draft(store, payload, user_id, role):
         id=identifier('AI'), elder_id=payload.elder_id, shift_id=payload.shift_id, raw_text=payload.text,
         **{key: value for key, value in output.items() if key not in {'warnings', 'model_status'}}, warnings=warnings,
         provider=provider.name, model_status='demo' if provider.name == 'mock' else 'available',
-        created_at=now(), created_by=user_id, generation_kind='context_record',
+        created_at=reference_time, created_by=user_id, generation_kind='context_record',
         context_snapshot={**inputs, 'fingerprint': fingerprint, 'requested_by': user_id, 'requested_role': role},
     )
     def mutate(data):
         validate_draft_context(data, draft.model_dump())
+        from app.services.task_proposals import task_proposals
+        draft.task_candidates = task_proposals(
+            draft.task_candidates, data, elder_id=payload.elder_id, shift_id=payload.shift_id,
+            user_id=user_id, role=role, reference_time=reference_time)
         data['ai_drafts'].append(draft.model_dump())
         audit(data, 'create_ai_draft', draft.id, user_id, elder_id=payload.elder_id, shift_id=payload.shift_id,
               detail='上下文AI生成事实、个性化候选和历史提醒草稿', provider=provider.name,
