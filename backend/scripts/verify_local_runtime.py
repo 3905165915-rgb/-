@@ -184,7 +184,7 @@ def main():
                     process.wait(timeout=5)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     result = {'status': 'passed', 'transport': 'real_uvicorn_tcp_http', 'python': sys.version.split()[0],
-              'platform': sys.platform, 'api_version': '0.4.0', 'schema_version': 4,
+              'platform': sys.platform, 'api_version': '0.4.0', 'schema_version': CURRENT_SCHEMA_VERSION,
               'data': 'temporary_synthetic_only', 'vendor_calls': 0, 'production_mutations': 0, 'checks': checks}
     args.output.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding='utf-8')
     print(f'PASS: {len(checks)} runtime assertions over real HTTP; temporary server stopped; report written.')
