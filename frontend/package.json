@@ -9,6 +9,7 @@
     "dev:admin": "pnpm --filter @hulao/admin-web dev",
     "dev:mobile": "pnpm --filter @hulao/mobile dev",
     "build": "pnpm --filter @hulao/admin-web build && pnpm --filter @hulao/mobile build",
+    "build:deploy": "pnpm --filter @hulao/admin-web build --base / && pnpm --filter @hulao/mobile build --base /mobile/",
     "lint": "eslint .",
     "test": "vitest run",
     "test:e2e": "node e2e/all.mjs",

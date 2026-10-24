@@ -15,6 +15,10 @@ pnpm dev:mobile
 
 默认 `VITE_APP_MODE=api`，接口不可用时只显示错误，不会自动进入演示。权限校验、AI确认入库和业务状态流转仍以后端为准。
 
+### 服务器正式发布
+
+运行 `pnpm build:deploy`，将 `apps/admin-web/dist` 发布到网站根路径，将 `apps/mobile/dist` 发布到 `/mobile/`。发布时使用 `VITE_APP_MODE=api`、`VITE_API_BASE_URL=/api/v1`、`VITE_SAME_ORIGIN_DEMO=false`。专用命令会设置两端不同的资源和路由基址，避免手机端错误加载根路径资源。普通 `pnpm build` 仍适合将单个应用发布到根路径，不用于这个双端共域部署。
+
 ## 同源双端演示
 
 ```bash
