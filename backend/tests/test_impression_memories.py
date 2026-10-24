@@ -83,3 +83,19 @@ def test_changed_sources_or_review_rejection_block_new_activation(api, provider)
     records(api, 1)
     assert client.post(path, headers=headers('manager'), json=body).status_code == 409
     assert not store.read()['care_memories']
+
+
+def test_human_revision_keeps_point_link_and_prevents_second_activation(api, provider):
+    client, store, headers = api
+    path, body, _, report = prepared(api)
+    memory = client.post(path, headers=headers('manager'), json=body).json()
+    revision = {key: value for key, value in body.items() if key != 'expected_revision'}
+    revision.update(expected_revision=memory['revision'], content='活动前先询问本人当次意愿', reason='主管修订提示用语')
+    response = client.post('/api/v1/memories/' + memory['id'] + '/revisions', headers=headers('manager'), json=revision)
+    assert response.status_code == 200, response.text
+    refreshed = client.get('/api/v1/elders/E1/impressions/' + report['id'], headers=headers()).json()
+    assert refreshed['points'][0]['care_memory']['id'] == memory['id']
+    retry = client.post(path, headers=headers('manager'), json=body)
+    assert retry.status_code == 200, retry.text
+    assert retry.json()['id'] == memory['id']
+    assert len(store.read()['care_memories']) == 1

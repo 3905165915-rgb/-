@@ -85,6 +85,14 @@ def _validate(output, sources):
         raise AIProviderError('Invalid longitudinal impression or source evidence') from exc
 
 
+def _point_memory(data, report_id, point_id, elder_id):
+    # The immutable creation link survives a human revision. Its active evidence
+    # may change independently, but the same point must never create two memories.
+    return next((m for m in data['care_memories'] if m['elder_id'] == elder_id and
+        (m.get('impression_origin') or m.get('candidate_source') or {}).get('impression_id') == report_id and
+        (m.get('impression_origin') or m.get('candidate_source') or {}).get('point_id') == point_id), None)
+
+
 def _view(data, report, user_id, role):
     _, sources, fingerprint = _snapshot(data, report['elder_id'], user_id, role)
     result = copy.deepcopy(report)
@@ -96,9 +104,7 @@ def _view(data, report, user_id, role):
     actors = {u['id']: u.get('display_name', '工作人员') for u in data['users']}
     for point in result['points']:
         point['reviewed_by_name'] = actors.get(point.get('reviewed_by'))
-        memory = next((m for m in data['care_memories'] if m['elder_id'] == report['elder_id'] and
-            (m.get('candidate_source') or {}).get('impression_id') == report['id'] and
-            m['candidate_source'].get('point_id') == point['id']), None)
+        memory = _point_memory(data, report['id'], point['id'], report['elder_id'])
         if memory:
             from app.services.memory_service import _view as memory_view
             current = memory_view(data, memory)
@@ -229,13 +235,12 @@ def activate_memory(store, elder_id, report_id, point_id, payload, user_id, role
             raise DomainError('impression_point_not_found', 404)
 
         def operation():
-            previous = next((m for m in data['care_memories'] if m['elder_id'] == elder_id and
-                (m.get('candidate_source') or {}).get('impression_id') == report_id and
-                m['candidate_source'].get('point_id') == point_id), None)
+            previous = _point_memory(data, report_id, point_id, elder_id)
             if previous:
                 # An uncertain duplicate may read its receipt, never silently
                 # change or reactivate an existing care instruction.
-                if previous['candidate_source'].get('activation_request') != payload.model_dump(mode='json'):
+                origin = previous.get('impression_origin') or previous.get('candidate_source') or {}
+                if origin.get('activation_request') != payload.model_dump(mode='json'):
                     raise DomainError('impression_memory_already_created')
                 return memory_service._view(data, previous)
             if point['revision'] != payload.expected_revision:
@@ -264,6 +269,10 @@ def activate_memory(store, elder_id, report_id, point_id, payload, user_id, role
                     if s['source_id'] == c['source_id']) for c in point['citations']},
                 'activation_request': payload.model_dump(mode='json'),
             })
+            memory['impression_origin'] = {
+                'impression_id': report_id, 'point_id': point_id,
+                'activation_request': payload.model_dump(mode='json'),
+            }
             before = memory_service._snapshot(memory)
             memory.update(status='confirmed', confirmed_by=user_id, confirmed_at=now())
             memory_service._change(data, memory, before, 'memory_confirm', payload.reason, user_id)

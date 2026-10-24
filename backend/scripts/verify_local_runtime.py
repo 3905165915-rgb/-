@@ -16,7 +16,7 @@ import httpx
 BACKEND = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND))
 from app.services.passwords import hash_password  # noqa: E402
-from app.storage.json_store import JsonStore  # noqa: E402
+from app.storage.json_store import JsonStore, CURRENT_SCHEMA_VERSION  # noqa: E402
 
 
 def main():
@@ -66,7 +66,7 @@ def main():
                         time.sleep(0.1)
                     else:
                         raise RuntimeError('Isolated server readiness timeout: ' + last_status)
-                    check('real_uvicorn_health', client.get('/health').json()['schema_version'] == 4)
+                    check('real_uvicorn_health', client.get('/health').json()['schema_version'] == CURRENT_SCHEMA_VERSION)
                     check('anonymous_denied', client.get('/elders').status_code == 401)
                     auth = {}
                     for actor in ('manager', 'worker', 'family'):
