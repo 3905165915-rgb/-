@@ -163,8 +163,8 @@ async function restoreDraft() {
     group="records"
     title="记一条"
     :context="{ ...route.query, ...(typeof route.query.elder === 'string' ? { elder_id: route.query.elder } : {}) }"
-    :initial-action="typeof route.query.draft_id === 'string' ? '/records/drafts/{draft_id}' : '/records/context-extract'"
-    :auto-read="typeof route.query.draft_id === 'string'"
+    :initial-action="typeof route.query.record_id === 'string' ? '/records/{record_id}' : typeof route.query.draft_id === 'string' ? '/records/drafts/{draft_id}' : '/records/context-extract'"
+    :auto-read="typeof route.query.record_id === 'string' || typeof route.query.draft_id === 'string'"
   />
   </section>
   <section v-else class="record-page editor-page">

@@ -187,6 +187,8 @@ onBeforeUnmount(() => {
         <dd>{{ task.due_at || '未提供' }}</dd>
         <dt>执行条件</dt>
         <dd>{{ task.condition || '未提供' }}</dd>
+        <dt>完成标准</dt>
+        <dd>{{ task.completion_criteria || '未提供，请核对具体任务要求' }}</dd>
       </dl>
       <p
         v-if="state.resident.status === 'error'"
@@ -220,6 +222,8 @@ onBeforeUnmount(() => {
           来源记录 {{ task.source_record_id }}：{{ state.source.message }}
         </p>
         <template v-else-if="source">
+          <p v-if="task.source_revision">创建任务时引用第{{ task.source_revision }}版。</p>
+          <p v-if="task.source_revision && task.source_revision !== source.revision" class="tcc-error" role="alert">来源已更正，以下为当前记录；请核对原安排的影响，不能视为已经自动更新任务。</p>
           <p>
             正式记录 {{ source.id }} · 当前版本 {{ source.revision }} ·
             {{ statuses[source.status] || source.status }}

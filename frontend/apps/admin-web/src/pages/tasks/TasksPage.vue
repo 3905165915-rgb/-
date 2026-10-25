@@ -107,7 +107,7 @@ watch(
     </div>
     <section v-if="creating" aria-label="新建照护任务">
       <el-button link @click="router.push({ query: {} })">返回任务列表</el-button>
-      <WorkflowPanel group="records" title="新建照护任务" initial-action="/records/manual" :context="createContext" task-creation @changed="tasks.refetch()" />
+      <WorkflowPanel group="tasks" title="新建照护任务" initial-action="/tasks" :context="createContext" task-creation @changed="tasks.refetch()" />
     </section>
     <template v-else>
     <div class="page-title-row">

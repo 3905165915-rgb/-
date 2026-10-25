@@ -17,7 +17,10 @@ import {
   taskCreationInitial,
   taskCreationPayload,
   taskCreationSchema,
+  checkTaskCreationReceipt,
+  taskSourceOptions, taskSourceIssue, updateTaskSource,
 } from './task-create'
+import { legacyTaskCreationSchema, legacyTaskCreationPayload } from './task-create-legacy'
 import {
   isQualityScan,
   qualityScopeOptions,
@@ -34,6 +37,8 @@ import RecordTaskReview from './RecordTaskReview.vue'
 import { recordTaskOwners, reviewedRecordTasks, selectedRecordTasks, recordSavedMessage } from './record-tasks'
 import ServiceCareHints from './ServiceCareHints.vue'
 import TaskCreationContext from './TaskCreationContext.vue'
+import TaskFeedbackComposer from './TaskFeedbackComposer.vue'
+import { withTaskFeedback } from './task-feedback'
 import PhotoObservation from './PhotoObservation.vue'
 import { careContextOptions, incidentEvidenceIssue, updateCareContext } from './care-context'
 import { submissionFeedback } from './submission-feedback'
@@ -82,11 +87,12 @@ const role = readSession()?.role
 const allowed = computed(() =>
   operations.filter(
     (op) =>
-      op.group === props.group &&
+      (op.group === props.group || (props.taskCreation && op.path === '/records/manual')) &&
       role &&
       op.roles.includes(role) &&
+      (props.taskCreation || op.path !== '/tasks' || op.method !== 'post') &&
       (!props.taskCreation ||
-        (op.path === '/records/manual' && op.method === 'post')),
+        (['/tasks', '/records/manual'].includes(op.path) && op.method === 'post')),
   ),
 )
 const activeId = ref('')
@@ -122,6 +128,9 @@ const draftDetail = computed(
 const params = ref<Row>({})
 const body = ref<Row>({})
 const catalogs = ref<Record<string, Row[]>>({})
+const taskSourcePreview = computed(() => props.taskCreation && body.value.source_type === 'record'
+  ? taskSourceOptions(body.value.elder_id, catalogs.value).find(row => row.id === body.value.source_id)
+  : undefined)
 const taskSelectionEnabled = computed(
   () => props.group === 'tasks' && !!active.value?.parameters.some((parameter) => parameter.name === 'task_id'),
 )
@@ -148,12 +157,17 @@ const fieldOptions = computed(() => {
       options.assigned_to = (options.assigned_to || catalogs.value.staff || []).filter((staff) => members.has(staff.id))
     }
   }
+  if (props.taskCreation && active.value?.path === '/tasks') options.source_id = taskSourceOptions(body.value.elder_id, catalogs.value)
   if (props.taskCreation && body.value.shift_id) {
     const shift = catalogs.value.shifts?.find((row) => row.id === body.value.shift_id)
     if (Array.isArray(shift?.caregiver_ids)) {
       const members = new Set(shift.caregiver_ids)
       options.assigned_to = (options.assigned_to || catalogs.value.staff || []).filter((staff) => members.has(staff.id))
     }
+  }
+  if (props.group === 'memories') {
+    const memory = catalogs.value.memories?.find(row => row.id === params.value.memory_id)
+    Object.assign(options, careContextOptions(body.value.elder_id || memory?.elder_id || selected.value.elder_id, catalogs.value))
   }
   if (props.group === 'incidents') {
     const incident = (catalogs.value.incidents || []).find(row => row.id === params.value.incident_id || (row.rectification as Row | undefined)?.id === params.value.rectification_id)
@@ -288,7 +302,7 @@ onBeforeRouteLeave(canLeave)
 onBeforeRouteUpdate(canLeave)
 defineExpose({ canClose: canLeave })
 const bodySchema = computed(() => {
-  if (props.taskCreation) return taskCreationSchema()
+  if (props.taskCreation) return active.value?.path === '/records/manual' ? legacyTaskCreationSchema() : taskCreationSchema()
   if (!active.value?.schema) return null
   const refName = active.value.schema.$ref?.split('/').pop()
   return refName ? schemas[refName] : active.value.schema
@@ -304,7 +318,11 @@ const visibleBodySchema = computed(() => {
   if (props.taskCreation && bodySchema.value) {
     const schema = structuredClone(bodySchema.value)
     delete schema.properties?.elder_id
+    if (body.value.source_type !== 'record') { delete schema.properties?.source_id; delete schema.properties?.source_revision }
     return schema
+  }
+  if (active.value?.path === '/tasks/{task_id}/complete' && (body.value._care_feedback as Row | undefined)?.enabled === true && bodySchema.value) {
+    const schema = structuredClone(bodySchema.value); delete schema.properties?.result; return schema
   }
   if (!recordTaskReview.value || !bodySchema.value) return bodySchema.value
   const schema = structuredClone(bodySchema.value)
@@ -499,10 +517,10 @@ function syncVersions() {
     if (hasValue(row?.revision))
       assign('expected_record_revision', row?.revision)
   }
-  const source = pick('record_id', form.source_record_id)
+  const source = pick('record_id', form.source_record_id || (props.taskCreation ? form.source_id : ''))
   if (source && 'source_revision' in form) {
     assign('source_revision', source.revision)
-    if (!form.source_field) form.source_field = 'observations'
+    if ('source_field' in form && !form.source_field) form.source_field = 'observations'
   }
   const occurrence = catalogs.value.occurrences?.find(
     (row) => row.occurrence_key === form.occurrence_key,
@@ -606,7 +624,7 @@ async function loadCatalogs() {
       incidents: 'incidents',
     }
     if (groupResource[props.group]) resources.add(groupResource[props.group])
-    if (props.taskCreation) resources.add('tasks')
+    if (props.taskCreation) { resources.add('tasks'); resources.add('records') }
     if (resources.has('admissions')) resources.add('elders')
     if (resources.has('memories')) resources.add('elders')
     if (resources.has('handover_items')) resources.add('handovers')
@@ -725,6 +743,7 @@ function setParam(field: string, value: unknown) {
     const task = catalogs.value.tasks?.find((row) => row.id === value)
     if (task) selected.value.elder_id = task.elder_id
   }
+  if (field === 'task_id' && active.value?.path === '/tasks/{task_id}/complete') { body.value.result = ''; body.value._care_feedback = {} }
   if (field === 'record_id') {
     recordHistory.value = null
     historyError.value = ''
@@ -747,10 +766,12 @@ function chooseTaskElder(elderId: string) {
   if (busy.value || frozen.value) return
   selected.value = { ...selected.value, elder_id: elderId, task_id: '' }
   params.value.task_id = ''
+  if (active.value?.path === '/tasks/{task_id}/complete') { body.value.result = ''; body.value._care_feedback = {} }
   message.value = ''
 }
 function setBody(value: unknown) {
   if (frozen.value || busy.value) return
+  const previousTaskBody = { ...body.value }
   const previousElder = body.value.elder_id
   const previousTasks = body.value.task_candidates
   body.value =
@@ -767,6 +788,7 @@ function setBody(value: unknown) {
     if (previousElder && previousElder !== body.value.elder_id)
       message.value = props.taskCreation ? '已切换老人，原任务内容已清空，请为当前老人重新填写。' : '已切换老人，请重新选择当前老人的事实证据。'
   }
+  if (props.taskCreation && active.value?.path === '/tasks') body.value = updateTaskSource(previousTaskBody, body.value, catalogs.value)
   confirm.value = false
   syncVersions()
 }
@@ -800,9 +822,13 @@ async function run() {
         throw new Error('请先选择或成功载入本条记录对应的老人，再核对任务。')
       payload = bodySchema.value
         ? props.taskCreation
-          ? taskCreationPayload(bodySchema.value, body.value)
-          : requestBody(op.path, bodySchema.value, recordBody)
+          ? (op.path === '/records/manual' ? legacyTaskCreationPayload(bodySchema.value, body.value) : taskCreationPayload(bodySchema.value, body.value))
+          : requestBody(op.path, bodySchema.value, op.path === '/tasks/{task_id}/complete' ? withTaskFeedback(recordBody) : recordBody)
         : undefined
+      if (props.taskCreation && op.path === '/tasks') {
+        const issue = taskSourceIssue(payload as Row, catalogs.value)
+        if (issue) throw new Error(issue)
+      }
       if (op.path === '/incidents' && op.method === 'post') {
         const issue = incidentEvidenceIssue(payload as Row, catalogs.value)
         if (issue) throw new Error(issue)
@@ -888,6 +914,7 @@ async function run() {
               payload,
               op.method === 'get' ? undefined : pending.value?.key,
             )
+    if (props.taskCreation && op.path === '/tasks' && op.method === 'post') checkTaskCreationReceipt(data, payload as Row)
     result.value = data
     if (op.method !== 'get') {
       phase.value = 'succeeded'
@@ -1109,6 +1136,7 @@ function freshForm() {
   reviewSource.value = null
   recordHistory.value = null
   historyError.value = ''
+  if (props.taskCreation) { activeId.value = initialOperationId(); selected.value = { ...props.context } }
   reset()
   if (props.taskCreation) {
     selected.value = { ...props.context }
@@ -1655,8 +1683,9 @@ onMounted(async () => {
             <p v-if="isQualityScan(active)" class="wf-muted">
               选择交班单后自动采用其交出班次；更换班次会清除不匹配的交班单。历史已关闭班次也可检查。
             </p>
+            <p v-if="taskCreation && active.path === '/records/manual'" class="wf-notice">这是旧版任务表单的恢复内容，仍按原记录接口处理。完成核实后，开始新操作可使用独立任务创建入口。</p>
             <p v-if="taskCreation" class="wf-notice">
-              先选择老人，再填写任务。护理员只能安排给本人；需要分配给其他员工或调整既有任务，请由主管或管理员办理。
+              先选择老人，再核对已有任务，避免重复安排。护理员只能安排给本人；分配他人或调整既有任务由主管办理。截止时间按设备时区输入，请明确核对日期与时刻。执行前提不会因填写此表自动满足。
             </p>
             <p
               v-if="group === 'handovers' && active.path === '/handovers' && active.method === 'post'"
@@ -1740,6 +1769,15 @@ onMounted(async () => {
                 :option-overrides="fieldOptions"
                 @update:model-value="setBody"
               />
+              <section v-if="taskSourcePreview" aria-label="所选来源记录">
+                <h4>来源记录当前内容 · 第{{ taskSourcePreview.revision }}版</h4>
+                <p class="wf-notice">来源事实不等于本次安排已经执行；请据此人工核对任务内容、期限与执行前提。</p>
+                <p>当前已核对观察</p>
+                <ul v-if="Array.isArray(taskSourcePreview.observations)"><li v-for="(observation, index) in taskSourcePreview.observations" :key="index">{{ observation }}</li></ul>
+                <details><summary>原始录入（保留原文）</summary><blockquote class="wf-source-text">{{ taskSourcePreview.raw_text }}</blockquote></details>
+                <p v-if="taskSourcePreview.revision !== Number(body.source_revision)" role="alert">来源已更正，当前表单仍保留原版本，不能直接提交。请重新选择来源并核对差异。</p>
+              </section>
+              <TaskFeedbackComposer v-if="active.path === '/tasks/{task_id}/complete'" :model-value="body" @update:model-value="setBody" />
               <RecordTaskReview
                 v-if="recordTaskReview"
                 :model-value="body.task_candidates || []"
@@ -1920,3 +1958,13 @@ onMounted(async () => {
     </template>
   </section>
 </template>
+<style scoped>
+.wf-source-text {
+  margin: 8px 0;
+  padding: 12px;
+  border-left: 3px solid #14765e;
+  background: #f5f7f8;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+</style>

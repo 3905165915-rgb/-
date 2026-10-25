@@ -32,6 +32,7 @@ async function setup(role = 'caregiver') {
       writes.push({ path, key: req.headers()['idempotency-key'], body: req.postDataJSON() })
       if (path.includes('/reports/elders/') && state.failExport) return route.abort('failed')
       if (path === '/quality/checks') return json({ id: 'QC-test', issues: [], scope: req.postDataJSON() }, 201)
+      if (path === '/tasks') return json({ ...state.task, ...req.postDataJSON() }, 201)
       if (path === '/records/manual') {
         if (state.failManual) { state.failManual = false; return route.abort('failed') }
         return json({ record: { ...record, raw_text: req.postDataJSON().raw_text }, tasks: [state.task] }, 201)
@@ -91,21 +92,24 @@ async function test(name, fn, role = 'caregiver') {
 try {
   await test('新建任务：最后输入刷新恢复、人工字段与来源、单次提交和回执恢复', async ({ page, writes }) => {
     await page.goto(base + '/mobile/tasks/new?elder=ELDER-test')
-    await field(page, 'raw_text').fill('虚构：老人希望下午沟通，最后输入')
+    await field(page, 'condition').fill('虚构：本人愿意沟通，最后输入')
     await page.reload()
-    await field(page, 'raw_text').waitFor()
-    assert.equal(await field(page, 'raw_text').inputValue(), '虚构：老人希望下午沟通，最后输入')
+    await field(page, 'condition').waitFor()
+    assert.equal(await field(page, 'condition').inputValue(), '虚构：本人愿意沟通，最后输入')
+    await field(page, 'shift_id').selectOption(shift.id)
     await field(page, 'title').fill('虚构回访任务')
     await field(page, 'assigned_to').selectOption('USER-test')
-    await field(page, 'due_at').fill('2026-10-24T14:00')
+    await field(page, 'due_at').fill('2099-10-24T14:00')
     await field(page, 'completion_criteria').fill('虚构：回访并记录本人反馈')
     await submit(page)
-    await page.getByText('记录已保存，同时创建了1项任务。可在任务列表按老人查看。', { exact: true }).waitFor()
+    await page.getByText('任务已创建，服务器已确认；请在任务列表继续核验执行条件。', { exact: true }).waitFor()
     assert.equal(writes.length, 1)
-    assert.equal(writes[0].path, '/records/manual')
+    assert.equal(writes[0].path, '/tasks')
     assert.equal(writes[0].body.elder_id, elder.id)
-    assert.equal(writes[0].body.task_candidates.length, 1)
-    assert.match(writes[0].body.raw_text, /【完成标准】虚构：回访并记录本人反馈/)
+    assert.equal(writes[0].body.completion_criteria, '虚构：回访并记录本人反馈')
+    assert.equal(writes[0].body.condition, '虚构：本人愿意沟通，最后输入')
+    assert.equal(writes[0].body.source_type, 'manual')
+    assert.equal(writes[0].body.raw_text, undefined)
     assert.ok(writes[0].key)
     await page.reload()
     assert.equal(await page.getByRole('button', { name: '本次操作已完成', exact: true }).isDisabled(), true)
@@ -313,7 +317,7 @@ try {
     for (const width of [320, 375, 390, 768, 1366]) {
       await page.setViewportSize({ width, height: 900 })
       await page.goto(base + '/mobile/tasks/new?elder=ELDER-test')
-      await field(page, 'raw_text').waitFor()
+      await field(page, 'title').waitFor()
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false, `mobile ${width}`)
       await page.screenshot({ path: resolve(output, `mobile-${width}.png`), fullPage: true })
     }
@@ -322,7 +326,7 @@ try {
     for (const width of [768, 1366]) {
       await page.setViewportSize({ width, height: 900 })
       await page.goto(base + '/admin/tasks?create=1&elder=ELDER-test')
-      await field(page, 'raw_text').waitFor()
+      await field(page, 'title').waitFor()
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false, `admin ${width}`)
       await page.screenshot({ path: resolve(output, `admin-${width}.png`), fullPage: true })
     }

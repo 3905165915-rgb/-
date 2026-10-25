@@ -137,9 +137,9 @@ try {
   })
   await test('切换老人清空任务原文和上下文', async ({ page }) => {
     await page.goto(base + '/mobile/tasks/new?elder=ELDER-one')
-    await field(page, 'title').fill('原老人任务不能迁移'); await field(page, 'raw_text').fill('原老人安排')
+    await field(page, 'title').fill('原老人任务不能迁移'); await field(page, 'condition').fill('原老人执行前提')
     await field(page, 'elder_id').selectOption('ELDER-two')
-    assert.equal(await field(page, 'title').inputValue(), ''); assert.equal(await field(page, 'raw_text').inputValue(), '')
+    assert.equal(await field(page, 'title').inputValue(), ''); assert.equal(await field(page, 'condition').inputValue(), '')
     await page.getByRole('region', { name: '所选老人的任务与照护提示' }).getByText('虚构关联任务2', { exact: false }).waitFor()
   })
   await test('无正式记录证据可直接人工上报，单次写入且不调用AI', async ({ page, writes, calls, state }) => {

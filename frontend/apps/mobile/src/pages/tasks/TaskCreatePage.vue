@@ -10,7 +10,7 @@ const context = computed(() => typeof route.query.elder === 'string' ? { elder_i
 <template>
   <section class="task-create-page">
     <RouterLink class="back-link" to="/caregiver"><ArrowLeft :size="18" aria-hidden="true" />返回今日</RouterLink>
-    <WorkflowPanel group="records" title="新建照护任务" initial-action="/records/manual" :context="context" task-creation />
+    <WorkflowPanel group="tasks" title="新建照护任务" initial-action="/tasks" :context="context" task-creation />
   </section>
 </template>
 

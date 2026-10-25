@@ -12,11 +12,11 @@ export function careContextOptions(elderId: unknown, catalogs: Record<string, Ro
 export function updateCareContext(previous: Row, next: Row, catalogs: Record<string, Row[]>, taskCreation = false): Row {
   const value = { ...next }
   if (previous.elder_id && previous.elder_id !== next.elder_id) {
-    for (const field of ['admission_id', 'source_record_id', 'source_revision', 'record_id'])
+    for (const field of ['admission_id', 'source_record_id', 'source_revision', 'source_id', 'record_id'])
       if (field in value) value[field] = ''
     for (const field of ['evidence', 'task_candidates']) if (field in value) value[field] = []
     if (taskCreation)
-      for (const field of ['raw_text', 'title', 'assigned_to', 'due_at', 'completion_criteria']) value[field] = ''
+      for (const field of ['raw_text', 'title', 'assigned_to', 'due_at', 'completion_criteria', 'condition', 'due_text']) value[field] = ''
   }
   if ('admission_id' in value && !value.admission_id) {
     const elder = catalogs.elders?.find(row => row.id === value.elder_id)

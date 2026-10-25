@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { manualFallback, taskCreationInitial, taskCreationPayload, taskCreationSchema } from './task-create'
+import { manualFallback } from './task-create'
+import { legacyTaskCreationInitial as taskCreationInitial, legacyTaskCreationPayload as taskCreationPayload, legacyTaskCreationSchema as taskCreationSchema } from './task-create-legacy'
 
-describe('human-authored task creation', () => {
+describe('legacy record-backed task recovery', () => {
   const value = () => ({ ...taskCreationInitial(taskCreationSchema()), elder_id: 'ELDER-test', raw_text: '虚构：本人希望下午再沟通',
     completion_criteria: '完成沟通并记录本人反馈', title: '回访沟通', assigned_to: 'USER-test', due_at: '2026-10-24T14:00:00+08:00' })
   it('uses one reviewed task and preserves criteria in the supported source record', () => {

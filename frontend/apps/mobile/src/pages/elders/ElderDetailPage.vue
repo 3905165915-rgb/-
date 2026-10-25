@@ -11,6 +11,7 @@ import {
 } from 'lucide-vue-next'
 import { taskStatusLabels } from '@hulao/shared'
 import ElderImpression from '@hulao/shared/elder-impression'
+import ElderMemories from '../../../../../packages/shared/src/workflow/ElderMemories.vue'
 import ElderActivity from '../../../../../packages/shared/src/workflow/ElderActivity.vue'
 import { mode, session, useElders, useTasks } from '../../services/data'
 import FeedbackState from '../../components/FeedbackState.vue'
@@ -77,6 +78,7 @@ const related = computed(() =>
         <ChevronRight :size="18" aria-hidden="true" />
       </RouterLink>
 
+      <ElderMemories :key="elder.id" :elder-id="elder.id" record-path="/records/new" />
       <ElderImpression :key="String(route.query.impression_id || elder.id)" :elder-id="elder.id" :report-id="typeof route.query.impression_id === 'string' ? route.query.impression_id : undefined" :point-id="typeof route.query.point_id === 'string' ? route.query.point_id : undefined" />
       <section class="profile-section" aria-labelledby="elder-profile-title">
         <h2 id="elder-profile-title">基本资料</h2>
