@@ -6,6 +6,7 @@ import os
 import tempfile
 import shutil
 import hashlib
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, TypeVar
@@ -14,7 +15,7 @@ from filelock import FileLock
 
 
 T = TypeVar("T")
-CURRENT_SCHEMA_VERSION = 6
+CURRENT_SCHEMA_VERSION = 7
 
 
 EMPTY_STORE: dict[str, Any] = {
@@ -46,6 +47,8 @@ EMPTY_STORE: dict[str, Any] = {
     "image_analyses": [],
     "ai_evaluations": [],
     "care_assignments": [],
+    "care_advice": [],
+    "care_advice_batches": [],
 }
 
 
@@ -173,9 +176,9 @@ class JsonStore:
             if version == CURRENT_SCHEMA_VERSION:
                 self._validate(data)
                 return None
-            if version not in {1, 2, 3, 4, 5}:
+            if version not in {1, 2, 3, 4, 5, 6}:
                 raise RuntimeError(f'Unsupported migration source: {version}')
-            added = set()
+            added = {"care_advice", "care_advice_batches"}
             if version <= 4:
                 added.add('elder_impressions')
             if version in {1, 2, 3, 4, 5}:
@@ -236,7 +239,17 @@ class JsonStore:
                 stream.write("\n")
                 stream.flush()
                 os.fsync(stream.fileno())
-            os.replace(temporary_name, self.path)
+            # Windows indexers/virus scanners may briefly hold a just-closed
+            # destination handle. Retain the transaction lock and retry only
+            # these OS errors; never truncate/delete the live file to recover.
+            for attempt in range(6):
+                try:
+                    os.replace(temporary_name, self.path)
+                    break
+                except PermissionError as exc:
+                    if getattr(exc, 'winerror', None) not in {5, 32, 33} or attempt == 5:
+                        raise
+                    time.sleep(0.01 * (2 ** attempt))
         finally:
             if os.path.exists(temporary_name):
                 os.unlink(temporary_name)

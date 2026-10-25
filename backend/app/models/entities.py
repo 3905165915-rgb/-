@@ -103,6 +103,7 @@ class CareTask(BaseModel):
     assigned_to: str | None = None
     status: TaskStatus = "pending"
     source_record_id: str | None = None
+    source_advice_id: str | None = None
     source_type: Literal['manual', 'record', 'care_plan', 'handover'] = 'manual'
     source_id: str | None = None
     source_revision: int | None = None

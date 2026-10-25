@@ -13,7 +13,7 @@ def instrument(provider, data_dir):
     """Preserve provider type/name, log metadata only, and never log prompts/keys."""
     from app.storage.json_store import JsonStore
     for method, feature in [('extract', 'extraction'), ('extract_context', 'context'),
-                            ('impression', 'impression'), ('summarize', 'summary'), ('quality', 'quality')]:
+                            ('impression', 'impression'), ('summarize', 'summary'), ('quality', 'quality'), ('care_advice', 'care_advice')]:
         original = getattr(provider, method)
         def wrap(fn, feature):
             @wraps(fn)
@@ -27,7 +27,9 @@ def instrument(provider, data_dir):
                     raise
                 finally:
                     row = {'id': identifier('RUN'), 'kind': 'run', 'feature': feature, 'model': provider.name,
-                           'prompt_version': 'care-text-2026-10-25', 'outcome': outcome,
+                           'prompt_version': ('care-advice-2026-10-25-v1' if feature == 'care_advice'
+                                              else 'care-text-2026-10-25'), 'outcome': outcome,
+                           'model_id': getattr(provider, 'model', provider.name),
                            'is_demo': provider.name == 'mock', 'created_at': now(),
                            'elapsed_ms': round((perf_counter() - started) * 1000)}
                     # Measurement is part of the model operation, not a fabricated

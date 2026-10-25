@@ -40,6 +40,50 @@ def test_failed_replace_keeps_original_and_releases_lock(tmp_path, monkeypatch):
     assert [r['id'] for r in store.read()['elders']] == ['SUCCESS']
 
 
+@pytest.mark.parametrize('winerror', [5, 32, 33])
+def test_transient_windows_replace_failure_retries_without_partial_write(tmp_path, monkeypatch, winerror):
+    store = JsonStore(tmp_path)
+    store.ensure()
+    original = store.path.read_bytes()
+    replace = json_store.os.replace
+    attempts = []
+    def transient(source, destination):
+        attempts.append(1)
+        if len(attempts) < 3:
+            assert store.path.read_bytes() == original
+            error = PermissionError('simulated Windows handle contention')
+            error.winerror = winerror
+            raise error
+        return replace(source, destination)
+    monkeypatch.setattr(json_store.os, 'replace', transient)
+    monkeypatch.setattr(json_store.time, 'sleep', lambda _: None)
+    store.mutate(lambda d: d['elders'].append({'id': 'SUCCESS', 'name': '张阿姨'}))
+    assert len(attempts) == 3
+    assert store.read()['elders'][0]['id'] == 'SUCCESS'
+    assert not list(tmp_path.glob('store.*.tmp'))
+
+
+def test_persistent_windows_replace_failure_is_bounded_and_preserves_live_file(tmp_path, monkeypatch):
+    store = JsonStore(tmp_path)
+    store.ensure()
+    original = store.path.read_bytes()
+    attempts = []
+    with monkeypatch.context() as patch:
+        def fail(*_):
+            attempts.append(1)
+            error = PermissionError('persistent Windows denial')
+            error.winerror = 5
+            raise error
+        patch.setattr(json_store.os, 'replace', fail)
+        patch.setattr(json_store.time, 'sleep', lambda _: None)
+        with pytest.raises(PermissionError):
+            store.mutate(lambda d: d['elders'].append({'id': 'FAILED'}))
+    assert len(attempts) == 6 and store.path.read_bytes() == original
+    assert not list(tmp_path.glob('store.*.tmp'))
+    store.mutate(lambda d: d['elders'].append({'id': 'RECOVERED'}))
+    assert store.read()['elders'][0]['id'] == 'RECOVERED'
+
+
 @pytest.mark.parametrize('failure', ['invalid_collection', 'serialization', 'callback'])
 def test_invalid_callback_output_cannot_corrupt_store(tmp_path, failure):
     store = JsonStore(tmp_path)

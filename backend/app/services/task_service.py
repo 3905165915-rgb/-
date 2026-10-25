@@ -59,47 +59,52 @@ def _validate_source(data, payload: TaskCreateRequest, user_id, role):
     raise DomainError('task_source_requires_dedicated_workflow', 422)
 
 
+def create_from_data(data, payload: TaskCreateRequest, user_id, role, advice_id=None):
+    """Create inside a caller's existing transaction; all task rules are shared."""
+    current_staff(data, user_id, role)
+    from app.services.care_scope_service import require_elder_access
+    require_elder_access(data, payload.elder_id, user_id, role)
+    from app.services.facility_service import care_eligible
+
+    care_eligible(data, payload.elder_id)
+    open_shift(data, payload.shift_id, user_id, role)
+    if payload.due_at is not None and payload.due_at <= parse_time(now()):
+        raise DomainError('due_at_must_be_future', 422)
+    assigned_to = payload.assigned_to
+    active_staff(data, assigned_to)
+    if role == 'caregiver' and assigned_to != user_id:
+        raise DomainError('management_required_to_assign_others', 403)
+    if assigned_to and payload.shift_id:
+        shift = find(data, 'shifts', payload.shift_id, 'shift_not_found')
+        if assigned_to not in shift['caregiver_ids']:
+            raise DomainError('assignee_not_in_shift', 422)
+    source = _validate_source(data, payload, user_id, role)
+    item = CareTask(
+        id=identifier('TASK'), elder_id=payload.elder_id, title=payload.title,
+        completion_criteria=payload.completion_criteria,
+        shift_id=payload.shift_id, assigned_to=assigned_to,
+        due_at=payload.due_at.isoformat() if payload.due_at else None,
+        condition=payload.condition, due_text=payload.due_text,
+        source_type=payload.source_type, source_id=payload.source_id,
+        source_revision=payload.source_revision, **source,
+        source_advice_id=advice_id,
+        created_by=user_id, created_at=now(), updated_at=now(),
+    )
+    data['care_tasks'].append(item.model_dump())
+    audit(data, 'create_task', item.id, user_id, elder_id=item.elder_id,
+          shift_id=item.shift_id, source_type=item.source_type,
+          source_id=item.source_id, source_revision=item.source_revision,
+          actor_role=role, before=None, after=item.model_dump(), detail=item.title)
+    return item.model_dump()
+
+
 def create(store: JsonStore, payload: TaskCreateRequest, user_id: str, role: str, key=None) -> CareTask:
     def mutate(data):
         current_staff(data, user_id, role)
         from app.services.care_scope_service import require_elder_access
         require_elder_access(data, payload.elder_id, user_id, role)
-
-        def operation():
-            from app.services.facility_service import care_eligible
-
-            care_eligible(data, payload.elder_id)
-            open_shift(data, payload.shift_id, user_id, role)
-            if payload.due_at is not None and payload.due_at <= parse_time(now()):
-                raise DomainError('due_at_must_be_future', 422)
-            assigned_to = payload.assigned_to
-            active_staff(data, assigned_to)
-            if role == 'caregiver' and assigned_to != user_id:
-                raise DomainError('management_required_to_assign_others', 403)
-            if assigned_to and payload.shift_id:
-                shift = find(data, 'shifts', payload.shift_id, 'shift_not_found')
-                if assigned_to not in shift['caregiver_ids']:
-                    raise DomainError('assignee_not_in_shift', 422)
-            source = _validate_source(data, payload, user_id, role)
-            item = CareTask(
-                id=identifier('TASK'), elder_id=payload.elder_id, title=payload.title,
-                completion_criteria=payload.completion_criteria,
-                shift_id=payload.shift_id, assigned_to=assigned_to,
-                due_at=payload.due_at.isoformat() if payload.due_at else None,
-                condition=payload.condition, due_text=payload.due_text,
-                source_type=payload.source_type, source_id=payload.source_id,
-                source_revision=payload.source_revision, **source,
-                created_by=user_id, created_at=now(), updated_at=now(),
-            )
-            data['care_tasks'].append(item.model_dump())
-            audit(data, 'create_task', item.id, user_id, elder_id=item.elder_id,
-                  shift_id=item.shift_id, source_type=item.source_type,
-                  source_id=item.source_id, source_revision=item.source_revision,
-                  actor_role=role, before=None, after=item.model_dump(), detail=item.title)
-            return item.model_dump()
-
-        return replayable(data, user_id, 'create_task', key, payload.model_dump(mode='json'), operation)
-
+        return replayable(data, user_id, 'create_task', key, payload.model_dump(mode='json'),
+                          lambda: create_from_data(data, payload, user_id, role))
     return CareTask.model_validate(store.mutate(mutate))
 
 
@@ -153,6 +158,8 @@ def complete(store: JsonStore, task_id: str, user_id: str, role: str, result: st
             at = now()
             from app.services.plan_service import assert_task_ready
             assert_task_ready(data, item, at)
+            from app.services.care_advice_service import assert_task_ready as advice_ready
+            advice_ready(data, item)
             assert_ready(data, item, at)
             item.update(status='completed', result=result, completed_by=user_id, completed_at=at,
                         revision=item.get('revision', 1) + 1, updated_at=at)
@@ -191,6 +198,8 @@ def transition(store: JsonStore, task_id: str, payload: TaskTransitionRequest, u
                 from app.services.task_condition_service import assert_ready
                 from app.services.plan_service import assert_task_ready
                 assert_task_ready(data, item, at)
+                from app.services.care_advice_service import assert_task_ready as advice_ready
+                advice_ready(data, item)
                 assert_ready(data, item, at)
                 item['status'] = 'in_progress'
             elif action == 'not_done':

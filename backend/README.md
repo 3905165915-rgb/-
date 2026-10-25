@@ -2,7 +2,9 @@
 
 这是参赛演示版后端，使用 FastAPI 和 JSON 文件存储，不使用数据库。JSON 存储适用于单服务器、低并发演示；正式生产部署前应替换为事务数据库并重新进行安全与隐私评估。AI适配层支持 DeepSeek OpenAI兼容接口，当前默认仍为 Mock，配置真实密钥后再切换。
 
-当前本地API版本0.4.2，JSON schema 6。2026-10-25最终改进清单的逐项实现与验收见[ACCEPTANCE_IMPROVEMENTS_2026-10-25.md](ACCEPTANCE_IMPROVEMENTS_2026-10-25.md)，新增接口、权限与前端对接见[IMPROVEMENT_API_2026-10-25.md](IMPROVEMENT_API_2026-10-25.md)。旧schema 1至5均须停服备份并显式迁移；不要删除数据文件重新初始化。本轮未推送、未部署，新增能力的前端联调另行验收。
+当前本地API版本0.4.3，JSON schema 7。新增主动照护建议闭环，接入见[照护建议接口说明](CARE_ADVICE_API_2026-10-25.md)，本轮结果与范围见[建议闭环验收记录](ACCEPTANCE_CARE_ADVICE_2026-10-25.md)。旧schema 1至6均须停服备份并显式迁移；不要删除数据文件重新初始化。本轮未推送、未部署，新增能力的前端联调另行验收。
+
+此前0.4.2改进清单的逐项实现与验收见[ACCEPTANCE_IMPROVEMENTS_2026-10-25.md](ACCEPTANCE_IMPROVEMENTS_2026-10-25.md)，其他新增接口、权限与前端对接见[IMPROVEMENT_API_2026-10-25.md](IMPROVEMENT_API_2026-10-25.md)。以下历史测试数字均对应各自版本，不能代替本轮结果。
 
 改进清单全量回归603通过、13跳过；独立临时Uvicorn的真实TCP/HTTP验收73项断言通过。其后按用户要求复用DeepSeek账号配置视觉输入，真实视觉接口验收2项通过、相关回归35项通过，见[视觉接入记录](DEEPSEEK_VISION_2026-10-25.md)。测试采用代码绘制的合成图片，不代表真实养老照片或临床识别效果已经验证。
 
@@ -92,7 +94,7 @@ python -m pytest backend/tests -q
 
 ## 存储迁移和备份
 
-当前schema为6，新增通知、照护分配、照片引用、视觉分析和AI评估集合。旧schema 1至5启动时不会自动迁移；先停服，加载服务端环境配置后执行：
+当前schema为7，本轮新增照护建议与生成批次集合，保留既有通知、照护分配、照片引用、视觉分析和AI评估集合。旧schema 1至6启动时不会自动迁移；先停服，加载服务端环境配置后执行：
 
 ```sh
 python backend/scripts/migrate_json.py

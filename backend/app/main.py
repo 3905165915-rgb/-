@@ -13,7 +13,7 @@ from app.schemas.api import HealthResponse
 from app.storage.json_store import CURRENT_SCHEMA_VERSION, JsonStore
 from app.services.workflow import DomainError
 from app.api.routes import family, incidents, reports, insights, impressions
-from app.api.routes import notifications, photos, governance
+from app.api.routes import notifications, photos, governance, care_advice
 
 
 @asynccontextmanager
@@ -29,7 +29,7 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title="护老智交 Backend", version="0.4.2", lifespan=lifespan)
+app = FastAPI(title="护老智交 Backend", version="0.4.3", lifespan=lifespan)
 
 
 @app.middleware('http')
@@ -68,6 +68,23 @@ async def domain_error_handler(_, exc: DomainError):
         'record_impact_changed_refresh': '影响范围已变化，请重新预览并核对',
         'not_a_shift_member': '当前账号未加入该班次，请选择正确班次或联系主管',
         'assistant_context_changed': '相关照护资料已更新，请重新整理并核对',
+        'advice_insufficient_sources': '暂无足够的正式记录或有效偏好，请先记录实际照护情况',
+        'advice_scope_too_large': '本次照护资料过多，请缩短回顾日期后重试',
+        'advice_context_changed': '整理期间照护资料已更新，请重新获取建议',
+        'advice_requires_refresh': '建议已处理、过期或依据已变化，请刷新后核对',
+        'advice_source_changed': '建议引用的资料已变化，请核实依据后重新安排',
+        'advice_trial_paused': '主管已要求停止或调整本次尝试，请先核对新的安排',
+        'advice_task_object_mismatch': '建议与任务的老人或来源不一致，请核对',
+        'advice_condition_must_be_preserved': '请保留建议的前提条件，核实满足后才能执行',
+        'advice_not_proposed': '这条建议已处理，请刷新查看',
+        'advice_not_adopted': '请先人工采纳并安排任务，再登记执行反馈',
+        'advice_feedback_needs_task_result': '请先登记任务完成或未执行结果，再填写反馈',
+        'advice_feedback_already_saved': '本次执行已有有效反馈，请查看原记录',
+        'advice_feedback_time_invalid': '反馈发生时间应在任务创建之后且不晚于当前时间',
+        'advice_followup_needs_assignment': '后续跟进还需明确负责人和期限',
+        'advice_followup_not_requested': '未选择后续跟进，请清除跟进负责人和期限',
+        'advice_review_needs_feedback': '暂无执行反馈，不能复核本次尝试结果',
+        'advice_feedback_changed': '反馈或任务结果已变化，请刷新核对，必要时重新登记反馈',
         'idempotency_key_payload_mismatch': '本次提交标识已用于其他内容，请核对提交状态',
         'impression_no_records': '这位老人还没有已确认记录，请先登记日常照护情况',
         'impression_sources_changed': '历史记录已新增或更正，请重新整理印象后核对',
@@ -120,3 +137,5 @@ app.include_router(impressions.router, prefix="/api/v1")
 app.include_router(notifications.router, prefix="/api/v1")
 app.include_router(photos.router, prefix="/api/v1")
 app.include_router(governance.router, prefix="/api/v1")
+
+app.include_router(care_advice.router, prefix="/api/v1")
