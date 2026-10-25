@@ -192,7 +192,7 @@ const primitiveOptions = computed(
       </option>
     </select>
     <select
-      v-else-if="resourceFor[field]"
+      v-else-if="resourceFor[field] || optionOverrides?.[field]"
       :value="modelValue ?? ''"
       @change="input"
     >

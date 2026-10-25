@@ -49,6 +49,8 @@ function logout() {
         </dd>
       </div>
     </dl>
+    <RouterLink class="account-link" to="/safety?report=1"><span>照护安全与事件上报</span><ChevronRight :size="18" aria-hidden="true" /></RouterLink>
+    <RouterLink class="account-link" to="/notifications"><span>待我处理</span><ChevronRight :size="18" aria-hidden="true" /></RouterLink>
     <section
       class="account-tools"
       aria-labelledby="account-tools-title"

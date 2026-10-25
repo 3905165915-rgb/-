@@ -14,7 +14,7 @@ import {
   type ImpressionPoint,
 } from '../impressions'
 
-const props = defineProps<{ elderId: string }>()
+const props = defineProps<{ elderId: string; reportId?: string; pointId?: string }>()
 const report = ref<ElderImpression | null>(null)
 const history = ref<ImpressionList['history']>([])
 const latestId = ref('')
@@ -133,10 +133,14 @@ async function run(action: () => Promise<void>) {
 }
 async function load() {
   const elder = props.elderId
+  const reportId = props.reportId, ticket = epoch
   await run(async () => {
     const result = await listImpressions(elder)
-    if (props.elderId !== elder) return
-    report.value = result.latest
+    if (ticket !== epoch) return
+    const requested = reportId && result.latest?.id !== reportId ? await getImpression(elder, reportId) : result.latest
+    if (ticket !== epoch) return
+    if (reportId && requested?.id !== reportId) throw new Error('关联印象版本不匹配，请刷新后核实。')
+    report.value = requested
     history.value = result.history
     latestId.value = result.latest?.id || ''
   })
@@ -193,7 +197,7 @@ async function review(
   })
 }
 watch(
-  () => props.elderId,
+  () => [props.elderId, props.reportId],
   () => {
     epoch++
     report.value = null
@@ -311,8 +315,9 @@ watch(
             v-for="point in group.points"
             :key="point.id"
             class="impression-point"
-            :class="{ rejected: point.status === 'rejected' }"
+            :class="{ rejected: point.status === 'rejected', 'linked-point': point.id === pointId }"
           >
+            <p v-if="point.id === pointId" role="status">当前关联的印象事项</p>
             <div class="impression-tags">
               <span
                 :class="{ 'impression-warning': point.kind === 'conflict' }"
@@ -572,6 +577,7 @@ blockquote {
   gap: 9px;
   margin-top: 12px;
 }
+.linked-point { outline: 2px solid var(--hl-primary, #1767cf); outline-offset: 2px; }
 .impression-review label { display: grid; gap: 6px; min-width: 0; }
 .impression-review fieldset { min-width: 0; border: 1px solid #c7d9cf; border-radius: 9px; }
 .impression-review .impression-scene { display: inline-flex; align-items: center; gap: 5px; margin: 5px 10px 5px 0; }

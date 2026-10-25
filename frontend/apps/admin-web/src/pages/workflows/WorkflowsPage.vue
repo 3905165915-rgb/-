@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import WorkflowPanel from '@hulao/shared/workflow'
+import CareSafety from '@hulao/shared/care-safety'
 const route = useRoute()
 const group = computed(() => String(route.params.group || 'records'))
 const titles: Record<string, string> = {
@@ -17,14 +18,15 @@ const titles: Record<string, string> = {
   memories: '个性化照护记忆',
   changes: '来源变更核验',
   family: '家属授权与沟通',
-  incidents: '不良事件与整改',
+  incidents: '照护安全与事件上报',
   reports: '运营指标与证据导出',
   staff: '员工账号与责任清单',
 }
 </script>
 <template>
   <section>
-    <h1>{{ titles[group] || '业务办理' }}</h1>
-    <WorkflowPanel :key="group" :group="group" :context="route.query" />
+    <CareSafety v-if="group === 'incidents'" :context="route.query" record-path="/workflows/records" :report="route.query.report === '1'" />
+    <template v-else><h1>{{ titles[group] || '业务办理' }}</h1>
+    <WorkflowPanel :key="group" :group="group" :context="route.query" :initial-action="typeof route.query.action === 'string' ? route.query.action : ''" :auto-read="route.query.read === '1'" /></template>
   </section>
 </template>

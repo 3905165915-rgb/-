@@ -6,6 +6,8 @@ import {
   operations,
   schemas,
   request,
+  requestBinary,
+  requestBlob,
   requestBody,
   type Operation,
 } from './model'
@@ -147,6 +149,46 @@ describe('business form contracts', () => {
       JSON.stringify({ detail: 'quality_scope_mismatch' }), { status: 422 },
     )))
     await expect(request('/quality/checks', 'post', {})).rejects.toThrow('所选班次必须是该交班单的交出班次')
+  })
+  it('uploads bounded image bytes with the authenticated binary contract and fetches private content as a blob', async () => {
+    const uploadResponse = new Response(JSON.stringify({ id: 'PHOTO-1', status: 'pending_review' }), { status: 201 })
+    const contentResponse = new Response(new Blob(['synthetic-image'], { type: 'image/jpeg' }), { status: 200 })
+    const fetcher = vi.fn().mockResolvedValueOnce(uploadResponse).mockResolvedValueOnce(contentResponse)
+    vi.stubGlobal('fetch', fetcher)
+    const file = new Blob(['synthetic-image'], { type: 'image/jpeg' })
+    await requestBinary('/attachments?elder_id=E1', file, 'image/jpeg', 'upload-1')
+    const [url, init] = fetcher.mock.calls[0]
+    expect(url).toContain('/api/v1/attachments?elder_id=E1')
+    expect(init.headers).toMatchObject({
+      Authorization: 'Bearer synthetic-token',
+      'Content-Type': 'image/jpeg',
+      'Idempotency-Key': 'upload-1',
+    })
+    expect(init.body).toBe(file)
+    const blob = await requestBlob('/attachments/PHOTO-1/content')
+    expect(blob.size).toBeGreaterThan(0)
+    expect(fetcher.mock.calls[1][1].headers.Authorization).toBe('Bearer synthetic-token')
+  })
+  it('rejects oversized images before sending and keeps the server idempotency error actionable', async () => {
+    const fetcher = vi.fn()
+    vi.stubGlobal('fetch', fetcher)
+    await expect(requestBinary('/attachments', new Blob([new Uint8Array(4 * 1024 * 1024 + 1)]), 'image/jpeg', 'large'))
+      .rejects.toThrow('不能超过4MiB')
+    expect(fetcher).not.toHaveBeenCalled()
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ safe_message: '照片已发生变化' }), { status: 409 })))
+    await expect(requestBlob('/attachments/PHOTO-1/content')).rejects.toThrow('照片已发生变化')
+  })
+  it.each(['json', 'blob'])('does not clear a newer login when an old %s request returns 401', async kind => {
+    let active = { mode: 'api', accountKey: 'old', role: 'caregiver', accessToken: 'synthetic-old' }
+    const removeItem = vi.fn()
+    vi.stubGlobal('sessionStorage', { getItem: () => JSON.stringify(active), removeItem })
+    let finish!: (response: Response) => void
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(resolve => { finish = resolve })))
+    const pending = kind === 'json' ? request('/notifications') : requestBlob('/attachments/P1/content')
+    active = { ...active, accountKey: 'new', accessToken: 'synthetic-new' }
+    finish(new Response(JSON.stringify({ detail: 'expired synthetic session' }), { status: 401 }))
+    await expect(pending).rejects.toThrow()
+    expect(removeItem).not.toHaveBeenCalled()
   })
 })
 describe('cloud audio format', () => {

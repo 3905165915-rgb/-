@@ -2,6 +2,9 @@
   "name": "@hulao/shared",
   "private": true,
   "type": "module",
+  "dependencies": {
+    "lucide-vue-next": "0.468.0"
+  },
   "peerDependencies": {
     "vue": "^3.5.0",
     "vue-router": "^4.0.0"
@@ -15,6 +18,8 @@
     "./workflow": "./src/workflow/WorkflowPanel.vue",
     "./workflow-journals": "./src/workflow/WorkflowJournals.vue",
     "./task-care-context": "./src/workflow/TaskCareContext.vue",
-    "./elder-impression": "./src/workflow/ElderImpression.vue"
+    "./elder-impression": "./src/workflow/ElderImpression.vue",
+    "./care-safety": "./src/workflow/CareSafety.vue",
+    "./pending-work": "./src/workflow/PendingWork.vue"
   }
 }

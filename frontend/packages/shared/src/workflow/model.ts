@@ -1,5 +1,6 @@
 import contract from './contract.json'
 import { clearSession, readSession, type Role } from '../session'
+import { sameCareSession } from './task-care-context'
 
 export type Row = Record<string, unknown>
 export interface Schema {
@@ -86,6 +87,7 @@ export const labels: Record<string, string> = {
   due_text: '原文时间表达',
   condition: '执行前提条件',
   result: '完成结果',
+  source_type: '任务来源类型',
   note: '说明',
   happened_at: '实际发生时间',
   created_at: '录入时间',
@@ -203,7 +205,7 @@ export const labels: Record<string, string> = {
   summary_id: '家属简报',
   feedback_id: '家属问题单',
   reply: '经核实的回复',
-  incident_id: '不良事件',
+  incident_id: '照护安全事件',
   rectification_id: '整改事项',
   occurred_at: '事件发生时间',
   description: '事件描述',
@@ -354,6 +356,20 @@ export const valueLabels: Record<string, string> = {
   review_required: '待复核',
   retired: '已停用',
   request_review: '要求重新核实',
+  manual: '人工安排',
+  suspend: '暂停使用',
+  suspended: '已暂停',
+  resume: '恢复使用',
+  keep: '复核后维持',
+  memory_confirm: '人工确认记忆',
+  memory_keep: '复核后维持',
+  memory_suspend: '暂停使用',
+  memory_resume: '恢复使用',
+  revise_memory: '人工修订',
+  memory_source_changed: '来源变更待复核',
+  memory_request_review: '要求复核',
+  memory_reject: '驳回',
+  memory_retire: '停用',
   raw_text: '原始文本',
   observations: '已核对观察',
   met: '条件满足',
@@ -371,6 +387,8 @@ export const valueLabels: Record<string, string> = {
   accept: '复查通过',
   assigned: '已指派',
   awaiting_review: '等待独立复查',
+  reported: '待人工分级',
+  rectifying: '整改中',
   reference_withdrawn: '旧依据已撤回',
   reference_replaced: '已明确替换依据',
   task_terminal: '原任务已结束',
@@ -607,7 +625,7 @@ export async function request(
     )
     const data = await res.json().catch(() => null)
     if (!res.ok) {
-      if (res.status === 401) {
+      if (res.status === 401 && sameCareSession(readSession(), current)) {
         clearSession()
         window.dispatchEvent(new Event('hulao:unauthorized'))
       }
@@ -637,6 +655,11 @@ export async function request(
         shift_closed:
           '该班次已完成交班，请选择开放班次；跨班任务需先完成接班。',
         assignee_not_in_shift: '所选负责人不在该班次中，请核对班次成员。',
+        task_source_revision_changed: '来源记录版本已变化，请刷新并核对来源后重新安排。',
+        task_source_elder_mismatch: '来源记录与任务老人不匹配，请重新选择。',
+        task_source_not_confirmed: '来源记录未确认或已撤销，不能用于安排任务。',
+        task_source_admission_changed: '来源记录属于其他入住阶段，请核对当前入住关系。',
+        due_at_must_be_future: '截止时间必须晚于当前时间，请重新填写。',
         task_assigned_to_another_caregiver:
           '该任务由其他护理员负责，请由主管核对或转交。',
         draft_already_confirmed_refresh_record:
@@ -667,6 +690,71 @@ export async function request(
     clearTimeout(timeout)
   }
 }
+
+async function authorizedRequest<T>(path: string, init: NonNullable<Parameters<typeof fetch>[1]>, consume: (response: Response) => Promise<T>, timeoutMs = 90000): Promise<T> {
+  const current = readSession()
+  if (!current?.accessToken || current.mode !== 'api')
+    throw new Error('请使用服务器测试账号登录')
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const response = await fetch(
+      (import.meta.env.VITE_API_BASE_URL || '/api/v1').replace(/\/$/, '') + path,
+      {
+        ...init,
+        signal: controller.signal,
+        cache: 'no-store',
+        headers: {
+          Authorization: 'Bearer ' + current.accessToken,
+          ...init.headers,
+        },
+      },
+    )
+    if (response.status === 401 && sameCareSession(readSession(), current)) {
+      clearSession()
+      window.dispatchEvent(new Event('hulao:unauthorized'))
+    }
+    if (!response.ok) {
+      const data = await response.clone().json().catch(() => null)
+      const message = typeof data?.safe_message === 'string'
+        ? data.safe_message
+        : typeof data?.detail === 'string' ? data.detail : '请求未完成，请核对后重试。'
+      throw new WorkflowRequestError(response.status, `${response.status === 409 ? '资料或状态已变化，请刷新后核对。' : ''}${message}`)
+    }
+    return await consume(response)
+  } catch (error) {
+    if (error instanceof WorkflowRequestError) throw error
+    throw new WorkflowRequestError(0, '网络请求未能确认结果，请检查连接后使用同一请求编号重试。')
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+export async function requestBinary(
+  path: string,
+  file: Blob,
+  contentType: 'image/jpeg' | 'image/png',
+  key: string,
+  timeoutMs = 90000,
+): Promise<unknown> {
+  if (file.size < 1 || file.size > 4 * 1024 * 1024)
+    throw new WorkflowRequestError(413, '照片不能为空且不能超过4MiB。')
+  const value = await authorizedRequest(path, {
+    method: 'POST',
+    headers: { 'Content-Type': contentType, 'Idempotency-Key': key },
+    body: file,
+  }, response => response.json().catch(() => null), timeoutMs)
+  if (!value || typeof value !== 'object' || typeof value.id !== 'string')
+    throw new WorkflowRequestError(502, '照片上传结果格式异常，请核实当前状态后再重试。')
+  return value
+}
+
+export async function requestBlob(path: string, timeoutMs = 30000): Promise<Blob> {
+  const value = await authorizedRequest(path, { method: 'GET' }, response => response.blob(), timeoutMs)
+  if (!value.size) throw new WorkflowRequestError(502, '照片内容为空，未能生成预览。')
+  return value
+}
+
 export class WorkflowRequestError extends Error {
   constructor(
     readonly status: number,

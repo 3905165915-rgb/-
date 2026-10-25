@@ -32,6 +32,7 @@ async function setup(role = 'caregiver') {
       writes.push({ path, key: req.headers()['idempotency-key'], body: req.postDataJSON() })
       if (path.includes('/reports/elders/') && state.failExport) return route.abort('failed')
       if (path === '/quality/checks') return json({ id: 'QC-test', issues: [], scope: req.postDataJSON() }, 201)
+      if (path === '/tasks') return json({ ...state.task, ...req.postDataJSON() }, 201)
       if (path === '/records/manual') {
         if (state.failManual) { state.failManual = false; return route.abort('failed') }
         return json({ record: { ...record, raw_text: req.postDataJSON().raw_text }, tasks: [state.task] }, 201)
@@ -91,21 +92,24 @@ async function test(name, fn, role = 'caregiver') {
 try {
   await test('新建任务：最后输入刷新恢复、人工字段与来源、单次提交和回执恢复', async ({ page, writes }) => {
     await page.goto(base + '/mobile/tasks/new?elder=ELDER-test')
-    await field(page, 'raw_text').fill('虚构：老人希望下午沟通，最后输入')
+    await field(page, 'condition').fill('虚构：本人愿意沟通，最后输入')
     await page.reload()
-    await field(page, 'raw_text').waitFor()
-    assert.equal(await field(page, 'raw_text').inputValue(), '虚构：老人希望下午沟通，最后输入')
+    await field(page, 'condition').waitFor()
+    assert.equal(await field(page, 'condition').inputValue(), '虚构：本人愿意沟通，最后输入')
+    await field(page, 'shift_id').selectOption(shift.id)
     await field(page, 'title').fill('虚构回访任务')
     await field(page, 'assigned_to').selectOption('USER-test')
-    await field(page, 'due_at').fill('2026-10-24T14:00')
+    await field(page, 'due_at').fill('2099-10-24T14:00')
     await field(page, 'completion_criteria').fill('虚构：回访并记录本人反馈')
     await submit(page)
-    await page.getByText(/^(已保存，服务器已确认成功。|记录已保存，本次未创建任务。)$/).waitFor()
+    await page.getByText('任务已创建，服务器已确认；请在任务列表继续核验执行条件。', { exact: true }).waitFor()
     assert.equal(writes.length, 1)
-    assert.equal(writes[0].path, '/records/manual')
+    assert.equal(writes[0].path, '/tasks')
     assert.equal(writes[0].body.elder_id, elder.id)
-    assert.equal(writes[0].body.task_candidates.length, 1)
-    assert.match(writes[0].body.raw_text, /【完成标准】虚构：回访并记录本人反馈/)
+    assert.equal(writes[0].body.completion_criteria, '虚构：回访并记录本人反馈')
+    assert.equal(writes[0].body.condition, '虚构：本人愿意沟通，最后输入')
+    assert.equal(writes[0].body.source_type, 'manual')
+    assert.equal(writes[0].body.raw_text, undefined)
     assert.ok(writes[0].key)
     await page.reload()
     assert.equal(await page.getByRole('button', { name: '本次操作已完成', exact: true }).isDisabled(), true)
@@ -123,7 +127,7 @@ try {
     assert.equal(await field(page, 'raw_text').isDisabled(), true)
     await page.getByRole('button', { name: '使用原请求核实结果', exact: true }).click()
     await page.getByRole('button', { name: '使用原请求核实结果', exact: true }).click()
-    await page.getByText(/^(已保存，服务器已确认成功。|记录已保存，本次未创建任务。)$/).waitFor()
+    await page.getByText('记录已保存，同时创建了1项任务。可在任务列表按老人查看。', { exact: true }).waitFor()
     assert.equal(writes.length, 2)
     assert.equal(writes[0].key, writes[1].key)
     assert.deepEqual(writes[0].body, writes[1].body)
@@ -239,11 +243,11 @@ try {
     assert.equal(await page.evaluate(() => Object.values(localStorage).some(value => value.includes('legacy-request'))), true)
   })
   await test('多窗口统计查询：不创建共享草稿，不阻塞刷新，保留导出编辑稿', async ({ page, context, writes }) => {
-    await page.goto(base + '/admin/dashboard')
+    await page.goto(base + '/admin/workflows/reports?action=%2Freports%2Fmetrics&read=1&start=2026-10-25&end=2026-10-26')
     await page.getByText('统计刷新成功', { exact: true }).waitFor()
     assert.equal(await page.evaluate(() => Object.keys(localStorage).filter(k => k.startsWith('hulao:workflow:v2:')).length), 0)
     const other = await context.newPage()
-    await other.goto(base + '/admin/dashboard')
+    await other.goto(base + '/admin/workflows/reports?action=%2Freports%2Fmetrics&read=1&start=2026-10-25&end=2026-10-26')
     await other.getByText('统计刷新成功', { exact: true }).waitFor()
     await navigateMenu(page, '证据导出')
     await field(page, 'reason').fill('保留本窗口导出原因')
@@ -262,26 +266,26 @@ try {
     assert.equal(writes.length, 0)
   }, 'admin')
   await test('旧统计草稿与存储事件：查询不报冲突也不覆盖旧日志', async ({ page, context }) => {
-    await page.goto(base + '/admin/dashboard')
+    await page.goto(base + '/admin/workflows/reports?action=%2Freports%2Fmetrics&read=1&start=2026-10-25&end=2026-10-26')
     await page.getByText('统计刷新成功', { exact: true }).waitFor()
     const key = await page.evaluate(() => {
       const start = document.querySelector('[data-field="start"] input').value
       const end = document.querySelector('[data-field="end"] input').value
-      const key = 'hulao:workflow:v2:' + JSON.stringify(['isolated-admin', 'reports', { end, start }])
+      const key = 'hulao:workflow:v2:' + JSON.stringify(['isolated-admin', 'reports', { action: '/reports/metrics', end, read: '1', start }])
       localStorage.setItem(key, JSON.stringify({ version: 8, operation: 'metrics_api_v1_reports_metrics_get', params: { start, end }, body: {}, phase: 'editing', updatedAt: new Date().toISOString() }))
       return key
     })
     await page.reload()
     await page.getByText('统计刷新成功', { exact: true }).waitFor()
     const other = await context.newPage()
-    await other.goto(base + '/admin/dashboard')
+    await other.goto(base + '/admin/workflows/reports?action=%2Freports%2Fmetrics&read=1&start=2026-10-25&end=2026-10-26')
     await other.evaluate(key => { const value = JSON.parse(localStorage.getItem(key)); value.version++; localStorage.setItem(key, JSON.stringify(value)) }, key)
     await page.getByRole('button', { name: '读取当前数据', exact: true }).click()
     assert.equal(await page.getByText(/其他窗口已修改此表单|本机保存未完成/).count(), 0)
     assert.equal(await page.evaluate(key => JSON.parse(localStorage.getItem(key)).version, key), 9)
   }, 'admin')
   await test('未核实的写入：切换到查询和刷新仍无法绕过保护', async ({ page, writes, state }) => {
-    await page.goto(base + '/admin/dashboard')
+    await page.goto(base + '/admin/workflows/reports?action=%2Freports%2Fmetrics&read=1&start=2026-10-25&end=2026-10-26')
     await navigateMenu(page, '证据导出')
     await page.locator('[data-field="elder_id"] select').selectOption(elder.id)
     await field(page, 'reason').fill('虚构导出验证')
@@ -313,7 +317,7 @@ try {
     for (const width of [320, 375, 390, 768, 1366]) {
       await page.setViewportSize({ width, height: 900 })
       await page.goto(base + '/mobile/tasks/new?elder=ELDER-test')
-      await field(page, 'raw_text').waitFor()
+      await field(page, 'title').waitFor()
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false, `mobile ${width}`)
       await page.screenshot({ path: resolve(output, `mobile-${width}.png`), fullPage: true })
     }
@@ -322,7 +326,7 @@ try {
     for (const width of [768, 1366]) {
       await page.setViewportSize({ width, height: 900 })
       await page.goto(base + '/admin/tasks?create=1&elder=ELDER-test')
-      await field(page, 'raw_text').waitFor()
+      await field(page, 'title').waitFor()
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false, `admin ${width}`)
       await page.screenshot({ path: resolve(output, `admin-${width}.png`), fullPage: true })
     }

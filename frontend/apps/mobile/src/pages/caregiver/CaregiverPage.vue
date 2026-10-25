@@ -8,49 +8,51 @@ import {
   SlidersHorizontal,
   X,
   Plus,
+  ShieldAlert,
 } from 'lucide-vue-next'
 import { resolveStatus, taskStatusMeta } from '@hulao/shared'
-import { useTasks, useElders } from '../../services/data'
+import { mode, useCareWorklist, useTasks, useElders } from '../../services/data'
 import {
   useTaskFilters,
   taskStatusLabels,
 } from '../../composables/useTaskFilters'
 import FeedbackState from '../../components/FeedbackState.vue'
+import { elderWorkbench } from './elder-workbench'
 const tasks = useTasks()
 const elders = useElders()
+const worklist = useCareWorklist()
 const { filters, filtered, shifts, assignees, sync, reset } = useTaskFilters(
   () => tasks.data.value ?? [],
   () => elders.data.value ?? [],
 )
 const filterOpen = ref(false)
 const limit = ref(30)
+const elderLimit = ref(12)
+const elderCards = computed(() => {
+  if (!ready.value) return []
+  if (mode === 'demo') return elderWorkbench(elders.data.value ?? [], tasks.data.value ?? []).map(card => ({ ...card, scopeReasons: [] as string[] }))
+  const byId = new Map((elders.data.value ?? []).map(elder => [elder.id, elder]))
+  return (worklist.data.value?.items ?? []).map(item => ({
+    elder: byId.get(item.elder.id) ?? { id: item.elder.id, name: item.elder.name, bedLabel: '床位信息未提供', status: item.elder.status, notes: undefined, lastUpdate: undefined },
+    tasks: item.open_tasks.map(task => ({ id: task.id, title: task.title, status: task.status })),
+    pending: item.pending_count,
+    inProgress: item.open_tasks.filter(task => task.status === 'in_progress').length,
+    overdue: item.overdue_count,
+    scopeReasons: item.scope_reasons,
+  }))
+})
+const scopeReasonLabels: Record<string, string> = {
+  explicit_assignment: '明确分配', temporary_support: '临时支援',
+  explicit_task_assignment: '明确任务分配', open_shift_membership: '开放班次待办',
+  management_access: '管理范围',
+}
 const visible = computed(() => filtered.value.slice(0, limit.value))
-const pending = computed(() => tasks.isPending.value || elders.isPending.value)
-const queryError = computed(() => tasks.error.value || elders.error.value)
+const pending = computed(() => tasks.isPending.value || elders.isPending.value || (mode === 'api' && worklist.isPending.value))
+const queryError = computed(() => tasks.error.value || elders.error.value || (mode === 'api' ? worklist.error.value : null))
 const ready = computed(() => !pending.value && !queryError.value)
 const elderMap = computed(
   () => new Map(elders.data.value?.map((elder) => [elder.id, elder])),
 )
-const elderWorkload = computed(() => {
-  const grouped = new Map<string, typeof tasks.data.value>()
-  for (const task of tasks.data.value ?? []) {
-    if (!task.elderId) continue
-    const rows = grouped.get(task.elderId) ?? []
-    rows.push(task)
-    grouped.set(task.elderId, rows)
-  }
-  return [...grouped.entries()]
-    .map(([elderId, rows]) => ({
-      elder: elderMap.value.get(elderId),
-      rows: rows ?? [],
-      pending: (rows ?? []).filter(
-        (task) => !['completed', 'not_done', 'cancelled'].includes(task.status),
-      ).length,
-      overdue: (rows ?? []).filter((task) => task.status === 'overdue').length,
-    }))
-    .filter((item) => item.elder)
-    .sort((a, b) => b.pending - a.pending)
-})
 const statistics = computed(() => {
   const rows = tasks.data.value ?? []
   return {
@@ -82,6 +84,7 @@ function setStatus(tab: { name: string | number }) {
 function refresh() {
   void tasks.refetch()
   void elders.refetch()
+  if (mode === 'api') void worklist.refetch()
 }
 watch(filtered, () => {
   limit.value = 30
@@ -92,7 +95,7 @@ watch(filtered, () => {
     <div class="workbench-heading surface-band">
       <div class="page-title-row">
         <h1>护理工作台</h1>
-        <RouterLink to="/records/new" class="task-create-link"><Plus :size="18" aria-hidden="true" />记一条</RouterLink>
+        <RouterLink to="/tasks/new" class="task-create-link"><Plus :size="18" aria-hidden="true" />新建任务</RouterLink>
         <button
           type="button"
           class="icon-button"
@@ -110,7 +113,13 @@ watch(filtered, () => {
           />
         </button>
       </div>
-      <p class="workbench-intro">先找到老人，再查看今天需要接续的照护事项。</p>
+      <RouterLink
+        :to="{ path: '/safety', query: { report: '1' } }"
+        class="workbench-safety-link"
+      >
+        <ShieldAlert :size="18" aria-hidden="true" />照护安全与事件上报
+        <ChevronRight :size="18" aria-hidden="true" />
+      </RouterLink>
       <p class="scope-label">
         已载入任务统计
       </p>
@@ -131,34 +140,41 @@ watch(filtered, () => {
           <dt>已完成</dt>
         </div>
       </dl>
-      <section class="elder-workload" aria-labelledby="elder-workload-title">
-        <div class="section-heading">
-          <div>
-            <h2 id="elder-workload-title">任务关联老人</h2>
-            <p>按当前已载入任务整理，点开老人可查看照护提示和相关任务。</p>
-          </div>
-          <RouterLink to="/elders" class="all-elders-link">全部老人</RouterLink>
-        </div>
-        <div v-if="ready && elderWorkload.length" class="elder-workload-list">
-          <RouterLink
-            v-for="item in elderWorkload"
-            :key="item.elder!.id"
-            :to="'/elders/' + encodeURIComponent(item.elder!.id)"
-            class="elder-workload-card"
-          >
-            <span class="elder-avatar" aria-hidden="true">{{ item.elder!.name.slice(0, 1) }}</span>
-            <span class="elder-workload-copy">
-              <strong>{{ item.elder!.name }}</strong>
-              <small>{{ item.elder!.bedLabel || '床位未提供' }} · {{ item.rows.length }}项关联任务</small>
-            </span>
-            <span class="elder-workload-counts">
-              <b>{{ item.pending }}</b><small>待处理</small>
-              <em v-if="item.overdue">逾期 {{ item.overdue }}</em>
-            </span>
-            <ChevronRight :size="18" aria-hidden="true" />
-          </RouterLink>
-        </div>
-        <p v-else-if="ready" class="elder-workload-empty">暂时没有关联任务的老人，可从“老人”查看档案。</p>
+      <section class="elder-workbench" aria-labelledby="workbench-elders-title">
+        <h2 id="workbench-elders-title">先看老人</h2>
+        <p class="scope-label">{{ mode === 'api' ? (worklist.data.value?.scope_rule || '照护范围由服务器核定。') : '本地演示范围；不代表固定责任分配。' }} 任务筛选仅影响下方列表。</p>
+        <FeedbackState :loading="pending" :error="queryError"
+          :empty="ready && !elderCards.length" :empty-text="mode === 'api' ? '当前没有授权照护的老人，请联系主管安排照护范围。' : '暂无已载入任务关联的老人'"
+          @retry="refresh" />
+        <ul v-if="ready && elderCards.length" class="elder-card-list" aria-label="任务关联老人">
+          <li v-for="card in elderCards.slice(0, elderLimit)" :key="card.elder.id" class="elder-work-card">
+            <RouterLink :to="'/elders/' + encodeURIComponent(card.elder.id)" class="elder-card-title">
+              <strong>{{ card.elder.name || '姓名未提供' }}</strong>
+              <span>{{ card.elder.bedLabel || '床位未提供' }}</span>
+              <ChevronRight :size="18" aria-hidden="true" />
+            </RouterLink>
+            <p class="elder-card-counts">
+              待处理 {{ card.pending }} · 进行中 {{ card.inProgress }} · <span :class="{ 'elder-card-overdue': card.overdue }">已逾期 {{ card.overdue }}</span>
+            </p>
+            <p v-if="card.scopeReasons.length" class="scope-label">范围依据：{{ card.scopeReasons.map(reason => scopeReasonLabels[reason] || '其他授权范围').join('、') }}</p>
+            <p v-if="card.elder.notes?.trim()" class="elder-card-note">档案注意事项：{{ card.elder.notes }}</p>
+            <p v-if="card.elder.lastUpdate?.trim()" class="scope-label">档案最近更新：{{ card.elder.lastUpdate }}</p>
+            <ul class="elder-card-tasks" aria-label="关联任务预览">
+              <li v-for="task in card.tasks.slice(0, 2)" :key="task.id">
+                <RouterLink :to="'/tasks/' + encodeURIComponent(task.id)">
+                  {{ task.title }} · {{ taskStatusLabels[task.status] || '未知状态' }}
+                </RouterLink>
+              </li>
+            </ul>
+            <nav class="elder-card-actions" :aria-label="card.elder.name + '的快捷操作'">
+              <RouterLink :to="{ path: '/records/new', query: { elder: card.elder.id } }">记一条</RouterLink>
+              <RouterLink :to="{ path: '/tasks/new', query: { elder: card.elder.id } }">新建任务</RouterLink>
+              <RouterLink :to="{ path: '/caregiver', query: { elder: card.elder.id } }">相关任务 {{ card.tasks.length }}</RouterLink>
+              <RouterLink :to="'/elders/' + encodeURIComponent(card.elder.id)">档案与动态</RouterLink>
+            </nav>
+          </li>
+        </ul>
+        <button v-if="ready && elderCards.length > elderLimit" type="button" class="text-button" @click="elderLimit += 12">显示更多老人</button>
       </section>
       <div class="search-tools">
         <van-search
@@ -396,23 +412,25 @@ watch(filtered, () => {
   </section>
 </template>
 <style scoped>
-.task-create-link { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; padding: 0 12px; font-size: 14px; color: #1767cf; white-space: nowrap; background: #edf4ff; border-radius: 999px; }
-.workbench-intro { margin: 8px 0 18px; color: var(--hl-muted); font-size: 14px; }
-.elder-workload { padding: 16px 0 20px; }
-.section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
-.section-heading h2 { margin: 0; font-size: 17px; }
-.section-heading p { margin: 3px 0 0; color: var(--hl-muted); font-size: 12px; }
-.all-elders-link { flex-shrink: 0; font-size: 14px; }
-.elder-workload-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr)); gap: 10px; }
-.elder-workload-card { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 12px; color: var(--hl-ink); background: color-mix(in srgb, var(--hl-surface, #fff) 88%, #e9f2ff); border: 1px solid var(--hl-border); border-radius: 14px; box-shadow: 0 5px 16px #1d3f5e0a; }
-.elder-workload-card:hover { border-color: color-mix(in srgb, var(--hl-primary) 42%, var(--hl-border)); transform: translateY(-1px); }
-.elder-avatar { display: grid; place-items: center; width: 42px; height: 42px; flex: 0 0 42px; color: #1767cf; font-weight: 700; background: #e5efff; border-radius: 14px; }
-.elder-workload-copy { display: grid; flex: 1; min-width: 0; gap: 3px; }
-.elder-workload-copy strong { font-size: 15px; }
-.elder-workload-copy small, .elder-workload-counts small { color: var(--hl-muted); font-size: 12px; }
-.elder-workload-counts { display: grid; justify-items: center; line-height: 1.2; }
-.elder-workload-counts b { color: var(--hl-primary); font-size: 20px; }
-.elder-workload-counts em { margin-top: 4px; color: var(--hl-danger); font-size: 11px; font-style: normal; white-space: nowrap; }
-.elder-workload-empty { padding: 12px; color: var(--hl-muted); background: #ffffffa6; border-radius: 12px; }
-@media (max-width: 420px) { .elder-workload-card { gap: 8px; padding: 10px; } .elder-workload-counts { min-width: 45px; } }
+.task-create-link { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; font-size: 14px; color: #1767cf; white-space: nowrap; }
+.workbench-safety-link { display: flex; align-items: center; gap: 8px; min-height: 44px; color: var(--hl-primary); }
+.workbench-safety-link svg:last-child { margin-left: auto; }
+.elder-workbench { margin: 20px 0; }
+.elder-workbench h2 { margin-bottom: 6px; font-size: 18px; }
+.elder-card-list, .elder-card-tasks { list-style: none; margin: 0; padding: 0; }
+.elder-card-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+.elder-work-card { border: 1px solid var(--hl-border); border-radius: 12px; padding: 12px; background: var(--hl-surface, #fff); color: var(--hl-ink); overflow-wrap: anywhere; }
+.elder-card-title { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-height: 44px; color: var(--hl-ink); }
+.elder-card-title strong { font-size: 18px; }
+.elder-card-title svg { margin-left: auto; }
+.elder-card-title span, .elder-card-counts { font-size: 14px; }
+.elder-card-overdue { color: #a52a32; font-weight: 600; }
+.elder-card-note { white-space: pre-wrap; line-height: 1.6; }
+.elder-card-actions { display: flex; flex-wrap: wrap; gap: 4px 16px; border-top: 1px solid var(--hl-border); }
+.elder-card-actions a, .elder-card-tasks a { display: inline-flex; align-items: center; min-height: 44px; color: var(--hl-primary); }
+.elder-workbench a:focus-visible { outline: 3px solid var(--hl-primary); outline-offset: 2px; }
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .elder-work-card { transition: box-shadow 120ms ease; }
+  .elder-work-card:hover { box-shadow: 0 2px 8px rgb(23 44 69 / 10%); }
+}
 </style>

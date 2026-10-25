@@ -2082,7 +2082,7 @@
           },
           "type": "array",
           "maxItems": 10,
-          "minItems": 1,
+          "minItems": 0,
           "title": "Evidence"
         }
       },
@@ -2093,8 +2093,7 @@
         "admission_id",
         "occurred_at",
         "description",
-        "immediate_action",
-        "evidence"
+        "immediate_action"
       ],
       "title": "IncidentCreate"
     },
@@ -2598,6 +2597,7 @@
             "candidate",
             "confirmed",
             "review_required",
+            "suspended",
             "rejected",
             "retired"
           ],
@@ -2729,7 +2729,15 @@
       "properties": {
         "action": {
           "type": "string",
-          "enum": ["confirm", "request_review", "reject", "retire"],
+          "enum": [
+            "confirm",
+            "request_review",
+            "reject",
+            "retire",
+            "keep",
+            "suspend",
+            "resume"
+          ],
           "title": "Action"
         },
         "expected_revision": {
@@ -3260,7 +3268,15 @@
     "RecordConfirmRequest": {
       "properties": {
         "expected_revision": {
-          "anyOf": [{ "type": "integer", "minimum": 1 }, { "type": "null" }],
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1
+            },
+            {
+              "type": "null"
+            }
+          ],
           "default": null
         },
         "observations": {
@@ -4282,6 +4298,101 @@
       "type": "object",
       "required": ["loc", "msg", "type"],
       "title": "ValidationError"
+    },
+    "TaskCreateRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "elder_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "shift_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "assigned_to": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "due_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "completion_criteria": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "condition": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 0,
+              "maxLength": 1000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "due_text": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 0,
+              "maxLength": 500
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "source_type": {
+          "type": "string",
+          "enum": ["manual", "record"],
+          "default": "manual"
+        },
+        "source_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "source_revision": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "elder_id",
+        "title",
+        "shift_id",
+        "assigned_to",
+        "due_at",
+        "completion_criteria"
+      ]
     }
   },
   "operations": [
@@ -6831,6 +6942,19 @@
       ],
       "paginated": false,
       "schema": null
+    },
+    {
+      "id": "create_api_v1_tasks_post",
+      "group": "tasks",
+      "title": "新建照护任务",
+      "path": "/tasks",
+      "method": "post",
+      "roles": ["admin", "supervisor", "caregiver"],
+      "parameters": [],
+      "paginated": false,
+      "schema": {
+        "$ref": "#/components/schemas/TaskCreateRequest"
+      }
     }
   ]
 }

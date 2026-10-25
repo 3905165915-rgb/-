@@ -111,3 +111,22 @@
   outline: 2px solid var(--hl-primary);
   outline-offset: 3px;
 }
+
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .metric-card,
+  .elder-work-card {
+    transition: transform var(--hl-duration), box-shadow var(--hl-duration);
+  }
+  .metric-card:hover,
+  .elder-work-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgb(32 40 46 / 8%);
+  }
+}
+@media (hover: none) and (prefers-reduced-motion: no-preference) {
+  .task-row:active,
+  .elder-work-card:active,
+  .metric-card:active {
+    transform: scale(0.995);
+  }
+}

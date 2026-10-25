@@ -157,13 +157,16 @@ async function restoreDraft() {
 }
 </script>
 <template>
+  <section v-if="serverWorkflow">
+    <RouterLink :to="{ path: '/safety', query: { report: '1', elder: typeof route.query.elder === 'string' ? route.query.elder : '' } }" class="secondary-link">照护安全与事件上报</RouterLink>
   <WorkflowPanel
-    v-if="serverWorkflow"
     group="records"
-    title="记录"
-    :context="typeof route.query.elder === 'string' ? { elder_id: route.query.elder } : {}"
-    initial-action="/records/context-extract"
+    title="记一条"
+    :context="{ ...route.query, ...(typeof route.query.elder === 'string' ? { elder_id: route.query.elder } : {}) }"
+    :initial-action="typeof route.query.record_id === 'string' ? '/records/{record_id}' : typeof route.query.draft_id === 'string' ? '/records/drafts/{draft_id}' : '/records/context-extract'"
+    :auto-read="typeof route.query.record_id === 'string' || typeof route.query.draft_id === 'string'"
   />
+  </section>
   <section v-else class="record-page editor-page">
     <div class="page-title-row">
       <h1>快速记录</h1>

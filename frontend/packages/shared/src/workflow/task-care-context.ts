@@ -22,7 +22,9 @@ export interface TaskContext {
   assigned_to: string | null
   due_at: string | null
   condition: string | null
+  completion_criteria: string | null
   source_record_id: string | null
+  source_revision: number | null
   source_plan_id: string | null
   source_plan_revision: number | null
   plan_item_key: string | null
@@ -177,7 +179,9 @@ export function parseTaskContext(value: unknown, taskId: string): TaskContext {
     assigned_to: nullableText(row.assigned_to),
     due_at: nullableText(row.due_at),
     condition: nullableText(row.condition),
+    completion_criteria: nullableText(row.completion_criteria),
     source_record_id: nullableText(row.source_record_id),
+    source_revision: row.source_revision == null ? null : revision(row.source_revision),
     source_plan_id: nullableText(row.source_plan_id),
     source_plan_revision:
       row.source_plan_revision == null

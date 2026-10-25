@@ -22,6 +22,7 @@ export const navigation: NavigationItem[] = [
     group: '工作台',
     roles: internalRoles,
   },
+  { path: '/notifications', label: '待我处理', group: '工作台', roles: internalRoles },
   {
     path: '/elders',
     label: '老人档案',
@@ -96,7 +97,7 @@ export const navigation: NavigationItem[] = [
   },
   {
     path: '/workflows/incidents',
-    label: '不良事件与整改',
+    label: '照护安全与事件上报',
     group: '质量跟进',
     roles: internalRoles,
   },
