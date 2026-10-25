@@ -5,6 +5,7 @@ import {
   Activity,
   ArrowLeftRight,
   BedDouble,
+  Bell,
   ChevronDown,
   ChevronRight,
   ClipboardCheck,
@@ -75,6 +76,7 @@ const icons = {
   '/workflows/incidents': ShieldCheck,
   '/workflows/reports': LayoutDashboard,
   '/recovery': History,
+  '/notifications': Bell,
 }
 function changeTransparency(event: Event) {
   const value = (event.target as HTMLInputElement).checked
@@ -201,6 +203,7 @@ function leaveAccount(event: FocusEvent) {
           }}</strong>
         </div>
         <div class="header-actions">
+          <RouterLink v-if="auth.role && auth.role !== 'family'" to="/notifications" class="icon-button" title="待我处理" aria-label="待我处理"><Bell :size="20" aria-hidden="true" /></RouterLink>
           <span
             class="mode-label"
             :class="{ 'is-demo': mode === 'demo' }"

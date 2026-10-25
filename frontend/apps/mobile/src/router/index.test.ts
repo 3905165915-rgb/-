@@ -61,6 +61,8 @@ describe('mobile entry and session recovery', () => {
     '/account',
     '/account/recovery',
     '/handover',
+    '/safety',
+    '/notifications',
     '/403',
   ])('opens login for fresh %s', async (path) => {
     expect((await open(path)).currentRoute.value.path).toBe('/login')
@@ -80,6 +82,8 @@ describe('mobile entry and session recovery', () => {
         '/handover',
         '/tasks/test',
         '/timeline/test',
+        '/safety',
+        '/notifications',
       ]) {
         await router.push(path)
         expect(router.currentRoute.value.path).toBe(path)
@@ -105,6 +109,8 @@ describe('mobile entry and session recovery', () => {
       '/handover',
       '/tasks/test',
       '/timeline/test',
+      '/safety',
+      '/notifications',
     ]) {
       await router.push(path)
       expect(router.currentRoute.value.path).toBe('/403')

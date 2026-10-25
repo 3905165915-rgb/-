@@ -68,8 +68,9 @@ onBeforeRouteUpdate(() => (mode === 'api' ? true : leave()))
     v-if="serverWorkflow"
     group="handovers"
     title="交接班"
-    :context="{}"
-    initial-action="/handovers"
+    :context="route.query"
+    :initial-action="typeof route.query.handover_id === 'string' ? '/handovers/{handover_id}' : '/handovers'"
+    :auto-read="typeof route.query.handover_id === 'string'"
   />
   <section v-else class="handover-page editor-page">
     <h1>交接班</h1>

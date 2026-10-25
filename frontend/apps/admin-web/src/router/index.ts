@@ -38,6 +38,11 @@ const router = createRouter({
           meta: { roles: internalRoles },
         },
         {
+          path: 'notifications',
+          component: () => import('../pages/notifications/NotificationsPage.vue'),
+          meta: { roles: internalRoles },
+        },
+        {
           path: 'elders',
           component: () => import('../pages/elders/EldersPage.vue'),
           meta: { roles: internalRoles },

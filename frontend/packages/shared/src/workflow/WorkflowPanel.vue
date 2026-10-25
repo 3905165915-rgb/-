@@ -33,6 +33,8 @@ import RecordResults from './RecordResults.vue'
 import RecordTaskReview from './RecordTaskReview.vue'
 import { recordTaskOwners, reviewedRecordTasks, selectedRecordTasks, recordSavedMessage } from './record-tasks'
 import ServiceCareHints from './ServiceCareHints.vue'
+import TaskCreationContext from './TaskCreationContext.vue'
+import { careContextOptions, incidentEvidenceIssue, updateCareContext } from './care-context'
 import { submissionFeedback } from './submission-feedback'
 import {
   areaId,
@@ -151,6 +153,10 @@ const fieldOptions = computed(() => {
       const members = new Set(shift.caregiver_ids)
       options.assigned_to = (options.assigned_to || catalogs.value.staff || []).filter((staff) => members.has(staff.id))
     }
+  }
+  if (props.group === 'incidents') {
+    const incident = (catalogs.value.incidents || []).find(row => row.id === params.value.incident_id || (row.rectification as Row | undefined)?.id === params.value.rectification_id)
+    Object.assign(options, careContextOptions(body.value.elder_id || incident?.elder_id || selected.value.elder_id, catalogs.value))
   }
   return options
 })
@@ -294,6 +300,11 @@ const reviewElderName = computed(() => String((catalogs.value.elders || []).find
 const reviewOwners = computed(() => recordTaskOwners(catalogs.value, readSession(), reviewShiftId.value))
 const recordTaskCount = computed(() => selectedRecordTasks(body.value.task_candidates).length)
 const visibleBodySchema = computed(() => {
+  if (props.taskCreation && bodySchema.value) {
+    const schema = structuredClone(bodySchema.value)
+    delete schema.properties?.elder_id
+    return schema
+  }
   if (!recordTaskReview.value || !bodySchema.value) return bodySchema.value
   const schema = structuredClone(bodySchema.value)
   delete schema.properties?.task_candidates
@@ -441,6 +452,10 @@ const versionIssue = computed(() => {
 })
 function syncVersions() {
   const form = body.value
+  if (props.group === 'incidents' && 'admission_id' in form && !form.admission_id) {
+    const elder = catalogs.value.elders?.find(row => row.id === form.elder_id)
+    if (elder?.current_admission_id) form.admission_id = elder.current_admission_id
+  }
   const assign = (field: string, value: unknown) => {
     if (field in form && !hasValue(form[field]) && hasValue(value))
       form[field] = value
@@ -590,6 +605,7 @@ async function loadCatalogs() {
       incidents: 'incidents',
     }
     if (groupResource[props.group]) resources.add(groupResource[props.group])
+    if (props.taskCreation) resources.add('tasks')
     if (resources.has('admissions')) resources.add('elders')
     if (resources.has('memories')) resources.add('elders')
     if (resources.has('handover_items')) resources.add('handovers')
@@ -662,6 +678,8 @@ async function loadCatalogs() {
       )
       catalogs.value.admissions = admissions.flat()
     }
+    if (resources.has('admissions') && role === 'caregiver')
+      catalogs.value.admissions = (catalogs.value.elders || []).flatMap(row => row.current_admission_id ? [{ id: row.current_admission_id, elder_id: row.id, name: '当前入住关系', status: 'active' }] : [])
     if (props.group === 'assessments') {
       const templates = (await request('/assessments/templates')) as Row[]
       const template = templates[0]
@@ -698,6 +716,8 @@ async function loadCatalogs() {
 }
 function setParam(field: string, value: unknown) {
   if (frozen.value || busy.value) return
+  if (props.group === 'incidents' && ['incident_id', 'rectification_id'].includes(field) && params.value[field] !== value && 'evidence' in body.value)
+    body.value.evidence = []
   params.value[field] = value
   selected.value[field] = value
   if (field === 'task_id') {
@@ -741,6 +761,11 @@ function setBody(value: unknown) {
     body.value.task_candidates = previousTasks || []
   if (active.value?.path === '/records/manual' && previousElder && previousElder !== body.value.elder_id)
     body.value.task_candidates = []
+  if (props.taskCreation || props.group === 'incidents') {
+    body.value = updateCareContext({ elder_id: previousElder }, body.value, catalogs.value, props.taskCreation)
+    if (previousElder && previousElder !== body.value.elder_id)
+      message.value = props.taskCreation ? '已切换老人，原任务内容已清空，请为当前老人重新填写。' : '已切换老人，请重新选择当前老人的事实证据。'
+  }
   confirm.value = false
   syncVersions()
 }
@@ -777,6 +802,10 @@ async function run() {
           ? taskCreationPayload(bodySchema.value, body.value)
           : requestBody(op.path, bodySchema.value, recordBody)
         : undefined
+      if (op.path === '/incidents' && op.method === 'post') {
+        const issue = incidentEvidenceIssue(payload as Row, catalogs.value)
+        if (issue) throw new Error(issue)
+      }
       signature = JSON.stringify([
         readSession()?.accountKey,
         op.method,
@@ -1162,7 +1191,7 @@ function useDraft() {
   body.value.task_candidates = JSON.parse(
     JSON.stringify(data.task_candidates || []),
   )
-  body.value.expected_revision = data.revision || 1
+  syncVersions()
 }
 function useAISummary() {
   if (busy.value) return
@@ -1322,11 +1351,12 @@ async function initializeRecovery() {
   await loadCatalogs()
 }
 watch(
-  () => [props.group, JSON.stringify(props.context)],
+  () => [props.group, JSON.stringify(props.context), props.initialAction, props.autoRead],
   async () => {
-    activeId.value = ''
+    activeId.value = initialOperationId()
     result.value = null
     await initializeRecovery()
+    if (props.autoRead && active.value?.method === 'get') await run()
   },
 )
 watch(
@@ -1339,9 +1369,8 @@ watch(
   },
   { deep: true, flush: 'sync' },
 )
-onMounted(async () => {
-  if (!serverMode) return
-  activeId.value =
+function initialOperationId() {
+  return (
     allowed.value.find(
       (op) =>
         props.initialAction &&
@@ -1349,7 +1378,11 @@ onMounted(async () => {
         (props.autoRead ? op.method === 'get' : op.method !== 'get'),
     )?.id ||
     allowed.value[0]?.id ||
-    ''
+    '')
+}
+onMounted(async () => {
+  if (!serverMode) return
+  activeId.value = initialOperationId()
   window.addEventListener('beforeunload', beforeUnload)
   window.addEventListener('storage', checkOtherWindow)
   await initializeRecovery()
@@ -1566,7 +1599,7 @@ onMounted(async () => {
           <form class="wf-form" @submit.prevent="run">
             <h3>{{ taskCreation ? '任务内容' : operationTitle(active) }}</h3>
             <p v-if="group === 'incidents'" class="wf-notice">
-              安全事件用于登记跌倒、噎食、走失等需要跟进的问题，并追踪整改和复查。日常食欲变化或一次拒绝服务不自动认定为事件。请先保存事实记录，再选择“上报事件”关联依据，由主管分类和分级。
+              人工上报无需等待AI。请填写事实、发生时间和已采取措施，由主管分类和分级。当前上报需要关联该老人入住期间的正式记录；没有事实依据时，可先人工记一条，再回来上报。
             </p>
             <div
               v-if="recordComposer"
@@ -1682,7 +1715,23 @@ onMounted(async () => {
                 @update:model-value="setParam(param.name, $event)"
               />
               <WorkflowField
-                v-if="visibleBodySchema"
+                v-if="taskCreation && bodySchema?.properties?.elder_id"
+                :schema="bodySchema.properties.elder_id"
+                field="elder_id"
+                path="填写办理内容.elder_id"
+                :required="true"
+                :model-value="body.elder_id"
+                :catalogs="catalogs"
+                @update:model-value="setBody({ ...body, elder_id: $event })"
+              />
+              <TaskCreationContext
+                v-if="taskCreation"
+                :elder-id="String(body.elder_id || '')"
+                :tasks="catalogs.tasks || []"
+                :available="!!catalogs.tasks"
+              />
+              <WorkflowField
+                v-if="visibleBodySchema && (!taskCreation || !!body.elder_id)"
                 :schema="visibleBodySchema"
                 field="填写办理内容"
                 :model-value="body"
@@ -1699,6 +1748,11 @@ onMounted(async () => {
               />
             </fieldset>
             <ServiceCareHints v-if="recordComposer && active.path === '/records/context-extract'" :elder-id="String(body.elder_id || '')" :scene="String(body.scene || '')" />
+            <details v-if="recordComposer" class="wf-result-details">
+              <summary>照片辅助观察</summary>
+              <p>照片上传与识别暂未开放。可以继续文字、语音或人工记录；照片仅供授权照护与审核人员查看。</p>
+              <p class="wf-notice">AI识别可能有误，不构成诊断或处置建议，请人工核对。无法判断时，应补充清晰照片或人工核实。</p>
+            </details>
             <div
               v-if="
                 active.method !== 'get' &&

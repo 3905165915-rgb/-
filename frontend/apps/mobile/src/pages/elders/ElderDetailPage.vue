@@ -7,10 +7,12 @@ import {
   History,
   ListPlus,
   PenLine,
+  ShieldAlert,
 } from 'lucide-vue-next'
 import { taskStatusLabels } from '@hulao/shared'
 import ElderImpression from '@hulao/shared/elder-impression'
-import { useElders, useTasks } from '../../services/data'
+import ElderActivity from '../../../../../packages/shared/src/workflow/ElderActivity.vue'
+import { mode, session, useElders, useTasks } from '../../services/data'
 import FeedbackState from '../../components/FeedbackState.vue'
 
 const route = useRoute()
@@ -55,7 +57,7 @@ const related = computed(() =>
         :to="{ path: '/records/new', query: { elder: elder.id } }"
         class="record-link"
       >
-        <PenLine :size="18" aria-hidden="true" />新建记录
+        <PenLine :size="18" aria-hidden="true" />记一条
         <ChevronRight :size="18" aria-hidden="true" />
       </RouterLink>
 
@@ -64,6 +66,14 @@ const related = computed(() =>
         class="create-task-link"
       >
         <ListPlus :size="18" aria-hidden="true" />新建任务
+        <ChevronRight :size="18" aria-hidden="true" />
+      </RouterLink>
+
+      <RouterLink
+        :to="{ path: '/safety', query: { report: '1', elder: elder.id } }"
+        class="safety-report-link"
+      >
+        <ShieldAlert :size="18" aria-hidden="true" />照护安全与事件上报
         <ChevronRight :size="18" aria-hidden="true" />
       </RouterLink>
 
@@ -134,6 +144,8 @@ const related = computed(() =>
           </li>
         </ul>
       </section>
+
+      <ElderActivity :elder-id="elder.id" :mode="mode" :session="session" />
     </template>
   </section>
 </template>
@@ -142,6 +154,7 @@ const related = computed(() =>
 .back-link,
 .record-link,
 .create-task-link,
+.safety-report-link,
 .task-link,
 .timeline-link {
   display: flex;
@@ -165,6 +178,11 @@ const related = computed(() =>
   background: var(--hl-primary-soft);
   border-radius: 6px;
 }
+.safety-report-link {
+  color: var(--hl-primary);
+  margin: 12px 0 20px;
+}
+.safety-report-link svg:last-child { margin-left: auto; }
 .record-link svg:last-child,
 .create-task-link svg:last-child,
 .task-link svg {

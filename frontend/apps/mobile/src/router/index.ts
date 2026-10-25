@@ -73,6 +73,16 @@ const router = createRouter({
           meta: { roles: internalRoles },
         },
         {
+          path: 'safety',
+          component: () => import('../pages/safety/SafetyPage.vue'),
+          meta: { roles: internalRoles, focused: true },
+        },
+        {
+          path: 'notifications',
+          component: () => import('../pages/notifications/NotificationsPage.vue'),
+          meta: { roles: internalRoles, focused: true },
+        },
+        {
           path: 'family',
           component: () => import('../pages/family/FamilyPage.vue'),
           meta: { roles: ['family'] },

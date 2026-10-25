@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Activity, ArrowLeft, LogOut, UserRound, X } from 'lucide-vue-next'
+import { Activity, ArrowLeft, Bell, LogOut, UserRound, X } from 'lucide-vue-next'
 import { showToast } from 'vant'
 import { getReducedTransparency, setReducedTransparency } from '@hulao/shared'
 import { useAuthStore, roleLabels } from '../stores/auth'
@@ -75,6 +75,7 @@ function logout() {
         /><span>护老智交</span>
       </RouterLink>
       <div class="header-tools">
+        <RouterLink v-if="auth.role && auth.role !== 'family'" to="/notifications" class="icon-button" title="待我处理" aria-label="待我处理"><Bell :size="20" aria-hidden="true" /></RouterLink>
         <span
           v-if="mode === 'demo'"
           class="demo-marker"

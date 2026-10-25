@@ -43,7 +43,7 @@ describe('route and menu policy', () => {
         '家属沟通',
         '机构管理',
       ])
-      expect(groups[0]?.items.map((item) => item.path)).toEqual(['/dashboard'])
+      expect(groups[0]?.items.map((item) => item.path)).toEqual(['/dashboard', '/notifications'])
       const paths = groups.flatMap((group) =>
         group.items.map((item) => item.path),
       )
@@ -52,6 +52,7 @@ describe('route and menu policy', () => {
       expect([...paths].sort()).toEqual(
         [
           '/dashboard',
+          '/notifications',
           '/elders',
           '/admission',
           '/assessment',
