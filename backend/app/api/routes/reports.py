@@ -7,8 +7,15 @@ from pydantic import Field
 from app.api.deps import ManagementUser, Store
 from app.schemas.change_review import StrictRequest, Text
 from app.services import report_service as service
+from app.services import dashboard_service
 
 router = APIRouter(prefix='/reports', tags=['reports'])
+
+
+@router.get('/dashboard')
+def dashboard(start: date, end: date, current: ManagementUser, store: Store,
+              elder_id: str | None = None, shift_id: str | None = None, status: str | None = None):
+    return dashboard_service.dashboard(store, start, end, current['sub'], current['role'], elder_id, shift_id, status)
 
 
 class ExportRequest(StrictRequest):

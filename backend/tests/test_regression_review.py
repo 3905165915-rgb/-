@@ -71,6 +71,10 @@ def test_related_timeline_cannot_bypass_handover_membership(api, manual_payload,
         user.update(id='outsider', username='outsider', display_name='局外测试护理员')
         data['users'].append(user)
     store.mutate(seed_outsider)
+    # Authorize the elder file while keeping this actor outside both shifts;
+    # this regression specifically tests handover-content isolation.
+    from scope_fixtures import grant
+    grant(api, 'E1', 'outsider')
     url = f'/api/v1/handovers/{handover["id"]}'
     assert client.post(url + '/submit', headers=headers(), json={'expected_revision': 1}).status_code == 200
     task_item = next(row for row in handover['items'] if row['kind'] == 'task')

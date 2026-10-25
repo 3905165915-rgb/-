@@ -147,6 +147,8 @@ def test_condition_evidence_rejects_false_or_stale_inputs_atomically(api, condit
     evidence = body['evidence'][0]
     if case == 'wrong_elder':
         store.mutate(lambda data: data['elders'].append({'id': 'E2', 'name': '另一位虚构老人', 'status': 'active'}))
+        from scope_fixtures import grant
+        grant(api, 'E2')
         other = proof(api, elder_id='E2')
         evidence['record_id'] = other['id']
     elif case == 'wrong_revision':

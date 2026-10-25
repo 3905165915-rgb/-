@@ -142,7 +142,8 @@ def revoke(store, binding_id, payload, user_id, role, key=None):
     return store.mutate(mutate)
 
 
-def create_summary(store, payload, user_id, role, key=None):
+def create_summary(store, payload, user_id, role, key=None, generation=None,
+                   _action='create_family_summary', _fingerprint_payload=None):
     def mutate(data):
         current_staff(data, user_id, role, management=True)
         def operation():
@@ -160,10 +161,74 @@ def create_summary(store, payload, user_id, role, key=None):
                     raise DomainError('summary_evidence_admission_mismatch', 422)
             item = {'id': identifier('SUMMARY'), 'kind': 'summary', **payload.model_dump(mode='json', exclude={'evidence'}),
                     'evidence': evidence, 'status': 'draft', 'revision': 1, 'created_by': user_id, 'created_at': now()}
+            if generation is not None:
+                item['generation'] = copy.deepcopy(generation)
             data['family_cases'].append(item)
             audit(data, 'create_family_summary', item['id'], user_id, elder_id=item['elder_id'])
             return copy.deepcopy(item)
-        return replayable(data, user_id, 'create_family_summary', key, payload.model_dump(mode='json'), operation)
+        return replayable(data, user_id, _action, key,
+                          _fingerprint_payload if _fingerprint_payload is not None else payload.model_dump(mode='json'), operation)
+    return store.mutate(mutate)
+
+
+def suggest_summary(store, payload, user_id, role, key=None):
+    from time import perf_counter
+    from app.services.ai_service import AIProviderError, get_ai_provider
+    from app.services.ai_outputs import validate_citations
+    from app.schemas.family import SummaryCreate
+    data = store.read()
+    current_staff(data, user_id, role, management=True)
+    admission(data, payload.elder_id, payload.admission_id)
+    if not payload.public_quotes_confirmed:
+        raise DomainError('summary_public_quotes_need_confirmation', 422)
+    if not payload.period_start < payload.period_end <= parse_time(now()):
+        raise DomainError('summary_period_invalid', 422)
+    request_body = payload.model_dump(mode='json')
+    if key and any(r['user_id'] == user_id and r['action'] == 'suggest_family_summary' and r['key'] == key
+                   for r in data['idempotency_keys']):
+        return replayable(data, user_id, 'suggest_family_summary', key, request_body, lambda: None)
+    evidence = evidence_service._evidence(data, payload.elder_id, payload.evidence)
+    for source in evidence:
+        record = find(data, 'care_records', source['record_id'], 'record_not_found')
+        observed = parse_time(record.get('happened_at') or record['created_at'])
+        if record.get('admission_id') != payload.admission_id or not payload.period_start <= observed < payload.period_end:
+            raise DomainError('summary_evidence_outside_current_stay_or_period', 422)
+    # Only explicitly approved public quotes enter the model, not full internal
+    # narratives, medical records, account details, other elders or attachments.
+    sources = [{'source_id': f'public-{i + 1}', 'text': source['quote']} for i, source in enumerate(evidence)]
+    provider = get_ai_provider()
+    started = perf_counter()
+    try:
+        output = validate_citations(provider.summarize(sources), sources, 'summary')
+    except DomainError:
+        raise
+    except (ValueError, TypeError, KeyError) as exc:
+        raise AIProviderError('family_summary_output_invalid') from exc
+    text = '\n'.join(point['text'] for point in output['points'])
+    request = SummaryCreate(elder_id=payload.elder_id, admission_id=payload.admission_id,
+                            period_start=payload.period_start, period_end=payload.period_end,
+                            evidence=payload.evidence, text=text)
+    # create_summary revalidates the live evidence under the write lock after AI.
+    return create_summary(store, request, user_id, role, key, generation={
+        'provider': provider.name, 'prompt_version': 'public-quotes-summary-v1', 'points': output['points'],
+        'elapsed_ms': round((perf_counter() - started) * 1000), 'original_text': text,
+        'status': 'draft', 'public_quotes_confirmed_by': user_id},
+        _action='suggest_family_summary', _fingerprint_payload=request_body)
+
+
+def edit_summary(store, summary_id, payload, user_id, role, key=None):
+    def mutate(data):
+        current_staff(data, user_id, role, management=True)
+        def operation():
+            item = case(data, summary_id, 'summary')
+            version(item, payload.expected_revision)
+            if item['status'] != 'draft':
+                raise DomainError('summary_transition_invalid')
+            item.setdefault('edits', []).append({'before': item['text'], 'by': user_id, 'at': now(), 'reason': payload.reason})
+            item.update(text=payload.text, revision=item['revision'] + 1)
+            audit(data, 'edit_family_summary', summary_id, user_id, elder_id=item['elder_id'])
+            return copy.deepcopy(item)
+        return replayable(data, user_id, 'edit_family_summary', key, {'id': summary_id, **payload.model_dump()}, operation)
     return store.mutate(mutate)
 
 

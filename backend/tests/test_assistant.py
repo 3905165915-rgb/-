@@ -46,6 +46,9 @@ def fake_ai(monkeypatch):
 
 
 def create_memory(api, elder='E1', scene='activity', content='平时愿意参加上午活动', confirm=True, category='stable_preference'):
+    if elder != 'E1':
+        from scope_fixtures import grant
+        grant(api, elder)
     client, _, headers = api
     record = client.post('/api/v1/records/manual', headers=headers(), json={
         'elder_id': elder, 'raw_text': content, 'observations': [content],

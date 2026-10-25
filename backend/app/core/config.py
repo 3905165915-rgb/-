@@ -30,6 +30,10 @@ class Settings:
     cors_origins: tuple[str, ...]
     siliconflow_api_key: str = ''
     speech_timeout_seconds: float = 45
+    vision_api_key: str = ''
+    vision_base_url: str = ''
+    vision_model: str = ''
+    vision_timeout_seconds: float = 45
 
 
 def get_settings() -> Settings:
@@ -53,6 +57,10 @@ def get_settings() -> Settings:
         ),
         siliconflow_api_key=os.getenv('SILICONFLOW_API_KEY', '').strip(),
         speech_timeout_seconds=float(os.getenv('SPEECH_TIMEOUT_SECONDS', '45')),
+        vision_api_key=os.getenv('VISION_API_KEY', '').strip(),
+        vision_base_url=os.getenv('VISION_BASE_URL', '').strip().rstrip('/'),
+        vision_model=os.getenv('VISION_MODEL', '').strip(),
+        vision_timeout_seconds=float(os.getenv('VISION_TIMEOUT_SECONDS', '45')),
     )
 
 

@@ -57,10 +57,14 @@ def get(store, plan_id, role):
     return view(data, item)
 
 
-def listing(store, role, elder_id=None, limit=100, offset=0):
+def listing(store, role, elder_id=None, limit=100, offset=0, user_id=None):
     data = store.read()
+    from app.services.care_scope_service import elder_ids
+    scope = elder_ids(data, user_id, role) if role == 'caregiver' else None
     rows = []
     for item in reversed(data['care_plans']):
+        if scope is not None and item['elder_id'] not in scope:
+            continue
         if elder_id and item['elder_id'] != elder_id:
             continue
         try:

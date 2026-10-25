@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.core.config import settings
@@ -25,8 +25,9 @@ def create_access_token(user_id: str, role: str, token_version: int = 0) -> str:
     return jwt.encode(payload, settings.secret_key, algorithm="HS256")
 
 
-def get_token_payload(
+async def get_token_payload(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
+    request: Request,
 ) -> dict:
     if credentials is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
@@ -35,10 +36,13 @@ def get_token_payload(
     except jwt.PyJWTError as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token") from exc
     from app.storage.json_store import JsonStore
-    user = next((item for item in JsonStore(settings.data_dir).read()['users'] if item['id'] == payload['sub']), None)
+    data = JsonStore(settings.data_dir).read()
+    user = next((item for item in data['users'] if item['id'] == payload['sub']), None)
     if (not user or not user.get('active', True) or user['role'] != payload['role']
             or user.get('token_version', 0) != payload.get('tv', 0)):
         raise HTTPException(status_code=401, detail='Account is inactive or permissions changed')
+    from app.services.request_scope_service import enforce
+    await enforce(data, request, payload['sub'], payload['role'])
     return payload
 
 

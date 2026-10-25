@@ -37,10 +37,13 @@ def find(data: dict, collection: str, object_id: str, code: str) -> dict:
 def audit(data: dict, action: str, object_id: str, user_id: str, **details: Any) -> None:
     actor = next((row for row in data['users'] if row['id'] == user_id), None)
     details.setdefault('actor_role', actor.get('role') if actor else 'system')
-    data['audit_logs'].append({
+    event = {
         'id': identifier('AUDIT'), 'action': action, 'object_id': object_id,
         'user_id': user_id, 'created_at': now(), **details,
-    })
+    }
+    data['audit_logs'].append(event)
+    from app.services.notification_service import project
+    project(data, event)
 
 
 def active_staff(data: dict, user_id: str | None) -> None:
@@ -72,6 +75,9 @@ def open_shift(data: dict, shift_id: str | None, user_id: str, role: str) -> Non
 
 
 def editable(data: dict, item: dict, user_id: str, role: str) -> None:
+    if role == 'caregiver' and item.get('elder_id'):
+        from app.services.care_scope_service import require_elder_access
+        require_elder_access(data, item['elder_id'], user_id, role)
     if role not in {'admin', 'supervisor'} and item.get('created_by') != user_id:
         raise DomainError('only_author_or_management_can_edit', 403)
 

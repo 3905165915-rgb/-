@@ -1,6 +1,6 @@
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Header, Query
+from fastapi import APIRouter, Header, Query, HTTPException
 
 from app.api.deps import ManagementUser, FamilyUser, Store
 from app.schemas import family as schema
@@ -9,6 +9,21 @@ from app.services.staff_service import staff_view
 
 router = APIRouter(tags=['family'])
 Key = Annotated[str | None, Header(alias='Idempotency-Key', min_length=1, max_length=200)]
+
+
+@router.post('/family/summaries/suggest', status_code=201)
+def suggest_summary(payload: schema.SummarySuggest, current: ManagementUser, store: Store, idempotency_key: Key = None):
+    from app.services.ai_service import AIProviderError
+    from pydantic import ValidationError
+    try:
+        return service.suggest_summary(store, payload, current['sub'], current['role'], idempotency_key)
+    except (AIProviderError, ValidationError) as exc:
+        raise HTTPException(503, '简报整理暂不可用，请手工填写；尚未向家属发布任何内容') from exc
+
+
+@router.patch('/family/summaries/{summary_id}')
+def edit_summary(summary_id: str, payload: schema.SummaryEdit, current: ManagementUser, store: Store, idempotency_key: Key = None):
+    return service.edit_summary(store, summary_id, payload, current['sub'], current['role'], idempotency_key)
 
 
 @router.post('/family/accounts', status_code=201)

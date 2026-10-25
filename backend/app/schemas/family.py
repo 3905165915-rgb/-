@@ -45,6 +45,19 @@ class SummaryReview(FamilyDecision):
     action: Literal['publish', 'reject', 'withdraw']
 
 
+class SummarySuggest(StrictRequest):
+    elder_id: ObjectId
+    admission_id: ObjectId
+    period_start: AwareDatetime
+    period_end: AwareDatetime
+    evidence: list[ReviewEvidence] = Field(min_length=1, max_length=10)
+    public_quotes_confirmed: bool = Field(strict=True)
+
+
+class SummaryEdit(FamilyDecision):
+    text: Text
+
+
 class FeedbackCreate(StrictRequest):
     binding_id: ObjectId
     text: Text

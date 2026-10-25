@@ -45,7 +45,8 @@ def main():
             port = sock.getsockname()[1]
         child_env = {**os.environ, 'DATA_DIR': str(directory / 'data'), 'APP_ENV': 'demo',
                      'SECRET_KEY': secrets.token_urlsafe(48), 'AI_PROVIDER': 'mock', 'AI_FALLBACK_MOCK': 'false',
-                     'DEEPSEEK_API_KEY': '', 'SILICONFLOW_API_KEY': ''}
+                     'DEEPSEEK_API_KEY': '', 'SILICONFLOW_API_KEY': '',
+                     'VISION_API_KEY': '', 'VISION_BASE_URL': '', 'VISION_MODEL': ''}
         with (directory / 'uvicorn.log').open('w', encoding='utf-8') as log:
             process = subprocess.Popen([sys.executable, '-m', 'uvicorn', 'app.main:app', '--app-dir', str(BACKEND),
                 '--host', '127.0.0.1', '--port', str(port), '--no-access-log'], cwd=BACKEND, env=child_env,
@@ -97,6 +98,12 @@ def main():
                     state = post(f'/elders/{eid}/admissions', {'expected_elder_revision': 1, 'bed_id': bed['id'],
                         'expected_bed_revision': 1, 'kind': 'admit', 'reason': '虚构运行验收入住'}, expected=201)
                     aid = state['admission']['id']
+                    post('/elders/work-assignments', {'elder_id': eid, 'caregiver_id': 'worker',
+                        'kind': 'explicit_assignment', 'start_at': utc(-1), 'end_at': utc(1),
+                        'reason': '虚构运行验收照护安排'}, expected=201)
+                    worklist = get('/elders/worklist/me', actor='worker')
+                    check('current_care_assignment_in_worklist',
+                          any(row['elder']['id'] == eid for row in worklist['items']))
                     record = post('/records/manual', {'elder_id': eid, 'raw_text': '本人说喜欢安静进餐，已协助饮水。'}, actor='worker', expected=201)['record']
                     check('record_has_admission_provenance', record['admission_id'] == aid)
                     evidence = [{'record_id': record['id'], 'revision': 1, 'quote': '喜欢安静进餐'}]
@@ -155,6 +162,16 @@ def main():
                     check('incident_closed_by_independent_review', closed['status'] == 'closed')
                     metrics = get(f'/reports/metrics?start={day.isoformat()}&end={(day + timedelta(days=1)).isoformat()}')
                     check('metrics_count_unique_generated_occurrence', metrics['generated_plan_occurrences']['completion']['numerator'] == 1)
+                    dashboard = get(f'/reports/dashboard?start={day.isoformat()}&end={(day + timedelta(days=1)).isoformat()}')
+                    check('dashboard_drilldown_matches_counts', all(
+                        row['count'] == len(row['items']) for row in dashboard['details'].values()))
+                    check('dashboard_includes_comparison', 'comparison' in dashboard)
+                    timeline = get(f'/elders/{eid}/timeline?limit=1', actor='worker')
+                    check('timeline_has_server_pagination', len(timeline['events']) == 1
+                          and timeline['total'] > 1 and timeline['has_more'])
+                    notifications = get('/notifications', actor='worker')
+                    check('notification_business_projection', notifications['total'] > 0)
+                    check('vision_unconfigured_is_explicit', not get('/attachments/vision/status', actor='worker')['configured'])
                     exported = post(f'/reports/elders/{eid}/export', {'reason': '虚构案例验收'})
                     check('export_is_pseudonymized', exported['mode'] == 'pseudonymized_metadata' and record['raw_text'] not in json.dumps(exported, ensure_ascii=False))
                     post('/quality/checks', {'elder_id': eid, 'include_ai': False}, expected=201)
@@ -184,7 +201,7 @@ def main():
                     process.wait(timeout=5)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     result = {'status': 'passed', 'transport': 'real_uvicorn_tcp_http', 'python': sys.version.split()[0],
-              'platform': sys.platform, 'api_version': '0.4.0', 'schema_version': CURRENT_SCHEMA_VERSION,
+              'platform': sys.platform, 'api_version': '0.4.2', 'schema_version': CURRENT_SCHEMA_VERSION,
               'data': 'temporary_synthetic_only', 'vendor_calls': 0, 'production_mutations': 0, 'checks': checks}
     args.output.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding='utf-8')
     print(f'PASS: {len(checks)} runtime assertions over real HTTP; temporary server stopped; report written.')

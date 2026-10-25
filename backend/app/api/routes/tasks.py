@@ -20,10 +20,10 @@ def create(payload: TaskCreateRequest, current: StaffUser, store: Store, idempot
 
 
 @router.get("", response_model=list[CareTask])
-def tasks(_: StaffUser, store: Store, elder_id: str | None = None, shift_id: str | None = None,
+def tasks(current: StaffUser, store: Store, elder_id: str | None = None, shift_id: str | None = None,
           assigned_to: str | None = None, status: str | None = None,
           limit: int = Query(100, ge=1, le=200), offset: int = Query(0, ge=0)) -> list[CareTask]:
-    return task_service.list_tasks(store, elder_id, shift_id, assigned_to, status, limit, offset)
+    return task_service.list_tasks(store, elder_id, shift_id, assigned_to, status, limit, offset, current['sub'], current['role'])
 
 
 @router.get('/{task_id}', response_model=CareTask)

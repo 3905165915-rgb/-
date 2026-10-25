@@ -5,6 +5,7 @@ import json
 import os
 import tempfile
 import shutil
+import hashlib
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, TypeVar
@@ -13,7 +14,7 @@ from filelock import FileLock
 
 
 T = TypeVar("T")
-CURRENT_SCHEMA_VERSION = 5
+CURRENT_SCHEMA_VERSION = 6
 
 
 EMPTY_STORE: dict[str, Any] = {
@@ -40,6 +41,11 @@ EMPTY_STORE: dict[str, Any] = {
     "care_memories": [],
     "change_reviews": [],
     "elder_impressions": [],
+    "notifications": [],
+    "attachments": [],
+    "image_analyses": [],
+    "ai_evaluations": [],
+    "care_assignments": [],
 }
 
 
@@ -73,6 +79,7 @@ class JsonStore:
             restored = json.load(stream)
         self._validate(restored)
         self.ensure()
+        self._restore_attachment_files(restored, source)
         with self.lock:
             try:
                 with self.path.open(encoding='utf-8') as stream:
@@ -94,6 +101,16 @@ class JsonStore:
                                 revoked_at=_utc_now(), revoked_by='system:restore',
                                 reason='恢复备份后须重新核实授权')
             restored['idempotency_keys'] = []
+            restored['notifications'] = []
+            for assignment in restored['care_assignments']:
+                if assignment.get('status') == 'active':
+                    assignment.update(status='revoked', revision=assignment.get('revision', 1) + 1,
+                                      revoked_at=_utc_now(), revoked_by='system:restore',
+                                      revoked_reason='恢复备份后须重新核实照护分配')
+            for analysis in restored['image_analyses']:
+                if analysis.get('status') == 'processing':
+                    analysis.update(status='pending_review', model_status='failed', output=None,
+                                    error_code='vision_interrupted_by_restore', revision=analysis['revision'] + 1)
             backup = self._backup_locked()
             self._atomic_write(restored)
             return backup
@@ -105,7 +122,46 @@ class JsonStore:
         name = _utc_now().replace(':', '').replace('+', '_')
         target = destination / f'store-{name}-{uuid4().hex[:8]}.json'
         shutil.copy2(self.path, target)
+        # The JSON and its sibling folder form a backup set. Never report
+        # success while referenced images are missing or have changed bytes.
+        try:
+            snapshot = json.loads(self.path.read_text(encoding='utf-8'))
+        except (ValueError, TypeError):
+            snapshot = {}  # Still preserve a corrupt live file before restore.
+        attachments = snapshot.get('attachments', [])
+        if attachments:
+            sidecar = target.with_suffix('.attachments')
+            sidecar.mkdir()
+            for item in attachments:
+                path = self._attachment_path(self.data_dir / 'attachments', item)
+                if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != item['sha256']:
+                    raise RuntimeError('Attachment missing or corrupt; backup set is incomplete')
+                shutil.copy2(path, sidecar / path.name)
         return target
+
+    @staticmethod
+    def _attachment_path(root: Path, item: dict) -> Path:
+        root = root.resolve()
+        path = (root / item['storage_key']).resolve()
+        if path.parent != root or path.suffix != '.jpg':
+            raise RuntimeError('Invalid attachment storage reference')
+        return path
+
+    def _restore_attachment_files(self, restored: dict, source: Path) -> None:
+        pending = []
+        for item in restored['attachments']:
+            live = self._attachment_path(self.data_dir / 'attachments', item)
+            if live.is_file() and hashlib.sha256(live.read_bytes()).hexdigest() == item['sha256']:
+                continue
+            backup = self._attachment_path(source.with_suffix('.attachments'), item)
+            if not backup.is_file() or hashlib.sha256(backup.read_bytes()).hexdigest() != item['sha256']:
+                raise RuntimeError('Restore needs the matching attachment backup folder')
+            pending.append((backup, live))
+        # Validate the whole set before copying anything. Restore is an offline
+        # operation; existing credential/session invalidation remains unchanged.
+        for backup, live in pending:
+            live.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(backup, live)
 
     def migrate(self) -> Path | None:
         """Explicit migration with a backup of the original file under the same lock."""
@@ -117,9 +173,13 @@ class JsonStore:
             if version == CURRENT_SCHEMA_VERSION:
                 self._validate(data)
                 return None
-            if version not in {1, 2, 3, 4}:
+            if version not in {1, 2, 3, 4, 5}:
                 raise RuntimeError(f'Unsupported migration source: {version}')
-            added = {'elder_impressions'}
+            added = set()
+            if version <= 4:
+                added.add('elder_impressions')
+            if version in {1, 2, 3, 4, 5}:
+                added.update({'notifications', 'attachments', 'image_analyses', 'ai_evaluations', 'care_assignments'})
             if version in {1, 2, 3}:
                 added.add('change_reviews')
             if version in {1, 2}:

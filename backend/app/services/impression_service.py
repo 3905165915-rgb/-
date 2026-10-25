@@ -22,6 +22,8 @@ DEMO_MARKER = '【模拟长期照护】'
 
 def _snapshot(data, elder_id, user_id, role):
     current_staff(data, user_id, role)
+    from app.services.care_scope_service import require_elder_access
+    require_elder_access(data, elder_id, user_id, role)
     elder = find(data, 'elders', elder_id, 'elder_not_found')
     rows = []
     for record in data['care_records']:

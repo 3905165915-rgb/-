@@ -5,7 +5,7 @@ from pydantic import AwareDatetime, Field
 from app.schemas.change_review import StrictRequest, Text, ObjectId, ReviewEvidence
 
 Category = Literal['fall', 'choking', 'pressure_injury', 'wandering', 'medication', 'burn',
-                   'conflict', 'infection_concern', 'service_omission', 'other']
+                   'conflict', 'infection_concern', 'service_omission', 'restraint', 'injury', 'other']
 
 
 class IncidentCreate(StrictRequest):
@@ -14,7 +14,14 @@ class IncidentCreate(StrictRequest):
     occurred_at: AwareDatetime
     description: Text
     immediate_action: Text
-    evidence: list[ReviewEvidence] = Field(min_length=1, max_length=10)
+    evidence: list[ReviewEvidence] = Field(default_factory=list, max_length=10)
+
+
+class IncidentPrepare(StrictRequest):
+    elder_id: ObjectId
+    description: Text
+    occurred_at: AwareDatetime | None = None
+    immediate_action: Text | None = None
 
 
 class IncidentTriage(StrictRequest):

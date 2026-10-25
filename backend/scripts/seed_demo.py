@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -23,6 +24,11 @@ def main() -> None:
         {"id": "ELDER-305", "name": "王阿姨", "bed_id": "BED-305", "status": "active", "contact_name": "王女士女儿", "contact_phone": "13800000000", "notes": "虚构演示数据"}
     ]
     data["beds"] = [{"id": "BED-305", "room": "305", "status": "occupied", "elder_id": "ELDER-305"}]
+    instant = datetime.now(timezone.utc)
+    data['care_assignments'] = [{'id': 'SCOPE-DEMO', 'elder_id': 'ELDER-305', 'caregiver_id': 'USER-CAREGIVER',
+        'kind': 'explicit_assignment', 'status': 'active', 'revision': 1,
+        'start_at': instant.isoformat(), 'end_at': (instant + timedelta(days=7)).isoformat(),
+        'reason': '虚构演示照护分配'}]
     store.replace(data)
     print(f"Demo store initialized at {store.path}")
     print("Demo password for all accounts: demo123")

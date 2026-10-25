@@ -40,6 +40,8 @@ def create_draft(store: JsonStore, elder_id: str, shift_id: str | None, text: st
     elder_snapshot = care_state(care_eligible(initial, elder_id))
     if user_id:
         current_staff(initial, user_id, role)
+        from app.services.care_scope_service import require_elder_access
+        require_elder_access(initial, elder_id, user_id, role)
         open_shift(initial, shift_id, user_id, role)
     provider = get_ai_provider()
     try:
@@ -59,6 +61,7 @@ def create_draft(store: JsonStore, elder_id: str, shift_id: str | None, text: st
         from app.services.workflow import open_shift, audit
         if user_id:
             current_staff(data, user_id, role)
+            require_elder_access(data, elder_id, user_id, role)
             open_shift(data, shift_id, user_id, role)
         if care_state(care_eligible(data, elder_id)) != elder_snapshot:
             raise DomainError('draft_elder_state_changed')

@@ -13,7 +13,8 @@ from app.storage.json_store import JsonStore
 @pytest.fixture
 def api(tmp_path, monkeypatch):
     settings = replace(config.settings, data_dir=tmp_path / 'data', ai_provider='mock', ai_fallback_mock=False,
-                       deepseek_api_key='', siliconflow_api_key='')
+                       deepseek_api_key='', siliconflow_api_key='',
+                       vision_api_key='', vision_base_url='', vision_model='')
     for module in (config, security, main, store_service, ai_service, speech_service):
         monkeypatch.setattr(module, 'settings', settings)
     store = JsonStore(settings.data_dir)
@@ -25,6 +26,13 @@ def api(tmp_path, monkeypatch):
             for name, role in [('staff', 'caregiver'), ('other', 'caregiver'), ('manager', 'supervisor'), ('family', 'family')]
         ]
         data['elders'] = [{'id': 'E1', 'name': '虚构老人', 'status': 'active'}]
+        # General business fixtures explicitly authorize E1. Scope-specific tests
+        # clear these grants and exercise isolation/revocation separately.
+        data['care_assignments'] = [
+            {'id': 'FIXTURE-' + who, 'elder_id': 'E1', 'caregiver_id': who,
+             'kind': 'explicit_assignment', 'status': 'active', 'revision': 1,
+             'start_at': '2020-01-01T00:00:00+00:00', 'end_at': '2099-01-01T00:00:00+00:00'}
+            for who in ('staff', 'other')]
     store.mutate(seed)
     def headers(name='staff'):
         role = next(item['role'] for item in store.read()['users'] if item['id'] == name)

@@ -206,6 +206,8 @@ def test_evidence_must_be_current_same_elder_and_server_snapshot(api, affected, 
         expected = 409
     elif bad == 'other_elder':
         store.mutate(lambda data: data['elders'].append({'id': 'E2', 'name': '另一位虚构老人', 'status': 'active'}))
+        from scope_fixtures import grant
+        grant(api, 'E2')
         other = client.post('/api/v1/records/manual', headers=headers(), json={
             'elder_id': 'E2', 'raw_text': '其他老人的记录', 'observations': ['其他老人的记录']}).json()['record']
         evidence.update(record_id=other['id'], revision=1, quote='其他老人的记录')

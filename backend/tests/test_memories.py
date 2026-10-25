@@ -89,6 +89,8 @@ def test_candidate_needs_management_confirmation_before_scene_use(api, memory_pa
 def test_invalid_evidence_scope_or_client_confirmation_cannot_be_saved(api, memory_payload, change, code):
     client, store, headers = api
     store.mutate(lambda data: data['elders'].append({'id': 'E2', 'name': '另一位虚构老人', 'status': 'active'}))
+    from scope_fixtures import grant
+    grant(api, 'E2')  # Still reject evidence from the wrong elder after authorization.
     before = store.path.read_bytes()
     response = client.post('/api/v1/memories', json={**memory_payload, **change}, headers=headers())
     assert response.status_code == code, response.text

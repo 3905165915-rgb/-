@@ -2,9 +2,13 @@
 
 这是参赛演示版后端，使用 FastAPI 和 JSON 文件存储，不使用数据库。JSON 存储适用于单服务器、低并发演示；正式生产部署前应替换为事务数据库并重新进行安全与隐私评估。AI适配层支持 DeepSeek OpenAI兼容接口，当前默认仍为 Mock，配置真实密钥后再切换。
 
-当前本地API版本0.4.0，schema4。完整任务回顾与运行验收见 [STATUS_REVIEW_2026-10-20.md](STATUS_REVIEW_2026-10-20.md)。新增家属业务见[FAMILY_API.md](FAMILY_API.md)、事件整改见[INCIDENT_API.md](INCIDENT_API.md)、统计导出见[REPORTS_API.md](REPORTS_API.md)；前端需要调整的实际差异见[FRONTEND_HANDOFF.md](FRONTEND_HANDOFF.md)。已有v4无需迁移；旧v1/v2/v3必须先停服备份并迁移。尚未推送、部署或完成前端验收。
+当前本地API版本0.4.2，JSON schema 6。2026-10-25最终改进清单的逐项实现与验收见[ACCEPTANCE_IMPROVEMENTS_2026-10-25.md](ACCEPTANCE_IMPROVEMENTS_2026-10-25.md)，新增接口、权限与前端对接见[IMPROVEMENT_API_2026-10-25.md](IMPROVEMENT_API_2026-10-25.md)。旧schema 1至5均须停服备份并显式迁移；不要删除数据文件重新初始化。本轮未推送、未部署，新增能力的前端联调另行验收。
 
-2026-10-20上传前验收已通过：Linux Python3.10.12完整回归402通过，真实HTTP61个断言通过，显式真实配置验收12通过（11次DeepSeek文本请求、1次云语音请求，另含不联网故障注入）。详细证据、修复和AI局限见[ACCEPTANCE_2026-10-20.md](ACCEPTANCE_2026-10-20.md)。线上业务未改，机构独立效果和前端联调仍待验收。
+改进清单全量回归603通过、13跳过；独立临时Uvicorn的真实TCP/HTTP验收73项断言通过。其后按用户要求复用DeepSeek账号配置视觉输入，真实视觉接口验收2项通过、相关回归35项通过，见[视觉接入记录](DEEPSEEK_VISION_2026-10-25.md)。测试采用代码绘制的合成图片，不代表真实养老照片或临床识别效果已经验证。
+
+此前任务回顾见[STATUS_REVIEW_2026-10-20.md](STATUS_REVIEW_2026-10-20.md)，家属业务见[FAMILY_API.md](FAMILY_API.md)、事件整改见[INCIDENT_API.md](INCIDENT_API.md)、基础统计见[REPORTS_API.md](REPORTS_API.md)。旧对接说明保留供查阅，变更以本轮改进接口说明为准。
+
+历史版本2026-10-20上传前验收：Linux Python3.10.12完整回归402通过，真实HTTP61个断言通过，显式真实配置验收12通过（11次DeepSeek文本请求、1次云语音请求，另含不联网故障注入）。详细证据、修复和AI局限见[ACCEPTANCE_2026-10-20.md](ACCEPTANCE_2026-10-20.md)。这些数字不是本轮新功能的真实供应商验收结果。
 
 ## 本地启动
 
@@ -36,6 +40,8 @@ AI_FALLBACK_MOCK=false
 ```
 
 真实API不可用时，接口返回503，前端应保留人工录入入口；不要把AI错误伪装成成功结果。
+
+照片识别也可复用同一DeepSeek账号：在私有配置中填写`VISION_API_KEY`（与文字密钥的实际值相同）、`VISION_BASE_URL=https://api.deepseek.com/v1`、`VISION_MODEL=deepseek-flash`、`VISION_TIMEOUT_SECONDS=45`。Flash视觉请求使用非思考模式与JSON输出，结果仍须人工核对。配置在进程启动时读取；服务器已保存配置，但新视觉接口代码尚未部署，不能仅凭配置保存宣称线上已可识别。
 
 搭档电脑可使用仓库中的加密AI配置：安装`requirements-setup.txt`后运行`python backend/scripts/setup_ai_test.py`，输入单独提供的口令生成私有`.env`。具体步骤见[AI_TEST_SETUP.md](AI_TEST_SETUP.md)；口令与解密后的文件不提交Git。
 
@@ -71,7 +77,7 @@ AI_FALLBACK_MOCK=false
 
 0.3.5增加条件待办核验：主管明确标准和责任人，指定人引用正式记录确认满足/未满足，满足结论须有效期；未满足/到期/来源变化阻止原任务开始和完成。跨班保留历史并清空当前结论，接班者明确认领后重新核验。交班、上下文AI、质检检查条件变化，AI不能自动判定或执行。详见 [TASK_CONDITION_API.md](TASK_CONDITION_API.md)。JSON schema仍为4，不需要新增迁移；仅完成后端，未接入家属回复或前端页面。
 
-完整请求、响应和权限说明见 [API.md](API.md)；实现范围、AI职责和后续缺口见 [IMPLEMENTATION.md](IMPLEMENTATION.md)。当前静态前端多数业务仍为localStorage演示，不代表已接入这些接口。
+历史版本请求、响应和权限说明见[API.md](API.md)，历史实现范围见[IMPLEMENTATION.md](IMPLEMENTATION.md)。上述0.3系列条目描述对应版本当时的边界；本轮新增接口以[改进对接说明](IMPROVEMENT_API_2026-10-25.md)为准。前端代码由搭档负责，后端测试通过不代表页面已完成接入。
 
 ## 测试
 
@@ -86,7 +92,7 @@ python -m pytest backend/tests -q
 
 ## 存储迁移和备份
 
-当前schema为v4，新增change_reviews集合；v3已包含care_memories。旧v1/v2/v3数据启动时不会偷偷迁移；先停服，加载服务端环境配置后执行：
+当前schema为6，新增通知、照护分配、照片引用、视觉分析和AI评估集合。旧schema 1至5启动时不会自动迁移；先停服，加载服务端环境配置后执行：
 
 ```sh
 python backend/scripts/migrate_json.py
@@ -99,7 +105,9 @@ python backend/scripts/backup_json.py
 python backend/scripts/backup_json.py --restore /absolute/path/to/backup.json --confirm-service-stopped
 ```
 
-恢复仅支持当前schema，会再次备份现有数据并保留当前账号和密码；0.4.0起同时使旧登录失效、清空旧幂等缓存、撤销恢复快照中的有效家属绑定，恢复后须重新登录和核实授权，不能沿用恢复前页面中的旧版本提交。每日备份的systemd服务和timer放在 `deploy/`；安装与验证见 [deploy/README.md](deploy/README.md)。备份位于数据目录的backups/，没有自动清理，也不等于异地容灾。
+含照片的备份会生成同名 `.attachments` 文件夹，复制或归档时必须与JSON成对保存。恢复先校验文件和哈希，不能只恢复JSON而丢失原图。
+
+恢复仅支持当前schema，会再次备份现有数据并保留当前账号和密码；同时使旧登录失效、清空旧幂等缓存与通知、撤销恢复快照中的有效家属绑定及照护分配。恢复后须重新登录、核实家属授权并由主管重新安排照护范围，不能沿用旧页面中的版本提交。恢复包含文件操作，必须全程停服。每日备份的systemd服务和timer放在 `deploy/`；安装与验证见[deploy/README.md](deploy/README.md)。备份位于数据目录的backups/，没有自动清理，也不等于异地容灾。
 
 ## 免费云端语音识别
 

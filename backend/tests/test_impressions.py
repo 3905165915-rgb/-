@@ -218,6 +218,8 @@ def test_failure_empty_sources_and_other_elder_isolation(api, provider, monkeypa
     assert client.post(PATH + '/generate', headers=headers()).status_code == 422
     records(api, 1)
     store.mutate(lambda d: d['elders'].append({'id': 'E2', 'name': '李爷爷', 'status': 'active'}))
+    from scope_fixtures import grant
+    grant(api, 'E2')
     assert client.post('/api/v1/elders/E2/impressions/generate', headers=headers()).status_code == 422
     def fail(*a, **k): raise AIProviderError('offline')
     monkeypatch.setattr(provider, 'impression', fail)

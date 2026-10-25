@@ -10,4 +10,5 @@ __pycache__/
 data/store.json
 data/store.lock
 data/backups/
+data/attachments/
 *.log

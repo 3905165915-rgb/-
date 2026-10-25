@@ -161,6 +161,9 @@ def create(store: JsonStore, payload: MemoryCreateRequest, user_id: str, role: s
 
 
 def _create_candidate(data, payload: MemoryCreateRequest, user_id, candidate_source=None):
+    from app.services.care_scope_service import require_elder_access
+    actor = current_staff(data, user_id)
+    require_elder_access(data, payload.elder_id, user_id, actor['role'])
     elder = find(data, 'elders', payload.elder_id, 'elder_not_found')
     if elder.get('status') == 'discharged':
         raise DomainError('elder_inactive')

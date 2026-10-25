@@ -128,6 +128,8 @@ def test_invalid_assessment_input_cannot_become_official(api, change):
         body['review_due_at'] = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
     elif change == 'cross_elder':
         store.mutate(lambda data: data['elders'].append({'id': 'E2', 'name': '另一位虚构老人', 'status': 'active'}))
+        from scope_fixtures import grant
+        grant(api, 'E2')  # Test cross-elder evidence, separately from access denial.
         body['elder_id'] = 'E2'
     else:
         body['evidence'][0]['quote'] = '来源中不存在的文字'

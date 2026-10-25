@@ -1,12 +1,22 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Header, Query
+from fastapi import APIRouter, Header, Query, HTTPException
 from app.api.deps import ManagementUser, StaffUser, Store
 from app.schemas import incident as schema
 from app.services import incident_service as service
 
 router = APIRouter(tags=['incidents'])
 Key = Annotated[str | None, Header(alias='Idempotency-Key', min_length=1, max_length=200)]
+
+
+@router.post('/incidents/prepare')
+def prepare(payload: schema.IncidentPrepare, current: StaffUser, store: Store):
+    from app.services.ai_service import AIProviderError
+    from pydantic import ValidationError
+    try:
+        return service.prepare(store, payload, current['sub'], current['role'])
+    except (AIProviderError, ValidationError) as exc:
+        raise HTTPException(503, '辅助整理暂不可用，请直接人工上报，不必等待') from exc
 
 
 @router.get('/incidents')

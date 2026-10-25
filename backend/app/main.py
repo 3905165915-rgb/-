@@ -13,6 +13,7 @@ from app.schemas.api import HealthResponse
 from app.storage.json_store import CURRENT_SCHEMA_VERSION, JsonStore
 from app.services.workflow import DomainError
 from app.api.routes import family, incidents, reports, insights, impressions
+from app.api.routes import notifications, photos, governance
 
 
 @asynccontextmanager
@@ -52,6 +53,17 @@ async def validation_error_handler(request: Request, exc: RequestValidationError
 @app.exception_handler(DomainError)
 async def domain_error_handler(_, exc: DomainError):
     messages = {
+        'elder_not_in_current_work_scope': '该老人不在你的当前照护范围，请主管安排照护分配或临时支援',
+        'elder_not_in_care': '该老人当前不在可提供在院照护的状态，请先核对入住或离院信息',
+        'attachment_size_invalid': '照片不能为空且不能超过4MB，请压缩后重试',
+        'attachment_format_invalid': '仅支持JPEG和PNG照片',
+        'attachment_format_mismatch': '照片内容与所选文件类型不一致，请重新选择',
+        'attachment_pending_review_private': '照片尚未审核，仅上传人和主管可以查看',
+        'attachment_image_invalid': '无法读取这张照片，请重新拍摄或选择其他照片',
+        'image_analysis_requires_management_review': '此项照片观察需要主管审核，请提交审核',
+        'notification_not_authorized': '你不能查看或操作其他人员的通知',
+        'summary_public_quotes_need_confirmation': '请先核对并确认选定引文可以向家属公开',
+        'dashboard_narrow_range_required': '所选范围数据过多，请缩短日期或选择老人、班次',
         'stale_revision': '内容已被更新，请刷新后核对',
         'record_impact_changed_refresh': '影响范围已变化，请重新预览并核对',
         'not_a_shift_member': '当前账号未加入该班次，请选择正确班次或联系主管',
@@ -105,3 +117,6 @@ app.include_router(incidents.router, prefix="/api/v1")
 app.include_router(reports.router, prefix="/api/v1")
 app.include_router(insights.router, prefix="/api/v1")
 app.include_router(impressions.router, prefix="/api/v1")
+app.include_router(notifications.router, prefix="/api/v1")
+app.include_router(photos.router, prefix="/api/v1")
+app.include_router(governance.router, prefix="/api/v1")

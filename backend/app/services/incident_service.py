@@ -71,6 +71,8 @@ def get(store, item_id, user_id, role):
 def create(store, payload, user_id, role, key=None):
     def mutate(data):
         current_staff(data, user_id, role)
+        from app.services.care_scope_service import require_elder_access
+        require_elder_access(data, payload.elder_id, user_id, role)
         def operation():
             admission(data, payload.elder_id, payload.admission_id)
             if payload.occurred_at > parse_time(now()):
@@ -83,6 +85,31 @@ def create(store, payload, user_id, role, key=None):
             return view(data, item)
         return replayable(data, user_id, 'report_incident', key, payload.model_dump(mode='json'), operation)
     return store.mutate(mutate)
+
+
+def prepare(store, payload, user_id, role):
+    from time import perf_counter
+    from app.services.care_scope_service import require_elder_access
+    from app.services.ai_service import AIProviderError, get_ai_provider
+    from app.services.ai_outputs import validate_citations
+    data = store.read()
+    require_elder_access(data, payload.elder_id, user_id, role)
+    sources = [{'source_id': 'description', 'text': payload.description}]
+    if payload.immediate_action:
+        sources.append({'source_id': 'immediate_action', 'text': payload.immediate_action})
+    provider = get_ai_provider()
+    start = perf_counter()
+    try:
+        output = validate_citations(provider.summarize(sources), sources, 'summary')
+    except DomainError:
+        raise
+    except (ValueError, TypeError, KeyError) as exc:
+        raise AIProviderError('incident_preparation_output_invalid') from exc
+    require_elder_access(store.read(), payload.elder_id, user_id, role)
+    return {'facts_draft': output['points'], 'missing': [name for name, value in (
+        ('发生时间', payload.occurred_at), ('已采取措施', payload.immediate_action)) if value is None],
+        'provider': provider.name, 'elapsed_ms': round((perf_counter() - start) * 1000),
+        'status': 'draft', 'warning': '仅辅助整理原文，不能据此认定事件、等级、责任或医疗处置；人工上报无需等待本功能。'}
 
 
 def triage(store, item_id, payload, user_id, role, key=None):

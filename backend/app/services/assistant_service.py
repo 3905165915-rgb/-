@@ -17,10 +17,12 @@ def _snapshot(data, elder_id, shift_id, scene, user_id, role):
     user = find(data, 'users', user_id, 'staff_not_found')
     if role not in {'admin', 'supervisor', 'caregiver'} or not user.get('active', True) or user['role'] != role:
         raise DomainError('assistant_permissions_changed', 403)
+    from app.services.care_scope_service import require_elder_access
     elder = find(data, 'elders', elder_id, 'elder_not_found')
     if elder.get('status') == 'discharged':
         raise DomainError('elder_inactive')
     care_eligible(data, elder_id)
+    require_elder_access(data, elder_id, user_id, role)
     open_shift(data, shift_id, user_id, role)
     memories = context_from_data(data, elder_id, scene)
     member_shifts = {row['id'] for row in data['shifts'] if user_id in row['caregiver_ids']}

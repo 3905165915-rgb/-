@@ -79,6 +79,8 @@ class CareRecord(BaseModel):
     created_by: str
     status: RecordStatus = "confirmed"
     source_draft_id: str | None = None
+    source_attachment_ids: list[str] = Field(default_factory=list)
+    source_image_analysis_id: str | None = None
     created_at: str
     happened_at: str | None = None
     updated_at: str | None = None

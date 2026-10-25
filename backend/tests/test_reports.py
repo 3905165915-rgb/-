@@ -100,6 +100,8 @@ def test_export_preserves_evidence_chain_without_other_elders_in_same_handover(a
     first, second = shifts(api)
     _, store, _ = api
     store.mutate(lambda data: data['elders'].append({'id': 'E2', 'name': '其他老人', 'status': 'active'}))
+    from scope_fixtures import grant
+    grant(api, 'E2')
     for elder_id, text in [('E1', '本老人交班事项'), ('E2', '其他老人私密信息禁止导出')]:
         post(api, '/records/manual', {'elder_id': elder_id, 'shift_id': first['id'], 'raw_text': text,
             'task_candidates': [{'title': text}]}, actor='staff')

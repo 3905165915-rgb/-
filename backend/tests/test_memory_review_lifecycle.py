@@ -69,6 +69,8 @@ def test_refusal_evidence_must_belong_to_same_elder(api, memory_payload):
     _, store, _ = api
     memory = review(api, propose(api, memory_payload))
     store.mutate(lambda data: data['elders'].append({'id': 'E2', 'name': '测试老人', 'status': 'active'}))
+    from scope_fixtures import grant
+    grant(api, 'E2')
     assert report(api, memory, refusal_record(api, 'E2')).status_code == 422
 
 

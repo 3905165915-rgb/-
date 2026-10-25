@@ -108,8 +108,12 @@ def get(store, assessment_id, user_id, role):
 
 def listing(store, user_id, role, elder_id=None, limit=100, offset=0):
     data = store.read()
+    from app.services.care_scope_service import elder_ids
+    scope = elder_ids(data, user_id, role) if role == 'caregiver' else None
     rows = []
     for item in reversed(data['assessments']):
+        if scope is not None and item['elder_id'] not in scope:
+            continue
         if elder_id and item['elder_id'] != elder_id:
             continue
         try:
@@ -123,6 +127,8 @@ def listing(store, user_id, role, elder_id=None, limit=100, offset=0):
 def create(store, payload, user_id, role, key=None):
     def mutate(data):
         current_staff(data, user_id, role)
+        from app.services.care_scope_service import require_elder_access
+        require_elder_access(data, payload.elder_id, user_id, role)
         def operation():
             elder = care_eligible(data, payload.elder_id)
             at = now()

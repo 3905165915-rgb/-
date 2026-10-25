@@ -39,7 +39,7 @@ def review_assessment(assessment_id: str, payload: AssessmentReview, current: Ma
 @router.get('/care-plans')
 def list_plans(current: StaffUser, store: Store, elder_id: str | None = None,
                limit: int = Query(100, ge=1, le=200), offset: int = Query(0, ge=0)):
-    return plans.listing(store, current['role'], elder_id, limit, offset)
+    return plans.listing(store, current['role'], elder_id, limit, offset, current['sub'])
 
 
 @router.get('/care-plans/{plan_id}')

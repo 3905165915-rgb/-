@@ -21,9 +21,9 @@ IdempotencyKey = Annotated[str | None, Header(min_length=1, max_length=128)]
 
 
 @router.get('', response_model=list[CareRecord])
-def records(_: StaffUser, store: Store, elder_id: str | None = None, shift_id: str | None = None,
+def records(current: StaffUser, store: Store, elder_id: str | None = None, shift_id: str | None = None,
             limit: int = Query(100, ge=1, le=200), offset: int = Query(0, ge=0)):
-    return record_service.record_list(store, elder_id, shift_id, limit, offset)
+    return record_service.record_list(store, elder_id, shift_id, limit, offset, current['sub'], current['role'])
 
 
 @router.get('/drafts', response_model=list[AIDraft])

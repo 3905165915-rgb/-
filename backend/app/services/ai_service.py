@@ -248,11 +248,12 @@ def _parse_json_content(content: str) -> dict:
 
 
 def get_ai_provider() -> MockAIProvider | DeepSeekAIProvider:
+    from app.services.governance_service import instrument
     if settings.ai_provider.lower() == "deepseek":
-        return DeepSeekAIProvider(
+        return instrument(DeepSeekAIProvider(
             api_key=settings.deepseek_api_key,
             base_url=settings.deepseek_base_url,
             model=settings.deepseek_model,
             timeout_seconds=settings.deepseek_timeout_seconds,
-        )
-    return MockAIProvider()
+        ), settings.data_dir)
+    return instrument(MockAIProvider(), settings.data_dir)

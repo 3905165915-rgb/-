@@ -14,8 +14,18 @@ from app.services.workflow import current_staff
 from app.services.facility_service import care_eligible, care_state
 
 
-def record_list(store: JsonStore, elder_id=None, shift_id=None, limit=100, offset=0) -> list[CareRecord]:
-    items = store.read()['care_records']
+def _scope(data, elder_id, user_id, role):
+    from app.services.care_scope_service import require_elder_access
+    require_elder_access(data, elder_id, user_id, role)
+
+
+def record_list(store: JsonStore, elder_id=None, shift_id=None, limit=100, offset=0, user_id=None, role=None) -> list[CareRecord]:
+    data = store.read()
+    items = data['care_records']
+    if role == 'caregiver':
+        from app.services.care_scope_service import elder_ids
+        scope = elder_ids(data, user_id, role)
+        items = [r for r in items if r['elder_id'] in scope]
     items = [item for item in items if (elder_id is None or item['elder_id'] == elder_id)
              and (shift_id is None or item.get('shift_id') == shift_id)]
     return [CareRecord.model_validate(item) for item in sorted(items, key=lambda x: (x['created_at'], x['id']), reverse=True)[offset:offset+limit]]
@@ -26,7 +36,12 @@ def record_detail(store: JsonStore, record_id: str) -> CareRecord:
 
 
 def draft_list(store: JsonStore, user_id: str, role: str, elder_id=None, status=None, limit=100, offset=0) -> list[AIDraft]:
-    items = store.read()['ai_drafts']
+    data = store.read()
+    items = data['ai_drafts']
+    if role == 'caregiver':
+        from app.services.care_scope_service import elder_ids
+        scope = elder_ids(data, user_id, role)
+        items = [r for r in items if r['elder_id'] in scope]
     items = [item for item in items if (elder_id is None or item['elder_id'] == elder_id)
              and (status is None or item['status'] == status)
              and (role in {'admin', 'supervisor'} or item.get('created_by') == user_id)]
@@ -45,6 +60,7 @@ def save_failed_draft(store: JsonStore, elder_id: str, shift_id: str | None, tex
     """Keep the submitted original text when AI is unavailable; never fabricate output."""
     def mutate(data):
         current_staff(data, user_id, role)
+        _scope(data, elder_id, user_id, role)
         elder = care_eligible(data, elder_id)
         if expected_state is not None and care_state(elder) != expected_state:
             raise DomainError('draft_elder_state_changed')
@@ -100,6 +116,7 @@ def confirm(store: JsonStore, draft_id: str, user_id: str, observations, candida
     def mutate(data):
         current_staff(data, user_id, role)
         draft = find(data, 'ai_drafts', draft_id, 'draft_not_found')
+        _scope(data, draft['elder_id'], user_id, role)
         editable(data, draft, user_id, role)
         values = observations if observations is not None else draft.get('observations', [])
         if not values or any(not isinstance(value, str) or not value.strip() or len(value) > 5000 for value in values) or len(values) > 50:
@@ -212,6 +229,7 @@ def update_draft(store, draft_id, payload, user_id, role, key=None):
 def manual(store: JsonStore, payload: ManualRecordRequest, user_id: str, role: str, key=None) -> dict:
     def mutate(data):
         current_staff(data, user_id, role)
+        _scope(data, payload.elder_id, user_id, role)
         def operation():
             elder = care_eligible(data, payload.elder_id)
             open_shift(data, payload.shift_id, user_id, role)
@@ -237,6 +255,7 @@ def correct(store: JsonStore, record_id: str, payload: CorrectRecordRequest, use
     def mutate(data):
         current_staff(data, user_id, role)
         record = find(data, 'care_records', record_id, 'record_not_found')
+        _scope(data, record['elder_id'], user_id, role)
         editable(data, record, user_id, role)
         def operation():
             revision = record.get('revision', 1)

@@ -93,6 +93,12 @@ def build_demo(previous: dict, password: str) -> dict:
                 expected_elder_revision=elder['revision'], bed_id=bed['id'],
                 expected_bed_revision=bed['revision'], reason='虚构测试入住'), admin, 'admin')
             elder_id = elder['id']
+            from app.schemas.care_scope import CareAssignment
+            from app.services import care_scope_service
+            care_scope_service.assign(store, CareAssignment(
+                elder_id=elder_id, caregiver_id=caregiver, kind='explicit_assignment',
+                start_at=start, end_at=instant + timedelta(days=7),
+                reason='虚构演示照护分配，7天后需重新确认'), admin, 'admin')
             current_elder = next(row for row in store.read()['elders'] if row['id'] == elder_id)
             admission_id = current_elder['current_admission_id']
             recorded = instant - timedelta(minutes=5)

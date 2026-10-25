@@ -22,8 +22,14 @@ def task_view(item: dict) -> dict:
     return result
 
 
-def list_tasks(store: JsonStore, elder_id=None, shift_id=None, assigned_to=None, status=None, limit=100, offset=0):
-    items = [task_view(item) for item in store.read()['care_tasks']]
+def list_tasks(store: JsonStore, elder_id=None, shift_id=None, assigned_to=None, status=None, limit=100, offset=0, user_id=None, role=None):
+    data = store.read()
+    items = data['care_tasks']
+    if role == 'caregiver':
+        from app.services.care_scope_service import elder_ids
+        scope = elder_ids(data, user_id, role)
+        items = [r for r in items if r['elder_id'] in scope or r.get('assigned_to') == user_id]
+    items = [task_view(item) for item in items]
     items = [item for item in items if (elder_id is None or item['elder_id'] == elder_id)
              and (shift_id is None or item['shift_id'] == shift_id)
              and (assigned_to is None or item['assigned_to'] == assigned_to)
@@ -56,6 +62,8 @@ def _validate_source(data, payload: TaskCreateRequest, user_id, role):
 def create(store: JsonStore, payload: TaskCreateRequest, user_id: str, role: str, key=None) -> CareTask:
     def mutate(data):
         current_staff(data, user_id, role)
+        from app.services.care_scope_service import require_elder_access
+        require_elder_access(data, payload.elder_id, user_id, role)
 
         def operation():
             from app.services.facility_service import care_eligible
