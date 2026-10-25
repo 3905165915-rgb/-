@@ -31,6 +31,26 @@ const ready = computed(() => !pending.value && !queryError.value)
 const elderMap = computed(
   () => new Map(elders.data.value?.map((elder) => [elder.id, elder])),
 )
+const elderWorkload = computed(() => {
+  const grouped = new Map<string, typeof tasks.data.value>()
+  for (const task of tasks.data.value ?? []) {
+    if (!task.elderId) continue
+    const rows = grouped.get(task.elderId) ?? []
+    rows.push(task)
+    grouped.set(task.elderId, rows)
+  }
+  return [...grouped.entries()]
+    .map(([elderId, rows]) => ({
+      elder: elderMap.value.get(elderId),
+      rows: rows ?? [],
+      pending: (rows ?? []).filter(
+        (task) => !['completed', 'not_done', 'cancelled'].includes(task.status),
+      ).length,
+      overdue: (rows ?? []).filter((task) => task.status === 'overdue').length,
+    }))
+    .filter((item) => item.elder)
+    .sort((a, b) => b.pending - a.pending)
+})
 const statistics = computed(() => {
   const rows = tasks.data.value ?? []
   return {
@@ -72,7 +92,7 @@ watch(filtered, () => {
     <div class="workbench-heading surface-band">
       <div class="page-title-row">
         <h1>护理工作台</h1>
-        <RouterLink to="/tasks/new" class="task-create-link"><Plus :size="18" aria-hidden="true" />新建任务</RouterLink>
+        <RouterLink to="/records/new" class="task-create-link"><Plus :size="18" aria-hidden="true" />记一条</RouterLink>
         <button
           type="button"
           class="icon-button"
@@ -90,6 +110,7 @@ watch(filtered, () => {
           />
         </button>
       </div>
+      <p class="workbench-intro">先找到老人，再查看今天需要接续的照护事项。</p>
       <p class="scope-label">
         已载入任务统计
       </p>
@@ -110,6 +131,35 @@ watch(filtered, () => {
           <dt>已完成</dt>
         </div>
       </dl>
+      <section class="elder-workload" aria-labelledby="elder-workload-title">
+        <div class="section-heading">
+          <div>
+            <h2 id="elder-workload-title">任务关联老人</h2>
+            <p>按当前已载入任务整理，点开老人可查看照护提示和相关任务。</p>
+          </div>
+          <RouterLink to="/elders" class="all-elders-link">全部老人</RouterLink>
+        </div>
+        <div v-if="ready && elderWorkload.length" class="elder-workload-list">
+          <RouterLink
+            v-for="item in elderWorkload"
+            :key="item.elder!.id"
+            :to="'/elders/' + encodeURIComponent(item.elder!.id)"
+            class="elder-workload-card"
+          >
+            <span class="elder-avatar" aria-hidden="true">{{ item.elder!.name.slice(0, 1) }}</span>
+            <span class="elder-workload-copy">
+              <strong>{{ item.elder!.name }}</strong>
+              <small>{{ item.elder!.bedLabel || '床位未提供' }} · {{ item.rows.length }}项关联任务</small>
+            </span>
+            <span class="elder-workload-counts">
+              <b>{{ item.pending }}</b><small>待处理</small>
+              <em v-if="item.overdue">逾期 {{ item.overdue }}</em>
+            </span>
+            <ChevronRight :size="18" aria-hidden="true" />
+          </RouterLink>
+        </div>
+        <p v-else-if="ready" class="elder-workload-empty">暂时没有关联任务的老人，可从“老人”查看档案。</p>
+      </section>
       <div class="search-tools">
         <van-search
           v-model="filters.q"
@@ -346,5 +396,23 @@ watch(filtered, () => {
   </section>
 </template>
 <style scoped>
-.task-create-link { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; font-size: 14px; color: #1767cf; white-space: nowrap; }
+.task-create-link { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; padding: 0 12px; font-size: 14px; color: #1767cf; white-space: nowrap; background: #edf4ff; border-radius: 999px; }
+.workbench-intro { margin: 8px 0 18px; color: var(--hl-muted); font-size: 14px; }
+.elder-workload { padding: 16px 0 20px; }
+.section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.section-heading h2 { margin: 0; font-size: 17px; }
+.section-heading p { margin: 3px 0 0; color: var(--hl-muted); font-size: 12px; }
+.all-elders-link { flex-shrink: 0; font-size: 14px; }
+.elder-workload-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr)); gap: 10px; }
+.elder-workload-card { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 12px; color: var(--hl-ink); background: color-mix(in srgb, var(--hl-surface, #fff) 88%, #e9f2ff); border: 1px solid var(--hl-border); border-radius: 14px; box-shadow: 0 5px 16px #1d3f5e0a; }
+.elder-workload-card:hover { border-color: color-mix(in srgb, var(--hl-primary) 42%, var(--hl-border)); transform: translateY(-1px); }
+.elder-avatar { display: grid; place-items: center; width: 42px; height: 42px; flex: 0 0 42px; color: #1767cf; font-weight: 700; background: #e5efff; border-radius: 14px; }
+.elder-workload-copy { display: grid; flex: 1; min-width: 0; gap: 3px; }
+.elder-workload-copy strong { font-size: 15px; }
+.elder-workload-copy small, .elder-workload-counts small { color: var(--hl-muted); font-size: 12px; }
+.elder-workload-counts { display: grid; justify-items: center; line-height: 1.2; }
+.elder-workload-counts b { color: var(--hl-primary); font-size: 20px; }
+.elder-workload-counts em { margin-top: 4px; color: var(--hl-danger); font-size: 11px; font-style: normal; white-space: nowrap; }
+.elder-workload-empty { padding: 12px; color: var(--hl-muted); background: #ffffffa6; border-radius: 12px; }
+@media (max-width: 420px) { .elder-workload-card { gap: 8px; padding: 10px; } .elder-workload-counts { min-width: 45px; } }
 </style>
