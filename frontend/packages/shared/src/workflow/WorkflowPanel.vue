@@ -34,6 +34,7 @@ import RecordTaskReview from './RecordTaskReview.vue'
 import { recordTaskOwners, reviewedRecordTasks, selectedRecordTasks, recordSavedMessage } from './record-tasks'
 import ServiceCareHints from './ServiceCareHints.vue'
 import TaskCreationContext from './TaskCreationContext.vue'
+import PhotoObservation from './PhotoObservation.vue'
 import { careContextOptions, incidentEvidenceIssue, updateCareContext } from './care-context'
 import { submissionFeedback } from './submission-feedback'
 import {
@@ -1599,7 +1600,7 @@ onMounted(async () => {
           <form class="wf-form" @submit.prevent="run">
             <h3>{{ taskCreation ? '任务内容' : operationTitle(active) }}</h3>
             <p v-if="group === 'incidents'" class="wf-notice">
-              人工上报无需等待AI。请填写事实、发生时间和已采取措施，由主管分类和分级。当前上报需要关联该老人入住期间的正式记录；没有事实依据时，可先人工记一条，再回来上报。
+              可先提交已知事实和立即措施，无需等待AI或先创建正式记录。证据为可选项；有引用时请确认属于当前老人和入住关系。主管后续负责分类、分级与整改。
             </p>
             <div
               v-if="recordComposer"
@@ -1748,11 +1749,7 @@ onMounted(async () => {
               />
             </fieldset>
             <ServiceCareHints v-if="recordComposer && active.path === '/records/context-extract'" :elder-id="String(body.elder_id || '')" :scene="String(body.scene || '')" />
-            <details v-if="recordComposer" class="wf-result-details">
-              <summary>照片辅助观察</summary>
-              <p>照片上传与识别暂未开放。可以继续文字、语音或人工记录；照片仅供授权照护与审核人员查看。</p>
-              <p class="wf-notice">AI识别可能有误，不构成诊断或处置建议，请人工核对。无法判断时，应补充清晰照片或人工核实。</p>
-            </details>
+            <PhotoObservation v-if="recordComposer" :elder-id="String(body.elder_id || '')" :attachment-id="typeof props.context?.attachment_id === 'string' ? props.context.attachment_id : undefined" :analysis-id="typeof props.context?.analysis_id === 'string' ? props.context.analysis_id : undefined" />
             <div
               v-if="
                 active.method !== 'get' &&

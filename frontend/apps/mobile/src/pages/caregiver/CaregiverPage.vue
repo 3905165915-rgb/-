@@ -11,7 +11,7 @@ import {
   ShieldAlert,
 } from 'lucide-vue-next'
 import { resolveStatus, taskStatusMeta } from '@hulao/shared'
-import { useTasks, useElders } from '../../services/data'
+import { mode, useCareWorklist, useTasks, useElders } from '../../services/data'
 import {
   useTaskFilters,
   taskStatusLabels,
@@ -20,6 +20,7 @@ import FeedbackState from '../../components/FeedbackState.vue'
 import { elderWorkbench } from './elder-workbench'
 const tasks = useTasks()
 const elders = useElders()
+const worklist = useCareWorklist()
 const { filters, filtered, shifts, assignees, sync, reset } = useTaskFilters(
   () => tasks.data.value ?? [],
   () => elders.data.value ?? [],
@@ -27,11 +28,27 @@ const { filters, filtered, shifts, assignees, sync, reset } = useTaskFilters(
 const filterOpen = ref(false)
 const limit = ref(30)
 const elderLimit = ref(12)
-const elderCards = computed(() => ready.value
-  ? elderWorkbench(elders.data.value ?? [], tasks.data.value ?? []) : [])
+const elderCards = computed(() => {
+  if (!ready.value) return []
+  if (mode === 'demo') return elderWorkbench(elders.data.value ?? [], tasks.data.value ?? []).map(card => ({ ...card, scopeReasons: [] as string[] }))
+  const byId = new Map((elders.data.value ?? []).map(elder => [elder.id, elder]))
+  return (worklist.data.value?.items ?? []).map(item => ({
+    elder: byId.get(item.elder.id) ?? { id: item.elder.id, name: item.elder.name, bedLabel: '床位信息未提供', status: item.elder.status, notes: undefined, lastUpdate: undefined },
+    tasks: item.open_tasks.map(task => ({ id: task.id, title: task.title, status: task.status })),
+    pending: item.pending_count,
+    inProgress: item.open_tasks.filter(task => task.status === 'in_progress').length,
+    overdue: item.overdue_count,
+    scopeReasons: item.scope_reasons,
+  }))
+})
+const scopeReasonLabels: Record<string, string> = {
+  explicit_assignment: '明确分配', temporary_support: '临时支援',
+  explicit_task_assignment: '明确任务分配', open_shift_membership: '开放班次待办',
+  management_access: '管理范围',
+}
 const visible = computed(() => filtered.value.slice(0, limit.value))
-const pending = computed(() => tasks.isPending.value || elders.isPending.value)
-const queryError = computed(() => tasks.error.value || elders.error.value)
+const pending = computed(() => tasks.isPending.value || elders.isPending.value || (mode === 'api' && worklist.isPending.value))
+const queryError = computed(() => tasks.error.value || elders.error.value || (mode === 'api' ? worklist.error.value : null))
 const ready = computed(() => !pending.value && !queryError.value)
 const elderMap = computed(
   () => new Map(elders.data.value?.map((elder) => [elder.id, elder])),
@@ -67,6 +84,7 @@ function setStatus(tab: { name: string | number }) {
 function refresh() {
   void tasks.refetch()
   void elders.refetch()
+  if (mode === 'api') void worklist.refetch()
 }
 watch(filtered, () => {
   limit.value = 30
@@ -124,9 +142,9 @@ watch(filtered, () => {
       </dl>
       <section class="elder-workbench" aria-labelledby="workbench-elders-title">
         <h2 id="workbench-elders-title">先看老人</h2>
-        <p class="scope-label">已载入任务关联的老人；不代表固定责任分配。任务筛选仅影响下方列表。</p>
+        <p class="scope-label">{{ mode === 'api' ? (worklist.data.value?.scope_rule || '照护范围由服务器核定。') : '本地演示范围；不代表固定责任分配。' }} 任务筛选仅影响下方列表。</p>
         <FeedbackState :loading="pending" :error="queryError"
-          :empty="ready && !elderCards.length" empty-text="暂无已载入任务关联的老人"
+          :empty="ready && !elderCards.length" :empty-text="mode === 'api' ? '当前没有授权照护的老人，请联系主管安排照护范围。' : '暂无已载入任务关联的老人'"
           @retry="refresh" />
         <ul v-if="ready && elderCards.length" class="elder-card-list" aria-label="任务关联老人">
           <li v-for="card in elderCards.slice(0, elderLimit)" :key="card.elder.id" class="elder-work-card">
@@ -138,6 +156,7 @@ watch(filtered, () => {
             <p class="elder-card-counts">
               待处理 {{ card.pending }} · 进行中 {{ card.inProgress }} · <span :class="{ 'elder-card-overdue': card.overdue }">已逾期 {{ card.overdue }}</span>
             </p>
+            <p v-if="card.scopeReasons.length" class="scope-label">范围依据：{{ card.scopeReasons.map(reason => scopeReasonLabels[reason] || '其他授权范围').join('、') }}</p>
             <p v-if="card.elder.notes?.trim()" class="elder-card-note">档案注意事项：{{ card.elder.notes }}</p>
             <p v-if="card.elder.lastUpdate?.trim()" class="scope-label">档案最近更新：{{ card.elder.lastUpdate }}</p>
             <ul class="elder-card-tasks" aria-label="关联任务预览">

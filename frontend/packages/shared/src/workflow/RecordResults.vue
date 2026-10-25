@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { display, type Row } from './model'
 import WorkflowResult from './WorkflowResult.vue'
+import PhotoObservation from './PhotoObservation.vue'
 const props = defineProps<{ value: unknown; catalogs: Record<string, Row[]> }>()
 const emit = defineEmits<{ select: [Row] }>()
+const openPhotos = ref<Record<string, boolean>>({})
 const rows = computed(() => {
   const value = props.value
   if (Array.isArray(value)) return value as Row[]
@@ -57,6 +59,10 @@ const evidenceFields = (row: Row) =>
       </header>
       <p class="wf-muted">{{ display(row.created_at, 'created_at') }}</p>
       <p class="wf-record-preview">{{ content(row) }}</p>
+      <template v-if="Array.isArray(row.source_attachment_ids) && row.source_attachment_ids.length">
+        <button type="button" class="wf-secondary" :aria-expanded="!!openPhotos[String(row.id)]" @click="openPhotos[String(row.id)] = !openPhotos[String(row.id)]">{{ openPhotos[String(row.id)] ? '收起原图与人工审核' : '查看原图与人工审核' }}</button>
+        <PhotoObservation v-if="openPhotos[String(row.id)]" :elder-id="String(row.elder_id)" :attachment-id="String(row.source_attachment_ids[0])" :analysis-id="typeof row.source_image_analysis_id === 'string' ? row.source_image_analysis_id : undefined" read-only />
+      </template>
       <p
         v-if="isDraft(row) && row.status === 'pending_review'"
         class="wf-muted"

@@ -28,7 +28,7 @@ export function updateCareContext(previous: Row, next: Row, catalogs: Record<str
 export function incidentEvidenceIssue(payload: Row, catalogs: Record<string, Row[]>): string {
   const eligible = careContextOptions(payload.elder_id, catalogs)
   if (!eligible.admission_id.some(row => row.id === payload.admission_id)) return '请核对所选老人对应的入住关系，不能关联其他老人。'
-  if (!Array.isArray(payload.evidence) || !payload.evidence.length) return '当前上报接口需要至少一条已确认记录作为事实依据，请先人工记一条，无需等待AI。'
+  if (!Array.isArray(payload.evidence)) return '引用证据格式异常，请重新核对。'
   for (const source of payload.evidence as Row[]) {
     const record = eligible.record_id.find(row => row.id === source.record_id && row.admission_id === payload.admission_id)
     if (!record || record.revision !== source.revision) return '证据记录不属于当前老人或入住关系，或版本已变化，请重新核对。'

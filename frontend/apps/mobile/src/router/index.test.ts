@@ -162,6 +162,16 @@ describe('mobile entry and session recovery', () => {
       expect(router.currentRoute.value.path).toBe('/caregiver')
     },
   )
+  it('opens internal notification business forms with exact object context and denies family access', async () => {
+    const path = '/notifications/business/family?summary_id=S1&action=%2Ffamily%2Fsummaries%2F%7Bsummary_id%7D%2Freview'
+    const router = await open(path, loginSession('supervisor'))
+    expect(router.currentRoute.value.params.group).toBe('family')
+    expect(router.currentRoute.value.query.summary_id).toBe('S1')
+    expect(router.currentRoute.value.meta.focused).toBe(true)
+    sessionStorage.setItem(key, JSON.stringify(loginSession('family')))
+    await router.push('/notifications/business/memories')
+    expect(router.currentRoute.value.path).toBe('/403')
+  })
   it.each([
     { mode: 'api', accountKey: 'old', role: null, accessToken: 'old' },
     { mode: 'api', accountKey: 'old', role: 'root', accessToken: 'old' },

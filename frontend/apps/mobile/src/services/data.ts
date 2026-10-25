@@ -12,6 +12,8 @@ import {
   type FamilyCase,
   type TimelineEvent,
 } from '@hulao/shared'
+import { request } from '../../../../packages/shared/src/workflow/model'
+import { validateCareWorklist } from '../../../../packages/shared/src/workflow/care-worklist'
 
 export const mode: AppMode =
   import.meta.env.VITE_APP_MODE === 'demo' ? 'demo' : 'api'
@@ -71,6 +73,13 @@ export function useElders() {
         'bedLabel',
         'status',
       ]),
+  })
+}
+export function useCareWorklist() {
+  return useQuery({
+    queryKey: computed(() => queryKey('care-worklist', session.value?.role ?? '')),
+    enabled: computed(() => enabled.value && mode === 'api'),
+    queryFn: async () => validateCareWorklist(await request('/elders/worklist/me')),
   })
 }
 export async function fetchTasks() {

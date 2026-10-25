@@ -91,7 +91,7 @@ const related = computed(
           <ListChecks :size="17" aria-hidden="true" />查看全部任务
         </el-button>
       </div>
-      <ElderImpression :elder-id="elder.id" />
+      <ElderImpression :key="String(route.query.impression_id || elder.id)" :elder-id="elder.id" :report-id="typeof route.query.impression_id === 'string' ? route.query.impression_id : undefined" :point-id="typeof route.query.point_id === 'string' ? route.query.point_id : undefined" />
       <div class="data-section">
         <div class="profile-section">
           <div class="section-title">

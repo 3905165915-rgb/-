@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import WorkflowPanel from '@hulao/shared/workflow'
+import CareAssignments from './CareAssignments.vue'
 import { computed, ref } from 'vue'
 import { ArrowUpRight, RefreshCw, RotateCcw, Search } from 'lucide-vue-next'
-import { useElders } from '../../services/data'
+import { mode, useElders } from '../../services/data'
 import QueryFeedback from '../../components/QueryFeedback.vue'
 const elders = useElders()
 const keyword = ref('')
@@ -45,6 +46,7 @@ const rows = computed(() =>
       title="新建与维护老人档案"
       @changed="elders.refetch()"
     />
+    <CareAssignments v-if="mode === 'api'" @changed="elders.refetch()" />
     <div class="data-section">
       <el-form inline class="filter-bar">
         <el-form-item label="搜索">

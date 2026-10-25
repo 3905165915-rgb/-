@@ -83,6 +83,11 @@ const router = createRouter({
           meta: { roles: internalRoles, focused: true },
         },
         {
+          path: 'notifications/business/:group(family|memories|changes)',
+          component: () => import('../pages/notifications/NotificationBusinessPage.vue'),
+          meta: { roles: internalRoles, focused: true },
+        },
+        {
           path: 'family',
           component: () => import('../pages/family/FamilyPage.vue'),
           meta: { roles: ['family'] },

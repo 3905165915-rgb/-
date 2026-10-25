@@ -59,7 +59,7 @@ async function test(name, role, fn) {
         ? { width: 390, height: 844 }
         : { width: 1440, height: 1000 },
   })
-  const state = { report: null, writes: [], stale: false, invalid: false, promote: false }
+  const state = { report: null, historicalReport: null, reads: [], writes: [], stale: false, invalid: false, promote: false }
   await context.addInitScript(
     (role) =>
       sessionStorage.setItem(
@@ -78,6 +78,9 @@ async function test(name, role, fn) {
     const req = route.request(),
       path = new URL(req.url()).pathname.replace('/api/v1', '')
     let data = []
+    if (req.method() === 'GET') state.reads.push(path)
+    if (state.historicalReport && path === '/elders/E1/impressions/' + state.historicalReport.id)
+      data = state.historicalReport
     if (path === '/elders')
       data = [{ id: 'E1', name: '张阿姨', status: 'active', revision: 1 }]
     if (path === '/elders/E1/impressions')
@@ -157,6 +160,15 @@ async function test(name, role, fn) {
   }
 }
 try {
+  await test('关联入口定位历史印象与具体事项，历史版本不可重新审核', 'admin', async ({ page, state }) => {
+    state.report = { ...report(), id: 'IMP-latest' }
+    state.historicalReport = { ...report(), id: 'IMP-history' }
+    await page.goto(base + '/admin/elders/E1?impression_id=IMP-history&point_id=point-1')
+    await page.getByText('当前关联的印象事项', { exact: true }).waitFor()
+    assert.ok(state.reads.includes('/elders/E1/impressions/IMP-history'))
+    assert.equal(await page.getByRole('button', { name: '核对这条印象', exact: true }).count(), 0)
+    assert.equal(state.writes.length, 0)
+  })
   await test('主管明确场景后将已核对印象加入记忆，刷新不重复创建', 'admin', async ({page, state}) => {
     state.promote = true
     await page.getByRole('button', {name: '整理老人印象', exact: true}).click()

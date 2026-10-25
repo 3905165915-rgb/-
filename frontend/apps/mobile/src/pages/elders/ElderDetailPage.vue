@@ -77,7 +77,7 @@ const related = computed(() =>
         <ChevronRight :size="18" aria-hidden="true" />
       </RouterLink>
 
-      <ElderImpression :elder-id="elder.id" />
+      <ElderImpression :key="String(route.query.impression_id || elder.id)" :elder-id="elder.id" :report-id="typeof route.query.impression_id === 'string' ? route.query.impression_id : undefined" :point-id="typeof route.query.point_id === 'string' ? route.query.point_id : undefined" />
       <section class="profile-section" aria-labelledby="elder-profile-title">
         <h2 id="elder-profile-title">基本资料</h2>
         <dl class="elder-facts">

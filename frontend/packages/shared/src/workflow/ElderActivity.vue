@@ -8,6 +8,7 @@ import {
   activityFilterError,
   activityTypes,
   createElderActivity,
+  createElderTimeline,
   filterElderActivity,
   type ActivityFilter,
   type ActivityReference,
@@ -22,40 +23,45 @@ const context = createElderActivity({
   session: () => sameCareSession(readSession(), props.session) ? readSession() : null,
   demoTasks: async () => (await loadDemoState()).tasks,
 })
-const state = context.state
-const detail = context.detail
+const serverTimeline = createElderTimeline({
+  request,
+  session: () => sameCareSession(readSession(), props.session) ? readSession() : null,
+})
+const state = computed(() => props.mode === 'api' ? serverTimeline.state.value : context.state.value)
+const detail = computed(() => props.mode === 'api' ? serverTimeline.detail.value : context.detail.value)
 const filter = ref<ActivityFilter>({ type: '', start: '', end: '' })
 const limit = ref(30)
 const lastReference = ref<ActivityReference>()
 const detailRegion = ref<HTMLElement>()
 let opener: HTMLElement | null = null
-const items = computed(() => state.value.elderId === props.elderId
-  ? Object.values(state.value.slots).flatMap((slot) => slot.items) : [])
+const items = computed(() => state.value.elderId !== props.elderId ? [] : props.mode === 'api'
+  ? serverTimeline.state.value.items : Object.values(context.state.value.slots).flatMap((slot) => slot.items))
 const filtered = computed(() => filterElderActivity(items.value, props.elderId, filter.value))
 const filterError = computed(() => activityFilterError(filter.value))
 const missingTimes = computed(() => items.value.filter((item) => item.timestamp === null).length)
-const failures = computed(() => Object.entries(state.value.slots).flatMap(([type, slot]) =>
+const failures = computed(() => props.mode === 'api' ? [] : Object.entries(context.state.value.slots).flatMap(([type, slot]) =>
   slot.status === 'error' || slot.status === 'denied'
     ? [`${activityTypes[type as keyof typeof activityTypes]}${slot.status === 'denied' ? '暂不可访问' : '加载失败'}`] : []))
-function refresh() { void context.load(props.elderId, props.mode) }
+function refresh() { void (props.mode === 'api' ? serverTimeline.load(props.elderId, filter.value) : context.load(props.elderId, props.mode)) }
 function reset() { filter.value = { type: '', start: '', end: '' } }
 function reload() {
   reset()
   lastReference.value = undefined
   refresh()
 }
-function revoke() { context.clear(true) }
+function revoke() { context.clear(true); serverTimeline.clear(true) }
 function checkSession() {
   if (!sameCareSession(readSession(), props.session)) revoke()
 }
 function openDetail(reference: ActivityReference, event?: Event) {
   if (event?.currentTarget instanceof HTMLElement) opener = event.currentTarget
   lastReference.value = reference
-  void context.openDetail(reference)
+  void (props.mode === 'api' ? serverTimeline.openDetail(reference) : context.openDetail(reference))
   void nextTick(() => detailRegion.value?.focus())
 }
 function closeDetail() {
-  context.closeDetail()
+  if (props.mode === 'api') serverTimeline.closeDetail()
+  else context.closeDetail()
   opener?.focus()
 }
 function time(value: string) {
@@ -64,7 +70,7 @@ function time(value: string) {
 watch(() => [props.elderId, props.mode, props.session?.mode, props.session?.accountKey,
   props.session?.role, props.session?.userId, props.session?.accessToken], reload,
   { immediate: true, flush: 'sync' })
-watch(filter, () => { limit.value = 30 }, { deep: true })
+watch(filter, () => { limit.value = 30; if (props.mode === 'api') refresh() }, { deep: true })
 const unsubscribe = subscribeDemo(() => { if (props.mode === 'demo') refresh() })
 onMounted(() => {
   window.addEventListener('hulao:unauthorized', revoke)
@@ -73,6 +79,7 @@ onMounted(() => {
 })
 onBeforeUnmount(() => {
   context.clear()
+  serverTimeline.clear()
   unsubscribe()
   window.removeEventListener('hulao:unauthorized', revoke)
   window.removeEventListener('focus', checkSession)
@@ -89,7 +96,7 @@ onBeforeUnmount(() => {
     <p class="activity-scope">
       {{ mode === 'demo'
         ? '本地虚构演示：仅展示可关联的演示任务，未提供活动时间的任务不参加日期筛选。'
-        : '汇总当前账号可访问的记录、任务、交班事项、安全事件和照护记忆列表，不代表完整历史时间线。' }}
+        : '服务器按当前账号授权返回已登记事件；不代表现实服务必然发生。' }}
     </p>
     <fieldset class="activity-filters" :aria-describedby="filterId">
       <legend>筛选老人动态</legend>
@@ -102,10 +109,12 @@ onBeforeUnmount(() => {
       <button type="button" @click="reset">重置筛选</button>
     </fieldset>
     <p :id="filterId" class="activity-scope">按每项首个有效活动时间筛选，北京时间，含结束日期当天。</p>
+    <p v-if="mode === 'api' && serverTimeline.state.value.notice" class="activity-scope">{{ serverTimeline.state.value.notice }}</p>
     <p v-if="filterError" role="alert">{{ filterError }}</p>
     <p v-if="missingTimes" class="activity-scope">{{ missingTimes }} 项未提供有效活动时间；选择日期后隐藏。</p>
     <p v-if="state.status === 'pending'" role="status">正在加载可访问的动态…</p>
     <p v-if="state.status === 'denied'" role="alert">登录或访问权限已变化，请重新登录后查看。</p>
+    <div v-if="mode === 'api' && state.status === 'error'" class="activity-error" role="alert"><p>服务器时间线未载入完整；可保留已载入项目并重试。</p><button type="button" @click="serverTimeline.retry()">重试本页</button></div>
     <div v-if="failures.length" class="activity-error" role="alert">
       <p>{{ state.status === 'error' ? '动态未能载入。' : '部分动态未载入，当前结果不完整。' }}{{ failures.join('；') }}。</p>
       <button type="button" :disabled="state.status === 'pending'" @click="refresh">重试加载动态</button>
@@ -147,6 +156,7 @@ onBeforeUnmount(() => {
       <li v-for="item in filtered.slice(0, limit)" :key="item.key" class="activity-item">
         <p class="activity-kind">{{ activityTypes[item.type] }} · {{ display(item.status, 'status') }}</p>
         <h3>{{ item.title }}</h3>
+        <p v-if="item.actor" class="activity-scope">操作人：{{ item.actor }}</p>
         <p v-if="item.text" class="activity-text">{{ item.text.slice(0, 240) }}{{ item.text.length > 240 ? '…' : '' }}</p>
         <p v-if="!item.times.length" class="activity-scope">活动时间未提供</p>
         <p v-for="stamp in item.times" :key="stamp.label" class="activity-scope">
@@ -155,8 +165,8 @@ onBeforeUnmount(() => {
         </p>
         <div class="activity-actions">
           <RouterLink v-if="item.detailUrl" :to="item.detailUrl">任务详情</RouterLink>
-          <button v-if="mode === 'api'" type="button" :aria-controls="detailId" @click="openDetail(item.reference, $event)">查看{{ activityTypes[item.type] }}详情</button>
-          <template v-if="mode === 'api'">
+          <button v-if="mode === 'api' && item.detailAvailable !== false && !['family', 'other', 'handover'].includes(item.type)" type="button" :aria-controls="detailId" @click="openDetail(item.reference, $event)">查看{{ activityTypes[item.type] }}详情</button>
+          <template v-if="mode === 'demo'">
             <button v-for="(source, index) in item.sources" :key="source.type + source.id" type="button" :aria-controls="detailId" @click="openDetail(source, $event)">查看来源{{ activityTypes[source.type] }}{{ item.sources.length > 1 ? ' ' + (index + 1) : '' }}</button>
           </template>
           <RouterLink v-if="item.replayUrl" :to="item.replayUrl">事项回放</RouterLink>
@@ -164,6 +174,7 @@ onBeforeUnmount(() => {
       </li>
     </ol>
     <button v-if="filtered.length > limit" type="button" @click="limit += 30">显示更多动态</button>
+    <button v-if="mode === 'api' && serverTimeline.state.value.hasMore" type="button" :disabled="state.status === 'pending'" @click="serverTimeline.loadMore()">{{ state.status === 'pending' ? '正在加载…' : '加载下一页动态' }}</button>
   </section>
 </template>
 

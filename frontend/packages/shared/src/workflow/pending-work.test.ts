@@ -1,38 +1,44 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { FrontendSession } from '../session'
-import { isPendingRead, markPendingRead, pendingReadKey, pendingWork, pendingWorkLocation } from './pending-work'
-const session: FrontendSession = { mode: 'api', accountKey: 'isolated-test', userId: 'U1', role: 'caregiver' }
-const sources = {
-  drafts: [{ id: 'D1', elder_id: 'E1', revision: 1, status: 'pending_review', created_by: 'U1' }, { id: 'D2', status: 'pending_review', created_by: 'U2' }],
-  shifts: [{ id: 'S1', caregiver_ids: ['U1'] }],
-  handovers: [{ id: 'H1', status: 'submitted', target_shift_id: 'S1', items: [{ id: 'I1', status: 'pending', elder_id: 'E1' }, { id: 'I2', status: 'received' }] }, { id: 'H2', status: 'draft', items: [{ id: 'I3', status: 'pending' }] }],
-  incidents: [{ id: 'INC1', status: 'reported' }, { id: 'INC2', status: 'rectifying', revision: 1, rectification: { id: 'RECT2', revision: 2, assigned_to: 'U1', status: 'assigned', reviews: [{ decision: 'return' }] } }, { id: 'INC3', status: 'closed' }],
+import { clearNotificationAction, notificationActionKey, notificationLocation, notificationStages, validateNotifications, type ServerNotification } from './pending-work'
+
+const session: FrontendSession = { mode: 'api', accountKey: 'notice-test', userId: 'U1', role: 'caregiver' }
+const item: ServerNotification = {
+  id: 'N1', object_type: 'incidents', object_id: 'INC1', elder_id: 'E1', title: '安全事件待分级',
+  stage: 'triage', status: 'pending', read_at: null, revision: 2, created_at: '2026-10-25T10:00:00Z',
 }
-describe('current pending work queue', () => {
-  it('denies family and keeps caregiver scope to own review/shift/rectification work', () => {
-    expect(pendingWork(sources, { ...session, role: 'family' })).toEqual([])
-    expect(pendingWork(sources, null)).toEqual([])
-    expect(pendingWork(sources, session).map(row => row.key).sort()).toEqual(['record:D1', 'handover:I1', 'incident:INC2'].sort())
-    expect(pendingWork(sources, session).find(row => row.key === 'incident:INC2')?.title).toContain('退回')
-    expect(pendingWork(sources, { ...session, userId: undefined }).filter(row => row.kind === 'record')).toEqual([])
+describe('server notifications', () => {
+  it('validates paginated server envelopes and rejects malformed or duplicate notifications', () => {
+    const value = { items: [item], total: 1, offset: 0, limit: 100, as_of: '2026-10-25T10:01:00Z', definition: '服务器状态' }
+    expect(validateNotifications(value).items).toEqual([item])
+    expect(() => validateNotifications({ ...value, items: [{ ...item, revision: 0 }] })).toThrow('必要字段')
+    expect(() => validateNotifications({ ...value, total: 2, items: [item, item] })).toThrow('必要字段')
+    expect(() => validateNotifications({ ...value, total: -1 })).toThrow('字段不完整')
   })
-  it('keeps read separate from processing and makes changed revisions unread', () => {
+  it('routes each notice to its underlying business object and maps known stages to Chinese', () => {
+    expect(notificationLocation(item, true)).toEqual({ path: '/safety', query: { incident_id: 'INC1', action: '/incidents/{incident_id}', read: '1' } })
+    expect(notificationLocation(item, false).path).toBe('/workflows/incidents')
+    expect(notificationStages.triage).toBe('安全事件分级')
+    expect(notificationLocation({ ...item, object_type: 'unknown' }, true).path).toBe('/notifications')
+    expect(notificationLocation({ ...item, object_type: 'image_analyses' }, false)).toEqual({ path: '/workflows/records', query: { elder: 'E1', elder_id: 'E1', analysis_id: 'INC1', action: '/records/manual' } })
+    expect(notificationLocation({ ...item, object_type: 'attachments' }, true).query.attachment_id).toBe('INC1')
+    expect(notificationLocation({ ...item, object_type: 'family_cases', stage: 'summary_review' }, true)).toEqual({ path: '/notifications/business/family', query: { summary_id: 'INC1', action: '/family/summaries/{summary_id}/review' } })
+    expect(notificationLocation({ ...item, object_type: 'change_reviews' }, false).query).toEqual({ case_id: 'INC1', action: '/change-reviews/{case_id}', read: '1' })
+    expect(notificationLocation({ ...item, object_type: 'elder_impressions' }, false)).toEqual({ path: '/elders/E1', query: { impression_id: 'INC1' } })
+  })
+  it('retains the same action key after retry and scopes it by notice revision and action', () => {
     const values = new Map<string, string>()
-    const store = { getItem: (key: string) => values.get(key) || null, setItem: (key: string, value: string) => { values.set(key, value) } }
-    const item = pendingWork(sources, session).find(row => row.key === 'record:D1')!
-    markPendingRead(store, session, item)
-    expect(isPendingRead(store, session, item)).toBe(true)
-    expect(pendingWork(sources, session)).toHaveLength(3)
-    const changed = pendingWork({ ...sources, drafts: [{ ...sources.drafts[0], revision: 2 }] }, session).find(row => row.key === 'record:D1')!
-    expect(isPendingRead(store, session, changed)).toBe(false)
-    expect(pendingReadKey({ ...session, accountKey: 'another' })).not.toBe(pendingReadKey(session))
-    expect(pendingWork({ ...sources, drafts: [{ ...sources.drafts[0], status: 'confirmed' }] }, session)).toHaveLength(2)
-  })
-  it('links directly to current business objects and prevents own independent review', () => {
-    const item = pendingWork(sources, session).find(row => row.kind === 'handover')!
-    expect(pendingWorkLocation(item, true)).toEqual({ path: '/handover', query: { handover_id: 'H1', item_id: 'I1', action: '/handovers/{handover_id}', read: '1' } })
-    const incidents = [{ id: 'INC4', status: 'rectifying', rectification: { id: 'R4', status: 'awaiting_review', submissions: [{ by: 'U1' }] } }]
-    expect(pendingWork({ incidents }, { ...session, role: 'supervisor' })).toEqual([])
-    expect(pendingWork({ incidents }, { ...session, role: 'supervisor', userId: 'U2' })[0].title).toBe('整改待独立复查')
+    const storage = {
+      getItem: (key: string) => values.get(key) || null,
+      setItem: (key: string, value: string) => { values.set(key, value) },
+      removeItem: (key: string) => { values.delete(key) },
+    }
+    vi.stubGlobal('crypto', { randomUUID: vi.fn().mockReturnValueOnce('key-read').mockReturnValueOnce('key-accept').mockReturnValueOnce('key-new-revision') })
+    const read = notificationActionKey(storage, session, item, 'read')
+    expect(notificationActionKey(storage, session, item, 'read').key).toBe('key-read')
+    expect(notificationActionKey(storage, session, item, 'accept').key).toBe('key-accept')
+    clearNotificationAction(storage, read)
+    expect(notificationActionKey(storage, session, item, 'accept').key).toBe('key-accept')
+    expect(notificationActionKey(storage, session, { ...item, revision: 3 }, 'read').key).toBe('key-new-revision')
   })
 })

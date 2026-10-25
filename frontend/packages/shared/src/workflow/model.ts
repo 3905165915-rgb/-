@@ -1,5 +1,6 @@
 import contract from './contract.json'
 import { clearSession, readSession, type Role } from '../session'
+import { sameCareSession } from './task-care-context'
 
 export type Row = Record<string, unknown>
 export interface Schema {
@@ -609,7 +610,7 @@ export async function request(
     )
     const data = await res.json().catch(() => null)
     if (!res.ok) {
-      if (res.status === 401) {
+      if (res.status === 401 && sameCareSession(readSession(), current)) {
         clearSession()
         window.dispatchEvent(new Event('hulao:unauthorized'))
       }
@@ -669,6 +670,71 @@ export async function request(
     clearTimeout(timeout)
   }
 }
+
+async function authorizedRequest<T>(path: string, init: NonNullable<Parameters<typeof fetch>[1]>, consume: (response: Response) => Promise<T>, timeoutMs = 90000): Promise<T> {
+  const current = readSession()
+  if (!current?.accessToken || current.mode !== 'api')
+    throw new Error('请使用服务器测试账号登录')
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const response = await fetch(
+      (import.meta.env.VITE_API_BASE_URL || '/api/v1').replace(/\/$/, '') + path,
+      {
+        ...init,
+        signal: controller.signal,
+        cache: 'no-store',
+        headers: {
+          Authorization: 'Bearer ' + current.accessToken,
+          ...init.headers,
+        },
+      },
+    )
+    if (response.status === 401 && sameCareSession(readSession(), current)) {
+      clearSession()
+      window.dispatchEvent(new Event('hulao:unauthorized'))
+    }
+    if (!response.ok) {
+      const data = await response.clone().json().catch(() => null)
+      const message = typeof data?.safe_message === 'string'
+        ? data.safe_message
+        : typeof data?.detail === 'string' ? data.detail : '请求未完成，请核对后重试。'
+      throw new WorkflowRequestError(response.status, `${response.status === 409 ? '资料或状态已变化，请刷新后核对。' : ''}${message}`)
+    }
+    return await consume(response)
+  } catch (error) {
+    if (error instanceof WorkflowRequestError) throw error
+    throw new WorkflowRequestError(0, '网络请求未能确认结果，请检查连接后使用同一请求编号重试。')
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+export async function requestBinary(
+  path: string,
+  file: Blob,
+  contentType: 'image/jpeg' | 'image/png',
+  key: string,
+  timeoutMs = 90000,
+): Promise<unknown> {
+  if (file.size < 1 || file.size > 4 * 1024 * 1024)
+    throw new WorkflowRequestError(413, '照片不能为空且不能超过4MiB。')
+  const value = await authorizedRequest(path, {
+    method: 'POST',
+    headers: { 'Content-Type': contentType, 'Idempotency-Key': key },
+    body: file,
+  }, response => response.json().catch(() => null), timeoutMs)
+  if (!value || typeof value !== 'object' || typeof value.id !== 'string')
+    throw new WorkflowRequestError(502, '照片上传结果格式异常，请核实当前状态后再重试。')
+  return value
+}
+
+export async function requestBlob(path: string, timeoutMs = 30000): Promise<Blob> {
+  const value = await authorizedRequest(path, { method: 'GET' }, response => response.blob(), timeoutMs)
+  if (!value.size) throw new WorkflowRequestError(502, '照片内容为空，未能生成预览。')
+  return value
+}
+
 export class WorkflowRequestError extends Error {
   constructor(
     readonly status: number,

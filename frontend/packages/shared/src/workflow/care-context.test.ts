@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { careContextOptions, incidentEvidenceIssue, updateCareContext } from './care-context'
+import { clean, initial, schemas, type Row } from './model'
 
 const catalogs = {
   elders: [{ id: 'E1', current_admission_id: 'A1' }, { id: 'E2', current_admission_id: 'A2' }],
@@ -9,6 +10,12 @@ const catalogs = {
 }
 const valid = { elder_id: 'E1', admission_id: 'A1', evidence: [{ record_id: 'R1', revision: 2, field: 'observations', quote: '人工核对事实' }] }
 describe('elder-scoped task and safety forms', () => {
+  it('starts an initial safety report without evidence rows and accepts an empty evidence payload', () => {
+    const schema = schemas.IncidentCreate
+    expect((initial(schema) as Row).evidence).toEqual([])
+    expect((initial(schemas.AssessmentCreate) as Row).evidence).toHaveLength(1)
+    expect(() => clean(schema, { elder_id: 'E1', admission_id: 'A1', occurred_at: '2026-10-25T00:00:00Z', description: '人工事实', immediate_action: '人工措施', evidence: [] })).not.toThrow()
+  })
   it('only offers formal records and admission for the chosen elder', () => {
     expect(careContextOptions('E1', catalogs).record_id.map(row => row.id)).toEqual(['R1'])
     expect(careContextOptions('E1', catalogs).admission_id.map(row => row.id)).toEqual(['A1'])
@@ -30,6 +37,7 @@ describe('elder-scoped task and safety forms', () => {
     expect(incidentEvidenceIssue({ ...valid, evidence: [{ ...valid.evidence[0], record_id: 'R2' }] }, catalogs)).toContain('证据记录')
     expect(incidentEvidenceIssue({ ...valid, evidence: [{ ...valid.evidence[0], revision: 1 }] }, catalogs)).toContain('版本')
     expect(incidentEvidenceIssue({ ...valid, evidence: [{ ...valid.evidence[0], quote: '模型猜测' }] }, catalogs)).toContain('原文')
-    expect(incidentEvidenceIssue({ ...valid, evidence: [] }, catalogs)).toContain('无需等待AI')
+    expect(incidentEvidenceIssue({ ...valid, evidence: [] }, catalogs)).toBe('')
+    expect(incidentEvidenceIssue({ ...valid, evidence: null }, catalogs)).toContain('格式异常')
   })
 })

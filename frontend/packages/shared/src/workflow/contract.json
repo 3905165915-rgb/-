@@ -2082,7 +2082,7 @@
           },
           "type": "array",
           "maxItems": 10,
-          "minItems": 1,
+          "minItems": 0,
           "title": "Evidence"
         }
       },
@@ -2093,8 +2093,7 @@
         "admission_id",
         "occurred_at",
         "description",
-        "immediate_action",
-        "evidence"
+        "immediate_action"
       ],
       "title": "IncidentCreate"
     },
