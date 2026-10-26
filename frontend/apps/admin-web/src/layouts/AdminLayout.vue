@@ -206,6 +206,8 @@ function leaveAccount(event: FocusEvent) {
           <button
             type="button"
             class="identity-switch"
+            aria-label="切换身份"
+            title="切换身份"
             @click="logout"
           >
             <ArrowLeftRight
