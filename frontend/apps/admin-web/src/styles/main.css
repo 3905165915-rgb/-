@@ -1835,32 +1835,64 @@ input[type='file']::file-selector-button {
     -webkit-backdrop-filter: none;
   }
 }
-/* Give the photograph its own space so neither person is covered by the entry panel. */
-.role-login { background: radial-gradient(ellipse at 5% 5%, #e0eee4, transparent 62%), radial-gradient(ellipse at 95% 95%, #e5ddf4, transparent 60%), #f4f5f1; }
+/* Keep the full photograph separate from the role buttons on every screen. */
+.role-login {
+  background:
+    radial-gradient(ellipse at 5% 5%, #e0eee4, transparent 62%),
+    radial-gradient(ellipse at 95% 95%, #e5ddf4, transparent 60%),
+    #f4f5f1;
+}
 .role-login::before { display: none; }
 .login-wordmark, .login-mobile-link { color: #234f42; }
 .login-wordmark small, .login-footer { color: #52665e; }
 .login-mark { background: #ffffff80; border-color: #ffffffbd; }
-.login-content { align-items: center; gap: clamp(24px, 4vw, 60px); }
-.login-intro { flex: 1; min-width: 0; max-width: 650px; color: #243e33; text-shadow: none; }
+.login-content { align-items: center; gap: clamp(24px, 4vw, 56px); }
+.login-intro {
+  flex: 1;
+  min-width: 0;
+  max-width: none;
+  color: #243e33;
+  text-shadow: none;
+}
 .login-eyebrow { color: #446657; }
 .login-intro h1 { max-width: none; font-size: clamp(27px, 3vw, 40px); }
 .login-intro p { max-width: 560px; color: #536b60; }
-.login-photo { margin: 24px 0 0; overflow: hidden; border-radius: 24px; border: 1px solid #ffffffc9; box-shadow: 0 16px 40px #244d3614; }
+.login-photo {
+  margin: 24px 0 0;
+  overflow: hidden;
+  border: 1px solid #ffffffc9;
+  border-radius: 24px;
+  box-shadow: 0 16px 40px #244d3614;
+}
 .login-photo img { display: block; width: 100%; height: auto; }
-.role-panel { flex-shrink: 0; background: rgb(255 255 255 / 55%); box-shadow: 0 24px 70px #223d3020; }
+.role-panel {
+  flex-shrink: 0;
+  background: rgb(255 255 255 / 55%);
+  box-shadow: 0 24px 70px #223d3020;
+}
 @media (max-width: 760px) {
-.login-content { gap: 22px; }
-.login-intro { flex: 0 0 auto; width: 100%; max-width: none; }
-.login-photo { margin-top: 18px; border-radius: 18px; }
-.role-panel { flex-basis: auto; }
+  .login-content { gap: 22px; }
+  .login-intro { flex: 0 0 auto; width: 100%; }
+  .login-photo { margin-top: 18px; border-radius: 18px; }
+  .role-panel { flex-basis: auto; }
+}
+:root[data-reduce-transparency='true'] .role-panel { background: white; }
+@media (prefers-reduced-transparency: reduce) {
+  .role-panel { background: white; }
 }
 
-:root[data-reduce-transparency='true'] .role-panel { background: white; }
-@media (prefers-reduced-transparency: reduce) { .role-panel { background: white; } }
-
+/* Desktop: entry at the left, both people unobstructed at the right. */
+@media (min-width: 1101px) {
+  .login-content {
+    display: grid;
+    grid-template-columns: minmax(320px, 380px) minmax(0, 1fr);
+    width: min(1240px, 100%);
+  }
+  .role-panel { grid-column: 1; grid-row: 1; width: 100%; }
+  .login-intro { grid-column: 2; grid-row: 1; }
+}
 @media (min-width: 761px) and (max-width: 1100px) {
- .login-content { flex-direction: column; width: min(600px, 100%); gap: 24px; }
- .login-intro { flex: 0 0 auto; width: 100%; }
- .role-panel { width: 100%; flex-basis: auto; }
+  .login-content { flex-direction: column; width: min(600px, 100%); gap: 24px; }
+  .login-intro { flex: 0 0 auto; width: 100%; }
+  .role-panel { width: 100%; flex-basis: auto; }
 }

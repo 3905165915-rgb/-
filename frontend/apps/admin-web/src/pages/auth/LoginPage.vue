@@ -95,7 +95,6 @@ async function submit() {
 <template>
   <main
     class="role-login"
-    :style="{ '--login-image': `url('${image}')` }"
   >
     <header class="login-topbar">
       <a
@@ -130,7 +129,10 @@ async function submit() {
         <figure class="login-photo">
           <img
             :src="image"
-            alt="两位微笑的长者在绿意环绕的户外相伴"
+            alt="两位长者在林间相依而坐，微笑望向前方"
+            width="1920"
+            height="1272"
+            fetchpriority="high"
           >
         </figure>
       </div>
@@ -210,7 +212,7 @@ async function submit() {
       </section>
     </section>
     <footer class="login-footer">
-      <span>照护有依据 · 交接有回应 · 每位长者都被看见</span><span>场景照片：Pexels</span>
+      <span>照护有依据 · 交接有回应 · 每位长者都被看见</span><span>以人为本 · 协同照护</span>
     </footer>
   </main>
 </template>
