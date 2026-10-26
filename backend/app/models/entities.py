@@ -83,6 +83,7 @@ class CareRecord(BaseModel):
     source_attachment_ids: list[str] = Field(default_factory=list)
     source_image_analysis_id: str | None = None
     created_at: str
+    recorded_at: str | None = None
     happened_at: str | None = None
     updated_at: str | None = None
     revision: int = 1

@@ -77,6 +77,51 @@ def test_clarification_is_kept_until_receiver_confirms(api, manual_payload):
     assert len(response.json()['items'][0]['clarifications']) == 2
 
 
+def test_caregiver_handover_view_filters_shared_elders_and_internal_fields(api, manual_payload):
+    client, store, headers = api
+    _, _, _, handover = prepare(api, manual_payload)
+    first_item = handover['items'][0]
+    def seed(data):
+        data['elders'].append({'id': 'E2', 'name': '未授权老人', 'status': 'active'})
+        data['handover_items'].append({'id': 'HI-E2', 'handover_id': handover['id'], 'kind': 'record',
+            'elder_id': 'E2', 'source_id': 'R-E2', 'source_revision': 1,
+            'detail': '其他老人的私密记录', 'status': 'pending', 'clarifications': [],
+            'submitted_by': 'staff', 'received_by': 'other'})
+        data['handovers'][0]['ai_summary'] = {'status': 'pending_review', 'provider': 'mock',
+            'created_at': '2026-10-27T00:00:00Z', 'points': [
+                {'text': '授权老人事项', 'citations': [{'source_id': first_item['source_id'], 'quote': first_item['detail']}]},
+                {'text': '未授权老人事项', 'citations': [{'source_id': 'R-E2', 'quote': '其他老人的私密记录'}]}]}
+    store.mutate(seed)
+    response = client.get(f'/api/v1/handovers/{handover["id"]}', headers=headers('staff'))
+    assert response.status_code == 200
+    body = response.json()
+    assert all(item['elder_id'] == 'E1' for item in body['items'])
+    assert 'clarifications' in body['items'][0]
+    assert all('received_by' not in item and 'submitted_by' not in item for item in body['items'])
+    assert '未授权老人' not in body['ai_summary']['text']
+    manager = client.get(f'/api/v1/handovers/{handover["id"]}', headers=headers('manager')).json()
+    assert any(item['elder_id'] == 'E2' for item in manager['items'])
+
+
+def test_handover_inline_analysis_keeps_existing_task_and_only_suggests_new_task(api, manual_payload):
+    client, store, headers = api
+    _, _, _, handover = prepare(api, manual_payload)
+    existing = {row['id'] for row in store.read()['care_tasks']}
+    response = client.post(f'/api/v1/handovers/{handover["id"]}/ai-summary',
+        json={'expected_revision': handover['revision'], 'text': '请联系家属反馈情况'}, headers=headers())
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result['ai_summary']['status'] == 'pending_review'
+    assert result['handover_suggestions'][0]['evidence_text'] == '请联系家属反馈情况'
+    assert {row['id'] for row in store.read()['care_tasks']} == existing
+    assert {row['source_id'] for row in result['items'] if row['kind'] == 'task'} <= existing
+    submitted = client.post(f'/api/v1/handovers/{handover["id"]}/submit',
+        json={'expected_revision': result['revision'], 'summary': '人工核对摘要',
+              'approve_ai_summary': True, 'accepted_tasks': []}, headers=headers())
+    assert submitted.status_code == 200
+    assert {row['id'] for row in store.read()['care_tasks']} == existing
+
+
 def test_shift_conflicts_and_nonmembers_are_rejected(api, manual_payload):
     client, _, headers = api
     source, target = shifts(api)

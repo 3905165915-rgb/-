@@ -38,11 +38,54 @@ def view(data, item):
     return {**item, 'items': [dict(row) for row in data['handover_items'] if row['handover_id'] == item['id']]}
 
 
+def role_view(data, item, user_id, role):
+    full = view(data, item)
+    if role in {'admin', 'supervisor'}:
+        return full
+    from app.services.care_scope_service import require_elder_access
+    visible = []
+    for row in full['items']:
+        try:
+            require_elder_access(data, row['elder_id'], user_id, role)
+        except DomainError:
+            continue
+        safe = {key: row.get(key) for key in
+                ('id', 'handover_id', 'kind', 'elder_id', 'source_id', 'source_revision', 'detail', 'status')}
+        safe['clarifications'] = [{key: note.get(key) for key in ('kind', 'note')}
+                                  for note in row.get('clarifications', [])]
+        if row['kind'] == 'task':
+            safe.update({key: copy.deepcopy(row.get(key)) for key in
+                         ('memory_references', 'condition_check', 'condition_verification',
+                          'plan_check', 'source_plan_snapshot')})
+        visible.append(safe)
+    visible_ids = {row['source_id'] for row in visible}
+    all_items_authorized = bool(full['items']) and len(visible) == len(full['items'])
+    if all_items_authorized:
+        visible_ids.add('handover-text')
+    summary = ''
+    ai_summary = None
+    raw = full.get('ai_summary')
+    if raw:
+        points = [point for point in raw.get('points', [])
+                  if point.get('citations') and all(c['source_id'] in visible_ids for c in point['citations'])]
+        ai_summary = {key: raw.get(key) for key in ('status', 'provider', 'created_at')}
+        ai_summary.update(points=copy.deepcopy(points), text='\n'.join(point['text'] for point in points),
+                          warnings=copy.deepcopy(raw.get('warnings', [])))
+        if raw.get('status') in {'confirmed', 'pending_review'}:
+            summary = ai_summary['text']
+    return {'id': full['id'], 'source_shift_id': full['source_shift_id'],
+            'target_shift_id': full['target_shift_id'], 'status': full['status'],
+            'revision': full['revision'], 'summary': summary, 'items': visible,
+            'ai_summary': ai_summary,
+            'handover_suggestions': copy.deepcopy((raw or {}).get('task_suggestions', []))
+                if all_items_authorized else []}
+
+
 def get(store, handover_id, user_id, role):
     data = store.read()
     item = find(data, 'handovers', handover_id, 'handover_not_found')
     access(data, item, user_id, role)
-    return view(data, item)
+    return role_view(data, item, user_id, role)
 
 
 def list_handovers(store, user_id, role, shift_id=None, limit=100, offset=0):
@@ -55,7 +98,7 @@ def list_handovers(store, user_id, role, shift_id=None, limit=100, offset=0):
             access(data, item, user_id, role)
         except DomainError:
             continue
-        items.append(view(data, item))
+        items.append(role_view(data, item, user_id, role))
     return items[offset:offset+limit]
 
 
@@ -153,7 +196,7 @@ def assert_current(data, item):
                 raise DomainError('handover_needs_refresh')
 
 
-def generate_summary(store, handover_id, expected_revision, user_id, role):
+def generate_summary(store, handover_id, expected_revision, user_id, role, text=''):
     from app.services.ai_service import get_ai_provider
     data = store.read()
     current_staff(data, user_id, role)
@@ -165,10 +208,20 @@ def generate_summary(store, handover_id, expected_revision, user_id, role):
     assert_current(data, item)
     inputs = [{'source_id': row['source_id'], 'text': row['detail'], 'elder_id': row['elder_id'],
                'kind': row['kind']} for row in data['handover_items'] if row['handover_id'] == handover_id]
+    if text.strip():
+        inputs.append({'source_id': 'handover-text', 'text': text.strip(), 'elder_id': None,
+                       'kind': 'handover_text'})
     if sum(len(row['text']) for row in inputs) > 60000 or len(inputs) > 100:
         raise DomainError('ai_scope_too_large', 422)
     provider = get_ai_provider()
     output = provider.summarize(inputs)  # External calls never hold the JSON lock.
+    suggestions = []
+    if text.strip():
+        extracted = provider.extract('', None, text.strip())
+        suggestions = [{'id': identifier('HSUG'), 'title': row.get('title', ''),
+                        'evidence_text': row.get('evidence_text') or text.strip(),
+                        'condition': row.get('condition'), 'due_text': row.get('due_text')}
+                       for row in extracted.task_candidates]
     def mutate(latest):
         current_staff(latest, user_id, role)
         current = find(latest, 'handovers', handover_id, 'handover_not_found')
@@ -182,12 +235,14 @@ def generate_summary(store, handover_id, expected_revision, user_id, role):
         current['ai_summary'] = {
             **output, 'text': '\n'.join(point['text'] for point in output['points']),
             'status': 'pending_review', 'provider': provider.name, 'created_by': user_id, 'created_at': now(),
+            'input_text': text.strip(), 'task_suggestions': suggestions,
             'warnings': (['摘要未覆盖全部待办，请核对交接明细'] if missing_tasks else []) +
                         (['当前为演示结果，非真实AI推理'] if provider.name == 'mock' else []),
             'uncovered_task_ids': missing_tasks,
         }
         current['revision'] += 1
-        audit(latest, 'generate_ai_summary', handover_id, user_id, detail='AI生成摘要，待人工确认', provider=provider.name)
+        audit(latest, 'generate_ai_summary', handover_id, user_id, detail='AI生成摘要，待人工确认',
+              provider=provider.name, queue_record_job=False)
         return view(latest, current)
     return store.mutate(mutate)
 
@@ -214,6 +269,47 @@ def submit(store, handover_id, payload, user_id, role):
             item['summary'] = payload.summary
             if item.get('ai_summary'):
                 item['ai_summary']['status'] = 'not_used'
+        if payload.accepted_tasks:
+            summary = item.get('ai_summary')
+            if not payload.approve_ai_summary or not summary or summary.get('status') != 'confirmed':
+                raise DomainError('handover_task_suggestions_need_review')
+            from app.models.entities import CareTask
+            from app.services.care_scope_service import require_elder_access
+            from app.services.workflow import active_staff
+            suggestions = {row['id']: row for row in summary.get('task_suggestions', [])}
+            source_item_elders = {row['elder_id'] for row in data['handover_items'] if row['handover_id'] == handover_id}
+            for accepted in payload.accepted_tasks:
+                suggestion = suggestions.get(accepted.suggestion_id)
+                if not suggestion or not suggestion['evidence_text'] or suggestion['evidence_text'] not in summary.get('input_text', ''):
+                    raise DomainError('handover_suggestion_source_invalid', 422)
+                if accepted.elder_id not in source_item_elders:
+                    raise DomainError('handover_task_elder_not_in_sources', 403)
+                if accepted.shift_id != item['target_shift_id']:
+                    raise DomainError('handover_task_must_target_incoming_shift', 422)
+                target = find(data, 'shifts', accepted.shift_id, 'target_shift_not_found')
+                if target['status'] != 'open' or accepted.assigned_to not in target['caregiver_ids']:
+                    raise DomainError('assignee_not_in_target_shift', 422)
+                due = accepted.due_at
+                if due <= parse_time(now()) or not parse_time(target['start_at']) <= due < parse_time(target['end_at']):
+                    raise DomainError('handover_task_due_outside_target_shift', 422)
+                active_staff(data, accepted.assigned_to)
+                assignee = find(data, 'users', accepted.assigned_to, 'assignee_not_found')
+                require_elder_access(data, accepted.elder_id, accepted.assigned_to, assignee['role'])
+                duplicate = next((row for row in data['care_tasks'] if row['elder_id'] == accepted.elder_id
+                    and row.get('assigned_to') == accepted.assigned_to and row.get('due_at')
+                    and row.get('status') not in {'completed', 'cancelled'} and row['title'] == accepted.title
+                    and parse_time(row['due_at']) == due), None)
+                if duplicate:
+                    continue
+                task = CareTask(id=identifier('TASK'), elder_id=accepted.elder_id, title=accepted.title,
+                    completion_criteria=accepted.completion_criteria, due_at=due.isoformat(),
+                    assigned_to=accepted.assigned_to, shift_id=target['id'], status='pending',
+                    source_type='handover', source_id=handover_id, source_revision=item['revision'],
+                    created_by=user_id, created_at=now(), updated_at=now(), condition=suggestion.get('condition'),
+                    due_text=suggestion.get('due_text'))
+                data['care_tasks'].append(task.model_dump())
+                audit(data, 'create_task', task.id, user_id, elder_id=task.elder_id,
+                      handover_id=handover_id, detail=task.title, queue_record_job=False)
         item.update(status='submitted', submitted_by=user_id, submitted_at=now(), revision=item['revision'] + 1)
         find(data, 'shifts', item['source_shift_id'], 'shift_not_found')['status'] = 'closed'
         audit(data, 'submit_handover', handover_id, user_id, detail='人工确认并提交交班单')

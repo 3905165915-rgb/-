@@ -84,6 +84,12 @@ def summaries(binding_id: str, current: FamilyUser, store: Store, limit: int = Q
     return service.summaries(store, binding_id, current['sub'], limit, offset)
 
 
+@router.get('/family/me/bindings/{binding_id}/handovers')
+def handovers(binding_id: str, current: FamilyUser, store: Store,
+              limit: int = Query(100, ge=1, le=200), offset: int = Query(0, ge=0)):
+    return service.handovers(store, binding_id, current['sub'], limit, offset)
+
+
 @router.post('/family/me/feedback', status_code=201)
 def feedback(payload: schema.FeedbackCreate, current: FamilyUser, store: Store, idempotency_key: Key = None):
     return service.feedback(store, payload, current['sub'], idempotency_key)

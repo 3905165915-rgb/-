@@ -16,6 +16,7 @@
 
 - GET `/family/me/bindings`：仅本人当前有效授权的最小老人信息。
 - GET `/family/me/bindings/{id}/summaries`：仅已发布且来源仍有效的脱敏字段，不返回原文、证据、员工、审计和草稿；来源更正后自动隐藏，须新草稿重新审核。
+- GET `/family/me/bindings/{id}/handovers`：按当前有效 binding/admission 返回已发布且来源仍有效的家属简报摘要；只返回公开摘要和空待办列表，不返回内部交班、员工、班次、来源或AI核对明细。家属授权不会穿透共享交班读取其他老人。
 - POST `/family/me/feedback`：binding_id、text；GET `/family/me/bindings/{id}/feedback`仅本人反馈及对外回复。
 
 除账号凭据操作外，写接口支持Idempotency-Key；家属授权在幂等回放之前复查。撤销、到期、停号、离院或再次入住均阻断旧授权，换床/短期外出不失效；再次入住需重新核实授权。重复有效绑定拒绝。

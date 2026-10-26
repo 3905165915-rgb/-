@@ -1,5 +1,7 @@
 # 后端接口约定（0.4.2）
 
+2026-10-27 后端接口补充（0.6.0 / schema 9）：老人即时记录、分析与确认的契约见 [ELDER_WORKSPACE_API.md](ELDER_WORKSPACE_API.md)；单页交班的输入、建议和安全重试见下方交班说明；家属摘要范围见 [FAMILY_API.md](FAMILY_API.md)。老人时间线新增 `recorded_at`，并以登记时间执行日期筛选和分页排序；`happened_at` 仅代表来源明确提供的实际发生时间。新增分析接口不取代旧 `/records/manual`、草稿确认和交班路径。
+
 2026-10-24：记录整理增加可核对的时间、人员安排建议，正式确认时与任务同存；记录也进入该老人的长期印象证据，任务安排不作为已发生服务证据。印象须单独整理、人工确认；更正来源后旧结论需重新核对。请求路径与原有字段兼容，无存储迁移。语义和边界、前端接入及验收见 [RECORD_TASKS_2026-10-24.md](RECORD_TASKS_2026-10-24.md)。
 
 0.4.2 修复重试一致性，不改变现有请求/响应结构或 JSON schema 4。`POST /records/{draft_id}/confirm` 对首次确认保存有效内容指纹；相同内容重试仍返回已有记录与当前任务，不重复创建。不同内容或旧版已确认但无指纹的草稿返回 409 `draft_already_confirmed_refresh_record`，客户端应查询正式记录并使用更正接口，不能显示“修改已保存”。任务转交相同账号/键/内容重试可在责任人已变化后回放成功结果；当前账号权限仍须有效，不同内容返回冲突。覆盖核对以最新审核决定去重，支持另一主管重新打开后再次提交明确决定。详见 [RELEASE_2026-10-21.md](RELEASE_2026-10-21.md)。下列各版本说明保留为历史记录。
@@ -117,8 +119,8 @@
 | GET | `/handovers` | 本人参与的交接或管理人员；shift_id、分页 |
 | GET | `/handovers/{handover_id}` | 返回交接对象与items数组 |
 | POST | `/handovers/{handover_id}/refresh` | 仅草稿；刷新明细，清空旧AI摘要，revision递增 |
-| POST | `/handovers/{handover_id}/ai-summary` | expected_revision；生成待核对摘要，revision递增 |
-| POST | `/handovers/{handover_id}/submit` | expected_revision、summary（可选）、approve_ai_summary（默认false） |
+| POST | `/handovers/{handover_id}/ai-summary` | expected_revision、可编辑text（可空）；锁外生成带原文依据的摘要和 `handover_suggestions`，不创建任务，revision递增 |
+| POST | `/handovers/{handover_id}/submit` | expected_revision、summary（可选）、approve_ai_summary（默认false）、accepted_tasks（默认空）；仅完整且经确认的新建议会生成任务 |
 | POST | `/handovers/{handover_id}/items/{item_id}/receive` | 接班成员或管理人员；status为received/clarifying，note、assigned_to可选 |
 | POST | `/handovers/{handover_id}/items/{item_id}/clarify` | 交班成员或管理人员；note，答复接班疑问 |
 
@@ -131,6 +133,8 @@
 任务接班沿用原task_id和continuity_key，换到目标班次及负责人，保留审计中的原状态、结果与未执行原因，不生成重复任务。未指定负责人时优先接收者本人（须属于目标班）；管理人员代接需指定目标班成员。已完成/取消的任务不重新激活。
 
 AI摘要包含 `points[{text,citations[{source_id,quote}]}]`、provider、status、warnings、uncovered_task_ids。引用ID和原文逐字校验；未覆盖任务有显式提醒，明细保留全部任务。生成不会关闭班次或提交交班。提交时显式 `approve_ai_summary:true` 才确认该摘要；否则使用人工summary，AI摘要标为not_used。生成期间资料更新会拒绝保存。引用校验不等于语义准确，仍需人工核对。
+
+可编辑交班文本中的任务线索作为 `handover_suggestions[{id,title,evidence_text,condition,due_text}]` 返回；仅逐字原文依据可确认。`accepted_tasks` 每项须包含 suggestion_id、elder_id、title、目标班次shift_id、唯一负责人assigned_to、带时区的due_at和completion_criteria。目标班次必须开放且包含负责人，老人必须属于交班来源，截止时间须在目标班次内，重复任务不再创建。原有未完成任务继续使用原task_id。护理员响应只含当前老人照护范围内的明细；管理人员保留完整明细。家属只通过 `/family/me/bindings/{id}/handovers` 读取已发布公开简报，不读取内部交班内容。
 
 ## 质检和证据时间线
 
@@ -146,7 +150,7 @@ AI摘要包含 `points[{text,citations[{source_id,quote}]}]`、provider、status
 
 报告为历史快照，`historical_snapshot:true`，保留来源、扫描时刻、provider、warnings、issues和人工处理。issue状态从pending_review到acknowledged或not_applicable，后一种也要求理由。处理质检建议不会直接改记录、任务或事故等级；处理后如需验证改进，应重新扫描。
 
-timeline返回action、label、actor/actor_id、source_id、happened_at、entered_at、detail；包含可用的AI引用、更正前后、任务前后和跨班记录。旧数据没有审计的步骤不虚构补齐。护理员看不到他人草稿或管理端质检审阅记录。
+timeline返回action、label、actor/actor_id、source_id、recorded_at、happened_at、detail；`recorded_at`是服务端审计登记时间，决定过滤、分页、日期分组和最新优先顺序；`happened_at`只在来源明确提供实际发生时间时返回。旧数据没有审计的步骤不虚构补齐。护理员看不到他人草稿或管理端质检审阅记录。
 
 AI摘要/质检输入最多100条、累计60000字，超限需按老人或班次缩小范围。演示存储不适合大量历史全量扫描。
 

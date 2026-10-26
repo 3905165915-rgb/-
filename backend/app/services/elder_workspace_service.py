@@ -10,7 +10,7 @@ import re
 from datetime import timedelta, timezone
 
 from app.services.workflow import (DomainError, audit, current_staff, find,
-                                   identifier, now, parse_time, replayable)
+                                   identifier, now, open_shift, parse_time, replayable)
 from app.services.facility_service import care_eligible, care_state
 from app.services.care_scope_service import require_elder_access
 
@@ -103,10 +103,232 @@ def enqueue_record(data, record_id, user_id):
 def save_record(store, elder_id, payload, user_id, role, key):
     from app.schemas.api import ManualRecordRequest
     from app.services import record_service
+    from app.services.ai_service import AIProviderError
     result = record_service.manual(store, ManualRecordRequest(elder_id=elder_id,
-        raw_text=payload.text, observations=[payload.text], task_candidates=[]), user_id, role, key)
-    return {**result, 'organising': {'status': 'queued',
-        'message': '记录已保存，系统正在后台整理；原始记录不会等待AI。'}}
+        raw_text=payload.text, observations=[payload.text], shift_id=payload.shift_id,
+        happened_at=payload.happened_at, attachment_ids=payload.attachment_ids,
+        task_candidates=[]), user_id, role, key, queue_analysis=False)
+    record = result['record']
+    existing = next((row for row in store.read()['record_analyses'] if row['record_id'] == record['id']
+                     and row['record_revision'] == record.get('revision', 1)), None)
+    if existing:
+        return inline_record_envelope(store, record['id'], existing)
+    try:
+        analysis = analyze_record(store, record['id'], user_id, role, scene=payload.scene)
+    except (AIProviderError, ValueError, TypeError, KeyError):
+        analysis = persist_analysis_failure(store, record['id'], user_id, role)
+    return inline_record_envelope(store, record['id'], analysis)
+
+
+def inline_record_envelope(store, record_id, analysis):
+    record = next(row for row in store.read()['care_records'] if row['id'] == record_id)
+    return {'record': copy.deepcopy(record), 'analysis_status': analysis['status'],
+            'analysis': analysis_view(analysis) if analysis['status'] != 'failed' else None}
+
+
+def analysis_view(analysis):
+    return {key: copy.deepcopy(value) for key, value in analysis.items()
+            if key not in {'source_text', 'source_fingerprint', 'created_by', 'error_code'}}
+
+
+def _record_analysis_data(data, record_id, user_id, role):
+    current_staff(data, user_id, role)
+    record = find(data, 'care_records', record_id, 'record_not_found')
+    access(data, record['elder_id'], user_id, role)
+    elder = care_eligible(data, record['elder_id'])
+    if record.get('status') not in {'confirmed', 'corrected'}:
+        raise DomainError('record_not_confirmed')
+    if record.get('admission_id') != elder.get('current_admission_id'):
+        raise DomainError('record_admission_changed')
+    if record.get('shift_id'):
+        shift = find(data, 'shifts', record['shift_id'], 'shift_not_found')
+        if role == 'caregiver' and user_id not in shift.get('caregiver_ids', []):
+            raise DomainError('not_a_shift_member', 403)
+    return record, elder
+
+
+def persist_analysis_failure(store, record_id, user_id, role):
+    def mutate(data):
+        record, _ = _record_analysis_data(data, record_id, user_id, role)
+        revision = record.get('revision', 1)
+        existing = next((row for row in data['record_analyses'] if row['record_id'] == record_id
+                         and row['record_revision'] == revision and row['status'] != 'confirmed'), None)
+        if existing:
+            existing.update(status='failed', error_code='analysis_unavailable', updated_at=now(),
+                            source_text='\n'.join(record.get('observations') or [record['raw_text']]))
+            return copy.deepcopy(existing)
+        analysis = {'id': identifier('ANALYSIS'), 'record_id': record_id, 'record_revision': revision,
+                    'source_text': '\n'.join(record.get('observations') or [record['raw_text']]),
+                    'status': 'failed', 'provider': 'unavailable',
+                    'error_code': 'analysis_unavailable', 'created_by': user_id,
+                    'created_at': now(), 'updated_at': now()}
+        data['record_analyses'].append(analysis)
+        audit(data, 'analyze_record_failed', record_id, user_id, elder_id=record['elder_id'],
+              record_id=record_id, queue_record_job=False)
+        return copy.deepcopy(analysis)
+    return store.mutate(mutate)
+
+
+def analyze_record(store, record_id, user_id, role, scene=None):
+    from app.services.ai_service import get_ai_provider
+    snapshot = store.read()
+    record, elder = _record_analysis_data(snapshot, record_id, user_id, role)
+    revision = record.get('revision', 1)
+    source_text = '\n'.join(record.get('observations') or [record['raw_text']])
+    provider = get_ai_provider()
+    draft = provider.extract(record['elder_id'], record.get('shift_id'), source_text)
+    source_field = 'observations'
+    quote = (draft.observations[0] if draft.observations else source_text)
+    evidence = {'source_field': source_field, 'quote': quote}
+    explicit_frequency = bool(re.search(r'每天|每日|每周|每星期|每月|经常|总是|一直|长期', source_text))
+    one_time = bool(re.search(r'今天|这次|本次|现在|暂时', source_text))
+    preference_suggestions = []
+    if any(word in source_text for word in ('喜欢', '愿意', '偏好', '习惯', '不愿', '不喜欢')):
+        preference_suggestions.append({'id': identifier('PREF'), 'content': source_text.strip(),
+            'frequency': 'explicit' if explicit_frequency else ('one_time' if one_time else 'ambiguous'),
+            'attributed_to': 'elder' if any(word in source_text for word in ('老人说', '本人说', '我喜欢', '我愿意')) else 'unknown',
+            'evidence_text': quote})
+    observations = [{'id': identifier('OBS'), 'text': value,
+                     'citation': {'source_field': source_field, 'quote': value}}
+                    for value in draft.observations]
+    suggestions = []
+    for candidate in draft.task_candidates:
+        suggestions.append({'id': identifier('SUG'), 'title': candidate.get('title', ''),
+            'evidence_text': candidate.get('evidence_text') or source_text,
+            'condition': candidate.get('condition'), 'due_text': candidate.get('due_text')})
+    analysis = {'id': identifier('ANALYSIS'), 'record_id': record_id, 'record_revision': revision,
+        'status': 'ready', 'scene': {'value': scene, 'citation': evidence if scene else None},
+        'observations': observations, 'task_suggestions': suggestions,
+        'preference_suggestions': preference_suggestions, 'provider': draft.provider,
+        'created_by': user_id, 'created_at': now(), 'source_text': source_text,
+        'source_fingerprint': __import__('hashlib').sha256(source_text.encode()).hexdigest()}
+    def commit(data):
+        current_staff(data, user_id, role)
+        live, live_elder = _record_analysis_data(data, record_id, user_id, role)
+        if (live.get('revision', 1) != revision or
+                '\n'.join(live.get('observations') or [live['raw_text']]) != source_text):
+            raise DomainError('record_changed_during_ai_call')
+        if live_elder.get('current_admission_id') != elder.get('current_admission_id'):
+            raise DomainError('record_admission_changed')
+        if any(c['quote'] not in (live.get(c['source_field']) if c['source_field'] == 'raw_text' else '\n'.join(live.get('observations', [])))
+               for c in [e['citation'] for e in observations]):
+            raise DomainError('analysis_source_changed')
+        data['record_analyses'] = [row for row in data['record_analyses']
+                                   if not (row['record_id'] == record_id and row['record_revision'] == revision
+                                           and row['status'] != 'confirmed')]
+        data['record_analyses'].append(copy.deepcopy(analysis))
+        audit(data, 'analyze_record', record_id, user_id, elder_id=live['elder_id'], record_id=record_id,
+              provider=draft.provider, queue_record_job=False)
+        return copy.deepcopy(analysis)
+    return store.mutate(commit)
+
+
+def retry_record_analysis(store, elder_id, record_id, user_id, role):
+    data = store.read()
+    record, _ = _record_analysis_data(data, record_id, user_id, role)
+    if record['elder_id'] != elder_id:
+        raise DomainError('record_not_found', 404)
+    latest = next((row for row in reversed(data['record_analyses']) if row['record_id'] == record_id
+                   and row['record_revision'] == record.get('revision', 1) and row['status'] == 'ready'), None)
+    if latest:
+        return inline_record_envelope(store, record_id, latest)
+    from app.services.ai_service import AIProviderError
+    try:
+        analysis = analyze_record(store, record_id, user_id, role)
+    except (AIProviderError, ValueError, TypeError, KeyError):
+        analysis = persist_analysis_failure(store, record_id, user_id, role)
+    return inline_record_envelope(store, record_id, analysis)
+
+
+def confirm_record_analysis(store, elder_id, record_id, analysis_id, payload, user_id, role, key=None):
+    from app.models.entities import CareRecord
+    from app.schemas.api import TaskCandidate
+    from app.schemas.memory import MemoryCreateRequest
+    from app.services import memory_service, record_service
+    from app.services.workflow import active_staff
+    def mutate(data):
+        record, elder = _record_analysis_data(data, record_id, user_id, role)
+        if record['elder_id'] != elder_id:
+            raise DomainError('record_not_found', 404)
+        analysis = find(data, 'record_analyses', analysis_id, 'record_analysis_not_found')
+        if analysis['record_id'] != record_id:
+            raise DomainError('record_analysis_not_found', 404)
+        def operation():
+            if record.get('revision', 1) != payload.expected_revision or analysis['record_revision'] != payload.expected_revision:
+                raise DomainError('stale_record_analysis')
+            if analysis.get('status') != 'ready':
+                raise DomainError('record_analysis_not_ready')
+            current_source = '\n'.join(record.get('observations') or [record['raw_text']])
+            if analysis.get('source_text') != current_source:
+                raise DomainError('analysis_source_changed')
+            if analysis.get('source_fingerprint') != __import__('hashlib').sha256(record['raw_text'].encode()).hexdigest():
+                raise DomainError('analysis_source_changed')
+            tasks_by_id = {row['id']: row for row in analysis.get('task_suggestions', [])}
+            preferences_by_id = {row['id']: row for row in analysis.get('preference_suggestions', [])}
+            created_tasks, created_memories = [], []
+            for accepted in payload.accepted_tasks:
+                suggestion = tasks_by_id.get(accepted.suggestion_id)
+                if not suggestion or suggestion['evidence_text'] not in current_source:
+                    raise DomainError('analysis_suggestion_source_invalid', 422)
+                due = accepted.due_at
+                if due <= parse_time(now()):
+                    raise DomainError('task_due_must_be_future', 422)
+                shift = find(data, 'shifts', accepted.shift_id, 'shift_not_found')
+                open_shift(data, shift['id'], user_id, role)
+                if shift['status'] != 'open' or accepted.assigned_to not in shift['caregiver_ids']:
+                    raise DomainError('assignee_not_in_open_shift', 422)
+                if not parse_time(shift['start_at']) <= due < parse_time(shift['end_at']):
+                    raise DomainError('task_due_outside_shift', 422)
+                active_staff(data, accepted.assigned_to)
+                from app.services.care_scope_service import require_elder_access
+                assigned = find(data, 'users', accepted.assigned_to, 'assignee_not_found')
+                require_elder_access(data, elder_id, accepted.assigned_to, assigned['role'])
+                duplicate = next((row for row in data['care_tasks'] if row['elder_id'] == elder_id
+                    and row.get('assigned_to') == accepted.assigned_to and row.get('due_at')
+                    and row.get('status') not in {'completed', 'cancelled'}
+                    and row['title'] == accepted.title and parse_time(row['due_at']) == due), None)
+                if duplicate:
+                    created_tasks.append(copy.deepcopy(duplicate))
+                    continue
+                task = record_service.create_tasks(data, CareRecord.model_validate(record), [TaskCandidate(
+                    title=accepted.title, due_at=due, assigned_to=accepted.assigned_to,
+                    condition=suggestion.get('condition'), due_text=suggestion.get('due_text')).model_dump(mode='json')],
+                    user_id, role)[0]
+                saved = next(row for row in data['care_tasks'] if row['id'] == task.id)
+                saved['shift_id'] = accepted.shift_id
+                saved['completion_criteria'] = accepted.completion_criteria
+                saved['suggestion_id'] = accepted.suggestion_id
+                created_tasks.append(copy.deepcopy(saved))
+            for decision in payload.preference_decisions:
+                suggestion = preferences_by_id.get(decision.suggestion_id)
+                if not suggestion or suggestion['evidence_text'] not in current_source:
+                    raise DomainError('analysis_suggestion_source_invalid', 422)
+                if decision.decision != 'adopt':
+                    continue
+                if suggestion['frequency'] != 'explicit':
+                    raise DomainError('preference_frequency_not_explicit', 422)
+                request = MemoryCreateRequest(elder_id=elder_id,
+                    content=decision.content or suggestion['content'], category='stable_preference',
+                    scenes=[analysis.get('scene', {}).get('value') or 'other'],
+                    attributed_to=suggestion['attributed_to'], source_record_id=record_id,
+                    source_revision=payload.expected_revision, source_field='observations',
+                    source_quote=suggestion['evidence_text'])
+                memory = memory_service._create_candidate(data, request, user_id, candidate_source={
+                    'inline_analysis_id': analysis_id, 'frequency': suggestion['frequency'],
+                    'evidence_kind': 'single_person_self_report' if suggestion['attributed_to'] == 'elder' else 'single_record'})
+                before = memory_service._snapshot(memory)
+                memory.update(status='confirmed', confirmed_by=user_id, confirmed_at=now())
+                memory_service._change(data, memory, before, 'memory_confirm', '提交人核对明确重复频率', user_id)
+                created_memories.append(memory_service._view(data, memory))
+            analysis.update(status='confirmed', confirmed_by=user_id, confirmed_at=now(), updated_at=now())
+            audit(data, 'confirm_record_analysis', analysis_id, user_id, elder_id=elder_id,
+                  record_id=record_id, detail='提交人核对即时分析结果', queue_record_job=False)
+            return {'record': copy.deepcopy(record), 'analysis': analysis_view(analysis),
+                    'tasks': created_tasks, 'memories': created_memories}
+        return replayable(data, user_id, 'confirm_record_analysis', key,
+            {'elder_id': elder_id, 'record_id': record_id, 'analysis_id': analysis_id,
+             **payload.model_dump(mode='json')}, operation)
+    return store.mutate(mutate)
 
 
 def _cited_sources_current(data, report, point):
@@ -228,6 +450,8 @@ def retry_job(store, elder_id, job_id, user_id, role):
             raise DomainError('job_not_found', 404)
         if item['status'] != 'failed':
             raise DomainError('job_not_failed')
+        if item.get('error_code') == 'requires_inline_reanalysis':
+            raise DomainError('inline_record_retry_required', 409)
         item.update(status='queued', not_before=now(), updated_at=now(), error_code=None)
         audit(data, 'retry_care_job', item['id'], user_id, elder_id=elder_id)
         return copy.deepcopy(item)
@@ -455,7 +679,8 @@ def recover_jobs(store):
     def recover(data):
         for job in data['care_jobs']:
             if job['status'] == 'processing':
-                job.update(status='queued', claim_token=None, not_before=now(), updated_at=now(), error_code='interrupted_requeued')
+                job.update(status='failed', claim_token=None, updated_at=now(),
+                           error_code='requires_inline_reanalysis')
     store.mutate(recover)
 
 

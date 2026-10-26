@@ -262,6 +262,17 @@ def summaries(store, binding_id, user_id, limit=100, offset=0):
             and row['status'] == 'published' and evidence_service.sources_current(data, row)][offset:offset + limit]
 
 
+def handovers(store, binding_id, user_id, limit=100, offset=0):
+    """Expose only a reviewed public summary under the binding's current admission."""
+    data = store.read()
+    binding = authorize(data, binding_id, user_id, 'summary')
+    public = summaries(store, binding_id, user_id, limit=100000, offset=0)
+    selected = public[offset:offset + limit]
+    return [{'id': summary['id'], 'elder_id': binding['elder_id'], 'summary': summary['text'],
+             'tasks': [], 'period_start': summary['period_start'], 'period_end': summary['period_end']}
+            for summary in selected]
+
+
 def feedback_view(item):
     return {key: item.get(key) for key in ('id', 'binding_id', 'elder_id', 'text', 'status', 'revision', 'created_at', 'reply', 'replied_at')}
 

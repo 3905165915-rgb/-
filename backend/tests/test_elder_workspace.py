@@ -196,19 +196,98 @@ def test_short_term_observation_never_becomes_long_term_memory(api, monkeypatch,
     assert not api[1].read()['care_memories']
 
 
-def test_plain_record_never_waits_for_model_and_retries_deduplicate(api, monkeypatch):
+def test_inline_record_analysis_persists_once_and_retries_same_record(api, monkeypatch):
     provider = Organiser()
     monkeypatch.setattr(ai_service, 'get_ai_provider', lambda: provider)
     body = {'text': '今日完成床铺整理。'}
     first = post(api, BASE + '/record', body, actor='staff', key='record-once')
-    assert first['organising']['status'] == 'queued' and provider.calls == 0
+    assert first['analysis_status'] == 'ready'
+    assert first['analysis']['record_id'] == first['record']['id']
     assert post(api, BASE + '/record', body, actor='staff', key='record-once') == first
-    assert len(api[1].read()['care_records']) == len(api[1].read()['care_jobs']) == 1
-    service.process_next(api[1], force=True)
-    assert provider.calls == 0 and api[1].read()['care_jobs'][0]['status'] == 'completed'
+    assert len(api[1].read()['care_records']) == 1
+    assert api[1].read()['care_jobs'] == []
+    assert len(api[1].read()['record_analyses']) == 1
+    retried = post(api, BASE + f'/records/{first["record"]["id"]}/analyze', None, expected=200)
+    assert retried['record']['id'] == first['record']['id']
+    assert len(api[1].read()['care_records']) == 1
+    assert len(api[1].read()['record_analyses']) == 1
     before = api[1].path.read_bytes()
     assert not service.process_next(api[1], force=True)
     assert before == api[1].path.read_bytes()  # no idle file rewrites
+
+
+def test_inline_record_ai_failure_keeps_saved_record_and_retry_recovers(api, monkeypatch):
+    _, store, _ = api
+    monkeypatch.setattr(ai_service, 'get_ai_provider', lambda: type('Failing', (), {
+        'extract': lambda *args: (_ for _ in ()).throw(AIProviderError('unavailable'))})())
+    result = post(api, BASE + '/record', {'text': '今天想休息'}, key='inline-failure')
+    assert result['analysis_status'] == 'failed' and result['analysis'] is None
+    record_id = result['record']['id']
+    assert len(store.read()['care_records']) == 1 and store.read()['care_jobs'] == []
+    monkeypatch.setattr(ai_service, 'get_ai_provider', lambda: MockAIProvider())
+    retried = post(api, BASE + f'/records/{record_id}/analyze', None, expected=200)
+    assert retried['analysis_status'] == 'ready' and retried['record']['id'] == record_id
+    assert len(store.read()['care_records']) == 1
+
+
+def test_inline_analysis_confirm_creates_only_reviewed_explicit_memory_once(api):
+    result = post(api, BASE + '/record', {'text': '我每天午休后愿意听戏'}, key='daily-memory-record')
+    suggestion = result['analysis']['preference_suggestions'][0]
+    assert suggestion['frequency'] == 'explicit'
+    body = {'expected_revision': result['record']['revision'],
+            'preference_decisions': [{'suggestion_id': suggestion['id'], 'decision': 'adopt'}],
+            'accepted_tasks': []}
+    endpoint = BASE + f'/records/{result["record"]["id"]}/analysis/{result["analysis"]["id"]}/confirm'
+    confirmed = post(api, endpoint, body, expected=200, key='daily-memory-confirm')
+    assert len(confirmed['memories']) == 1 and confirmed['memories'][0]['effective']
+    assert post(api, endpoint, body, expected=200, key='daily-memory-confirm') == confirmed
+    assert len(api[1].read()['care_memories']) == 1 and len(api[1].read()['care_tasks']) == 0
+
+
+def test_inline_confirmation_rejects_ambiguous_frequency(api):
+    result = post(api, BASE + '/record', {'text': '愿意听戏'}, key='ambiguous-record')
+    suggestion = result['analysis']['preference_suggestions'][0]
+    assert suggestion['frequency'] == 'ambiguous'
+    post(api, BASE + f'/records/{result["record"]["id"]}/analysis/{result["analysis"]["id"]}/confirm',
+         {'expected_revision': 1, 'preference_decisions': [
+             {'suggestion_id': suggestion['id'], 'decision': 'adopt'}]}, expected=422)
+
+
+def test_inline_confirm_creates_only_complete_confirmed_task_once(api):
+    tomorrow = (datetime.now(timezone(timedelta(hours=8))) + timedelta(days=1)).date()
+    actual_shift = shift(api, tomorrow)
+    result = post(api, BASE + '/record', {'text': '请联系家属反馈情况', 'shift_id': actual_shift['id']},
+                  actor='staff', key='task-record')
+    suggestion = result['analysis']['task_suggestions'][0]
+    body = {'expected_revision': 1, 'preference_decisions': [], 'accepted_tasks': [{
+        'suggestion_id': suggestion['id'], 'title': '联系家属反馈情况',
+        'shift_id': actual_shift['id'], 'assigned_to': 'staff',
+        'due_at': datetime.combine(tomorrow, datetime.min.time(), tzinfo=timezone(timedelta(hours=8))).replace(hour=12).isoformat(),
+        'completion_criteria': '联系后记录反馈结果'}]}
+    endpoint = BASE + f'/records/{result["record"]["id"]}/analysis/{result["analysis"]["id"]}/confirm'
+    confirmed = post(api, endpoint, body, actor='staff', expected=200, key='task-confirm')
+    assert len(confirmed['tasks']) == 1
+    assert confirmed['tasks'][0]['source_record_id'] == result['record']['id']
+    assert confirmed['tasks'][0]['completion_criteria'] == '联系后记录反馈结果'
+    assert post(api, endpoint, body, actor='staff', expected=200, key='task-confirm') == confirmed
+    assert len(api[1].read()['care_tasks']) == 1
+
+
+def test_inline_confirm_blocks_stale_revision_and_revoked_scope(api):
+    result = post(api, BASE + '/record', {'text': '每天愿意听戏'}, key='stale-record')
+    suggestion = result['analysis']['preference_suggestions'][0]
+    body = {'expected_revision': 1, 'preference_decisions': [
+        {'suggestion_id': suggestion['id'], 'decision': 'adopt'}]}
+    endpoint = BASE + f'/records/{result["record"]["id"]}/analysis/{result["analysis"]["id"]}/confirm'
+    api[1].mutate(lambda data: next(row for row in data['care_records'] if row['id'] == result['record']['id'])
+                  .update(revision=2, raw_text='来源已更正'))
+    post(api, endpoint, body, expected=409)
+    latest = post(api, BASE + '/record', {'text': '每天愿意听戏'}, key='scope-record')
+    api[1].mutate(lambda data: data.update(care_assignments=[]))
+    retry = post(api, BASE + f'/records/{latest["record"]["id"]}/analyze', None,
+                 actor='staff', expected=403)
+    assert retry['error_code'] == 'elder_not_in_current_work_scope'
+    assert not api[1].read()['care_memories']
 
 
 @pytest.mark.parametrize('quote,allowed,expected_tasks', [
@@ -227,14 +306,14 @@ def test_followups_require_authorization_complete_time_and_safe_purpose(api, mon
             permitted_actions=['activity_invitation'], reason='主管授权仅询问活动意愿'), 'manager', 'supervisor')
     provider = Organiser()
     monkeypatch.setattr(ai_service, 'get_ai_provider', lambda: provider)
-    post(api, BASE + '/record', {'text': quote}, actor='staff')
+    post(api, '/records/manual', {'elder_id': 'E1', 'raw_text': quote}, actor='staff')
     service.process_next(store, force=True)
     assert len(store.read()['care_tasks']) == expected_tasks
     if expected_tasks:
         task = store.read()['care_tasks'][0]
         assert task['assigned_to'] == 'staff' and task['source_type'] == 'record'
         assert datetime.fromisoformat(task['due_at']).hour == 15
-        post(api, BASE + '/record', {'text': quote}, actor='staff')
+        post(api, '/records/manual', {'elder_id': 'E1', 'raw_text': quote}, actor='staff')
         service.process_next(store, force=True)
         assert len(store.read()['care_tasks']) == 1
     else:
@@ -255,7 +334,7 @@ def test_recovery_and_schema7_migration_never_resurrect_automation(api, tmp_path
     store.path.write_text(json.dumps(data), encoding='utf-8')
     backup = store.migrate()
     assert backup and json.loads(backup.read_text(encoding='utf-8'))['schema_version'] == 7
-    assert store.read()['schema_version'] == 8 and store.read()['care_jobs'] == []
+    assert store.read()['schema_version'] == 9 and store.read()['care_jobs'] == []
     def seed(current):
         current['automation_rules'].append({'id': 'RULE', 'kind': 'followup', 'elder_id': 'E1', 'enabled': True, 'revision': 1})
         current['care_jobs'].append({'id': 'JOB', 'status': 'processing'})
@@ -264,6 +343,30 @@ def test_recovery_and_schema7_migration_never_resurrect_automation(api, tmp_path
     store.restore(snapshot)
     assert not store.read()['automation_rules'][0]['enabled']
     assert store.read()['care_jobs'][0]['status'] == 'failed'
+
+
+def test_schema_eight_migration_preserves_data_and_marks_old_record_jobs_for_inline_retry(tmp_path):
+    data = copy.deepcopy(EMPTY_STORE)
+    data['schema_version'] = 8
+    data['care_records'] = [{'id': 'R1', 'elder_id': 'E1', 'revision': 1}]
+    data['care_jobs'] = [
+        {'id': 'J1', 'record_id': 'R1', 'status': 'queued'},
+        {'id': 'J2', 'record_id': 'R1', 'status': 'processing'},
+        {'id': 'J3', 'record_id': 'R1', 'status': 'completed'},
+    ]
+    store = JsonStore(tmp_path)
+    store.path.write_text(json.dumps(data), encoding='utf-8')
+    backup = store.migrate()
+    migrated = store.read()
+    assert backup and json.loads(backup.read_text(encoding='utf-8')) == data
+    assert migrated['schema_version'] == 9
+    assert migrated['care_records'] == data['care_records']
+    assert migrated['care_jobs'][0]['status'] == 'failed'
+    assert migrated['care_jobs'][0]['error_code'] == 'requires_inline_reanalysis'
+    assert migrated['care_jobs'][1]['status'] == 'failed'
+    assert migrated['care_jobs'][1]['error_code'] == 'requires_inline_reanalysis'
+    assert migrated['care_jobs'][2]['status'] == 'completed'
+    assert migrated['record_analyses'] == []
 
 
 def test_conflicting_prefill_is_unscored_and_has_original_quotes(api, monkeypatch):
@@ -292,11 +395,12 @@ def test_recovered_worker_cannot_commit_its_old_claim(api, monkeypatch):
     monkeypatch.setattr(ai_service, 'get_ai_provider', lambda: provider)
     records(api, 3)
     service.process_next(api[1], force=True)
-    assert all(j['status'] == 'queued' for j in api[1].read()['care_jobs'])
+    assert all(j['status'] == 'failed' and j['error_code'] == 'requires_inline_reanalysis'
+               for j in api[1].read()['care_jobs'])
     assert not api[1].read()['elder_impressions']
     provider.impression = original
     service.process_next(api[1], force=True)
-    assert len(api[1].read()['elder_impressions']) == 1
+    assert not api[1].read()['elder_impressions']
 
 
 def test_authorization_revoked_during_model_work_creates_no_followup(api, monkeypatch):
@@ -312,7 +416,7 @@ def test_authorization_revoked_during_model_work_creates_no_followup(api, monkey
         return original(sources)
     provider.ordinary_followups = revoked
     monkeypatch.setattr(ai_service, 'get_ai_provider', lambda: provider)
-    post(api, BASE + '/record', {'text': '明天下午三点，由staff询问是否愿意参加活动。'}, actor='staff')
+    post(api, '/records/manual', {'elder_id': 'E1', 'raw_text': '明天下午三点，由staff询问是否愿意参加活动。'}, actor='staff')
     service.process_next(store, force=True)
     assert not store.read()['care_tasks']
 

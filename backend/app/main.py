@@ -28,13 +28,12 @@ async def lifespan(_: FastAPI):
             raise RuntimeError('Production must not silently use Mock AI; use APP_ENV=demo for synthetic demos')
     store = JsonStore(settings.data_dir)
     store.read()  # Fail startup on an unmigrated/corrupt store.
-    from app.services.elder_workspace_service import recover_jobs, process_next, run_plan_rules
+    from app.services.elder_workspace_service import recover_jobs, run_plan_rules
     recover_jobs(store)
     stop = threading.Event()
     def organise():
         while not stop.wait(5):
             try:
-                process_next(store)
                 run_plan_rules(store)
             except Exception:
                 # Jobs retain a persistent failure state; never echo record text
@@ -53,7 +52,7 @@ async def lifespan(_: FastAPI):
             worker.join(timeout=1)
 
 
-app = FastAPI(title="护老智交 Backend", version="0.5.0", lifespan=lifespan)
+app = FastAPI(title="护老智交 Backend", version="0.6.0", lifespan=lifespan)
 
 
 @app.middleware('http')

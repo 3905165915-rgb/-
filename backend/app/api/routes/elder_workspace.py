@@ -2,7 +2,8 @@ from fastapi import APIRouter
 
 from app.api.deps import ManagementUser, StaffUser, Store
 from app.api.routes.records import IdempotencyKey
-from app.schemas.elder_workspace import AssessmentSave, AutomationRule, FollowupResolution, PlanAutomation, RecordSave, UnderstandingDecision
+from app.schemas.elder_workspace import (AssessmentSave, AutomationRule, FollowupResolution,
+    PlanAutomation, RecordSave, RecordAnalysisConfirm, UnderstandingDecision)
 from app.services import elder_workspace_service as service
 
 router = APIRouter(tags=['elder-workspace'])
@@ -18,6 +19,19 @@ def save_assessment(elder_id: str, payload: AssessmentSave, current: StaffUser, 
 def save_record(elder_id: str, payload: RecordSave, current: StaffUser, store: Store,
                 idempotency_key: IdempotencyKey = None):
     return service.save_record(store, elder_id, payload, current['sub'], current['role'], idempotency_key)
+
+
+@router.post('/elders/{elder_id}/records/{record_id}/analyze')
+def analyze_record(elder_id: str, record_id: str, current: StaffUser, store: Store):
+    return service.retry_record_analysis(store, elder_id, record_id, current['sub'], current['role'])
+
+
+@router.post('/elders/{elder_id}/records/{record_id}/analysis/{analysis_id}/confirm')
+def confirm_record_analysis(elder_id: str, record_id: str, analysis_id: str,
+                            payload: RecordAnalysisConfirm, current: StaffUser, store: Store,
+                            idempotency_key: IdempotencyKey = None):
+    return service.confirm_record_analysis(store, elder_id, record_id, analysis_id, payload,
+                                           current['sub'], current['role'], idempotency_key)
 
 
 @router.get('/elders/{elder_id}/understanding')

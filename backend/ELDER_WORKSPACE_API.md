@@ -1,12 +1,14 @@
-# 老人工作页 API（0.5.0 / schema 8）
+# 老人工作页 API（0.6.0 / schema 9）
 
 所有路径以 `/api/v1` 开始。工作人员接口仍校验账号有效性和老人照护范围；管理操作限主管/管理员。家属不开放内部观察、评估或整理队列。
 
 | 方法与路径 | 用途与约束 |
 | --- | --- |
-| `POST /elders/{id}/record` | `{text}` 保存正式记录，自动关联当前入住；同事务入后台队列，返回记录和排队状态。支持 `Idempotency-Key`，AI失败不撤销正式记录。 |
-| `GET /elders/{id}/organising` | 返回最近20项整理作业和处理结果；原始记录保存与后台状态分别展示。 |
-| `POST /elders/{id}/organising/{job}/retry` | 仅重试失败作业，重新校验权限和来源版本。 |
+| `POST /elders/{id}/record` | `{text, shift_id?, happened_at?, scene?, attachment_ids?}` 先保存正式记录，再锁外同步分析；返回 `{record, analysis_status, analysis}`。支持 `Idempotency-Key`；AI失败返回 `analysis_status=failed`，已保存记录不撤销。 |
+| `POST /elders/{id}/records/{record}/analyze` | 对同一正式记录重试分析，不重复创建记录。重新校验有效员工、老人照护范围、入住、记录修订和班次成员。 |
+| `POST /elders/{id}/records/{record}/analysis/{analysis}/confirm` | `{expected_revision, preference_decisions, accepted_tasks}`；核对依据必须匹配当前原文/版本。明确频率经提交人确认可写为正式提示；模糊/当次意愿不能升级。新任务须补齐老人、开放班次、负责人、未来截止和完成标准。支持幂等键。 |
+| `GET /elders/{id}/organising` | 兼容读取旧作业。Schema 9 迁移将 queued/processing 的记录整理作业标记为 `failed/requires_inline_reanalysis`；新记录不再创建此类作业。 |
+| `POST /elders/{id}/organising/{job}/retry` | 旧记录分析作业不再由 worker 消费；按记录ID使用 `/records/{record}/analyze`。 |
 | `POST /elders/{id}/organising/{job}/resolve-followups` | 主管填写 `{reason}`，记录人工接续办理说明；不自动认定任务已执行。 |
 | `GET /elders/{id}/understanding` | 返回已确认信息、近期观察、待复核信息及原文依据。未经确认的观察不覆盖正式要求。 |
 | `POST /elders/{id}/understanding/{report}/{point}/decision` | `{expected_revision, decision: adopt或reject, content?, note?}`；主管一次采用即可创建并确认记忆。仅来源仍有效的长期趋势允许采用；临时意愿、矛盾和专业关注不能直接升级。支持幂等键。 |
@@ -29,6 +31,6 @@
 
 ## 后台与部署
 
-普通记录没有个性化/跟进线索时不调用模型。相关整理限制在当前入住最近30条，排除交班和摘要重复引用；同日同文事件去重。后台可恢复，模型调用在文件锁外，提交时重查权限、入住、版本和原文。普通跟进还需核对授权、完整原句、唯一责任人、明确日期时刻、实际班次和重复任务。
+旧版记录整理队列仅供兼容展示，不再启动消费。计划排期仍由后台 worker 执行。新的即时记录保存不入队；模型调用在文件锁外，结果按记录修订保存，失败可重试同一记录。普通跟进还需核对授权、完整原句、唯一责任人、明确日期时刻、实际班次和重复任务。
 
-schema 7 到 8 增加 `care_jobs`、`automation_rules`，保留原账号和业务对象。恢复备份会撤销旧自动化授权，防止已撤销权限因旧快照复活。单 worker 部署；`BACKGROUND_JOBS_ENABLED=false` 仅用于隔离测试或显式停用后台。
+schema 8 到 9 增加 `record_analyses`，先备份，再将旧 queued/processing 记录作业迁为显式失败；其他作业、集合、账号和业务对象保留。旧 schema 迁移仍显式执行。恢复备份会撤销旧自动化授权，防止已撤销权限因旧快照复活。

@@ -111,6 +111,7 @@ class ManualRecordRequest(BaseModel):
     observations: list[Text] | None = Field(default=None, max_length=50)
     happened_at: AwareTime | None = None
     task_candidates: list[TaskCandidate] = Field(default_factory=list, max_length=50)
+    attachment_ids: list[str] = Field(default_factory=list, max_length=10)
 
 
 class RejectDraftRequest(BaseModel):
@@ -180,6 +181,18 @@ class HandoverSubmitRequest(BaseModel):
     expected_revision: int = Field(ge=1)
     summary: Annotated[str, Field(max_length=5000)] = ''
     approve_ai_summary: bool = False
+    accepted_tasks: list['HandoverAcceptedTask'] = Field(default_factory=list, max_length=50)
+
+
+class HandoverAcceptedTask(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra='forbid')
+    suggestion_id: Annotated[str, Field(min_length=1, max_length=100)]
+    elder_id: Annotated[str, Field(min_length=1, max_length=100)]
+    title: Annotated[str, Field(min_length=1, max_length=300)]
+    shift_id: Annotated[str, Field(min_length=1, max_length=100)]
+    assigned_to: Annotated[str, Field(min_length=1, max_length=100)]
+    due_at: AwareTime
+    completion_criteria: Annotated[str, Field(min_length=1, max_length=1000)]
 
 
 class HandoverReceiveRequest(BaseModel):
@@ -197,6 +210,7 @@ class ClarificationRequest(BaseModel):
 class AIReviewRequest(BaseModel):
     model_config = ConfigDict(extra='forbid')
     expected_revision: int = Field(ge=1)
+    text: Annotated[str, Field(max_length=5000)] = ''
 
 
 class QualityScanRequest(BaseModel):
