@@ -22,6 +22,14 @@ class MockAIProvider:
     def impression(self, sources, candidates=None):
         return {'points': []}  # Explicit demo mode; never fabricate a learned profile.
 
+    def assessment_prefill(self, sources, items, previous):
+        return {'items': [{'item_key': item['key'], 'score': None, 'citations': [],
+                           'question': f'请现场观察{item["label"]}，没有观察依据时保持待观察。'}
+                          for item in items]}
+
+    def ordinary_followups(self, sources):
+        return {'items': []}
+
     def summarize(self, sources):
         return {'points': [{'text': item['text'], 'citations': [{'source_id': item['source_id'], 'quote': item['text']}]} for item in sources[:30]]}
 
@@ -187,6 +195,31 @@ class DeepSeekAIProvider:
             instruction,
             json.dumps({'sources': sources, 'candidates': candidates}, ensure_ascii=False),
             timeout_seconds=max(self.timeout_seconds, 180),
+        )
+
+    def assessment_prefill(self, sources, items, previous):
+        return self._request(
+            '你是养老照护ADL评估资料定位助手，不是评估者。只根据本次入住期的正式观察记录，为每个给定条目定位直接相关的证据。'
+            '不得推断能力，不得把“记录未提到需要帮助”解释为“能够独立完成”。'
+            '每个条目均须返回一次：item_key、score、citations、question。'
+            'score仅可从该条目options中选择；没有直接、明确且充分描述本次能力表现的原文时，score为null且citations为空，'
+            'question提出一个具体的现场观察问题。若有依据，引用原文并选择匹配项，但结果仍必须由人员本次核对。'
+            '不同来源存在矛盾时，score=null、conflict=true，citations附至少两条不同记录原文，question说明需核对的差异。'
+            '其余条目conflict=false。上次评估仅作历史参考，不能作为当前证据。不得诊断、定级或提供专业结论。'
+            '来源仅可用sources中的record_id、revision及原文，citation必须逐字引用。'
+            '返回JSON仅含items数组，每项字段：item_key、score(整数或null)、conflict(布尔)、citations(数组，每项record_id/revision/field/quote)，question。',
+            json.dumps({'sources': sources, 'items': items, 'previous': previous}, ensure_ascii=False),
+        )
+
+    def ordinary_followups(self, sources):
+        return self._request(
+            '仅定位正式记录中已明确安排将来执行的普通生活跟进句子，不制定计划，不猜人名或时间。'
+            '只允许action=activity_invitation(询问参加活动意愿)或preference_check(询问本人意愿)。'
+            '已完成、取消、否定、用药、治疗、专业照护、责任认定不列入。'
+            '返回JSON {"items":[{"record_id":"原来源编号","action":"允许的类型","quote":"完整原文安排句"}]}，'
+            '最多10项。quote必须连续逐字引用给定text，保留对象、责任人、日期时刻和全部前提；'
+            '信息含糊仍保留原句，不补写字段。没有明确安排则items为空数组。',
+            json.dumps(sources, ensure_ascii=False),
         )
 
     def extract_context(self, text, context):

@@ -15,7 +15,7 @@ from filelock import FileLock
 
 
 T = TypeVar("T")
-CURRENT_SCHEMA_VERSION = 7
+CURRENT_SCHEMA_VERSION = 8
 
 
 EMPTY_STORE: dict[str, Any] = {
@@ -49,6 +49,8 @@ EMPTY_STORE: dict[str, Any] = {
     "care_assignments": [],
     "care_advice": [],
     "care_advice_batches": [],
+    "care_jobs": [],
+    "automation_rules": [],
 }
 
 
@@ -105,6 +107,13 @@ class JsonStore:
                                 reason='恢复备份后须重新核实授权')
             restored['idempotency_keys'] = []
             restored['notifications'] = []
+            # A backup must never resurrect a revoked automation authorization.
+            for rule in restored['automation_rules']:
+                rule.update(enabled=False, revision=rule.get('revision', 1) + 1,
+                            error_code='authorization_required_after_restore')
+            for job in restored['care_jobs']:
+                if job['status'] in {'queued', 'processing'}:
+                    job.update(status='failed', updated_at=_utc_now(), error_code='interrupted_by_restore')
             for assignment in restored['care_assignments']:
                 if assignment.get('status') == 'active':
                     assignment.update(status='revoked', revision=assignment.get('revision', 1) + 1,
@@ -176,9 +185,11 @@ class JsonStore:
             if version == CURRENT_SCHEMA_VERSION:
                 self._validate(data)
                 return None
-            if version not in {1, 2, 3, 4, 5, 6}:
+            if version not in {1, 2, 3, 4, 5, 6, 7}:
                 raise RuntimeError(f'Unsupported migration source: {version}')
-            added = {"care_advice", "care_advice_batches"}
+            added = {"care_jobs", "automation_rules"}
+            if version <= 6:
+                added.update({"care_advice", "care_advice_batches"})
             if version <= 4:
                 added.add('elder_impressions')
             if version in {1, 2, 3, 4, 5}:

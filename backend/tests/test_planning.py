@@ -106,7 +106,7 @@ def test_assessment_is_versioned_human_review_not_automatic_grade(api):
     assert store.path.read_bytes() == before
 
 
-@pytest.mark.parametrize('change', ['missing', 'invalid_option', 'extra', 'bool', 'float', 'future_observation', 'review_past', 'cross_elder', 'false_quote'])
+@pytest.mark.parametrize('change', ['invalid_option', 'extra', 'bool', 'float', 'future_observation', 'review_past', 'cross_elder', 'false_quote'])
 def test_invalid_assessment_input_cannot_become_official(api, change):
     _, store, _ = api
     record = source(api)

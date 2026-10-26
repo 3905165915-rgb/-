@@ -34,6 +34,7 @@ class Settings:
     vision_base_url: str = ''
     vision_model: str = ''
     vision_timeout_seconds: float = 45
+    background_jobs_enabled: bool = True
 
 
 def get_settings() -> Settings:
@@ -61,6 +62,7 @@ def get_settings() -> Settings:
         vision_base_url=os.getenv('VISION_BASE_URL', '').strip().rstrip('/'),
         vision_model=os.getenv('VISION_MODEL', '').strip(),
         vision_timeout_seconds=float(os.getenv('VISION_TIMEOUT_SECONDS', '45')),
+        background_jobs_enabled=os.getenv('BACKGROUND_JOBS_ENABLED', 'true').lower() in {'1', 'true', 'yes'},
     )
 
 

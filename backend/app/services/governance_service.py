@@ -13,7 +13,9 @@ def instrument(provider, data_dir):
     """Preserve provider type/name, log metadata only, and never log prompts/keys."""
     from app.storage.json_store import JsonStore
     for method, feature in [('extract', 'extraction'), ('extract_context', 'context'),
-                            ('impression', 'impression'), ('summarize', 'summary'), ('quality', 'quality'), ('care_advice', 'care_advice')]:
+                            ('impression', 'impression'), ('summarize', 'summary'), ('quality', 'quality'),
+                            ('care_advice', 'care_advice'), ('assessment_prefill', 'assessment_prefill'),
+                            ('ordinary_followups', 'ordinary_followups')]:
         original = getattr(provider, method)
         def wrap(fn, feature):
             @wraps(fn)

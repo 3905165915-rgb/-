@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+import threading
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -13,7 +14,7 @@ from app.schemas.api import HealthResponse
 from app.storage.json_store import CURRENT_SCHEMA_VERSION, JsonStore
 from app.services.workflow import DomainError
 from app.api.routes import family, incidents, reports, insights, impressions
-from app.api.routes import notifications, photos, governance, care_advice
+from app.api.routes import notifications, photos, governance, care_advice, elder_workspace
 
 
 @asynccontextmanager
@@ -25,11 +26,34 @@ async def lifespan(_: FastAPI):
             raise RuntimeError('Production requires a unique SECRET_KEY of at least 32 characters')
         if settings.ai_provider.lower() == 'mock' or settings.ai_fallback_mock:
             raise RuntimeError('Production must not silently use Mock AI; use APP_ENV=demo for synthetic demos')
-    JsonStore(settings.data_dir).read()  # Fail startup on an unmigrated/corrupt store.
-    yield
+    store = JsonStore(settings.data_dir)
+    store.read()  # Fail startup on an unmigrated/corrupt store.
+    from app.services.elder_workspace_service import recover_jobs, process_next, run_plan_rules
+    recover_jobs(store)
+    stop = threading.Event()
+    def organise():
+        while not stop.wait(5):
+            try:
+                process_next(store)
+                run_plan_rules(store)
+            except Exception:
+                # Jobs retain a persistent failure state; never echo record text
+                # or credentials into process logs.
+                pass
+    worker = threading.Thread(target=organise, name='elder-organising', daemon=True)
+    # Isolated synthetic tests invoke process_next explicitly for deterministic
+    # fault/concurrency checks. Live providers run the durable worker by default.
+    if settings.background_jobs_enabled:
+        worker.start()
+    try:
+        yield
+    finally:
+        stop.set()
+        if worker.is_alive():
+            worker.join(timeout=1)
 
 
-app = FastAPI(title="护老智交 Backend", version="0.4.3", lifespan=lifespan)
+app = FastAPI(title="护老智交 Backend", version="0.5.0", lifespan=lifespan)
 
 
 @app.middleware('http')
@@ -97,6 +121,13 @@ async def domain_error_handler(_, exc: DomainError):
         'impression_not_long_term_preference': '仅多日支持的生活偏好可加入长期记忆；临时意愿、分歧和专业照护关注请另行核实',
         'impression_memory_evidence_mismatch': '所选原文或版本与印象依据不一致，请刷新后重新选择',
         'impression_memory_already_created': '这条印象已加入照护记忆，请在记忆管理中查看或修订，不要重复创建',
+        'assessment_incomplete': '评估仍有待观察项目，补充并核对后才能确认',
+        'assessment_item_evidence_required': '已选择的评估结果需要关联原文依据或填写本次现场观察',
+        'invalid_assessment_item': '评估项目不正确，请刷新后重试',
+        'assessment_prefill_context_changed': '预填期间资料或入住情况已变化，请重新获取并核对',
+        'assessment_prefill_scope_too_large': '近期评估资料过多，请缩短回顾范围或直接补充现场观察',
+        'assessment_evidence_admission_changed': '原文不属于本次入住，请补充本次观察依据',
+        'assessment_not_editable': '当前评估状态不可修改，请刷新查看最新版本',
     }
     return JSONResponse(status_code=exc.status_code, content={
         'detail': exc.code, 'error_code': exc.code, 'retryable': False,
@@ -141,3 +172,4 @@ app.include_router(photos.router, prefix="/api/v1")
 app.include_router(governance.router, prefix="/api/v1")
 
 app.include_router(care_advice.router, prefix="/api/v1")
+app.include_router(elder_workspace.router, prefix="/api/v1")

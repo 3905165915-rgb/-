@@ -44,6 +44,10 @@ def audit(data: dict, action: str, object_id: str, user_id: str, **details: Any)
     data['audit_logs'].append(event)
     from app.services.notification_service import project
     project(data, event)
+    if action in {'create_manual_record', 'confirm_ai_draft', 'correct_record'}:
+        from app.services.elder_workspace_service import enqueue_record
+        record_id = details.get('record_id', object_id)
+        enqueue_record(data, record_id, user_id)
 
 
 def active_staff(data: dict, user_id: str | None) -> None:
