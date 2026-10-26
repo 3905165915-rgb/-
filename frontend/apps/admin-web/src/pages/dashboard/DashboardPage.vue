@@ -34,7 +34,7 @@ const selectedRows = computed(() => shown.value ? selectedDashboardRows(shown.va
 const displayedRows = computed(() => selectedRows.value.slice((page.value - 1) * pageSize, page.value * pageSize))
 const pages = computed(() => Math.max(1, Math.ceil(selectedRows.value.length / pageSize)))
 const selectedTitle = computed(() => selection.value.kind === 'pending'
-  ? '待处理事项 · 同快照明细'
+  ? '待处理事项 · 详情'
   : selection.value.kind === 'card' || selection.value.kind === 'comparison'
     ? dashboardLabels[selection.value.key || ''] || '工作事项'
     : selection.value.kind === 'trend' ? `${selection.value.key || ''} · 计划服务` : `${dashboardLabels[selection.value.section || ''] || '分类'} · ${dashboardGroupLabel(selection.value.section || '', selection.value.key || '')}`)
@@ -98,7 +98,7 @@ onBeforeUnmount(() => {
 <template>
   <DemoDashboard v-if="mode === 'demo'" />
   <main v-else class="dashboard-page">
-    <header class="page-header"><div><h1>管理看板</h1><p>指标、图表和明细来自同一服务器快照</p></div><button type="button" class="icon-button" aria-label="刷新完整看板" title="刷新完整看板" :disabled="loading" @click="refresh"><RefreshCw :size="18" aria-hidden="true" /></button></header>
+    <header class="page-header"><div><h1>管理看板</h1><p>照护任务、交接与服务质量，一处掌握</p></div><button type="button" class="icon-button" aria-label="刷新完整看板" title="刷新完整看板" :disabled="loading" @click="refresh"><RefreshCw :size="18" aria-hidden="true" /></button></header>
     <form class="filters" @submit.prevent="refresh">
       <label>开始日期（含）<input v-model="start" type="date" required /></label>
       <label>结束日期（不含）<input v-model="end" type="date" required /></label>
@@ -107,34 +107,34 @@ onBeforeUnmount(() => {
       <label>状态<select v-model="status"><option value="">全部状态</option><option v-for="value in statusOptions" :key="value" :value="value">{{ statusLabels[value] || '状态待核实' }}</option></select></label>
       <button type="submit" :disabled="loading">应用筛选</button>
       <button type="button" class="secondary" :disabled="loading" @click="elderId=''; shiftId=''; status=''; start=dates.start; end=dates.end; refresh()">重置筛选</button>
-      <p class="filter-note">北京时间，左闭右开，最多366天；更改筛选后需应用。</p>
+      <p class="filter-note">按北京时间统计，更改条件后点击应用筛选。</p>
       <p v-if="rangeError" class="error" role="alert">{{ rangeError }}</p>
       <p v-if="catalogError" class="muted" role="status">{{ catalogError }}</p>
     </form>
-    <p v-if="loading" role="status">正在读取完整服务器快照…</p>
+    <p v-if="loading" role="status">正在更新看板…</p>
     <div v-if="error" class="error-state" role="alert"><p>{{ error }}</p><button type="button" @click="refresh">重试</button></div>
     <template v-if="shown">
-      <section class="snapshot-meta"><p><strong>服务器快照</strong> · {{ formatTime(shown.as_of) }}（{{ shown.timezone }}）</p><p>{{ shown.definitions.snapshot || '统计按当前服务器状态计算。' }}</p></section>
+      <section class="snapshot-meta"><p><strong>更新于</strong> · {{ formatTime(shown.as_of) }}（北京时间）</p><p>展示当前待办与照护进展，点击指标可查看明细。</p></section>
       <section class="metric-grid" aria-label="待处理统计">
         <button v-for="(card, key) in shown.cards" :key="key" type="button" class="metric" :class="{ selected: selection.kind === 'card' && selection.key === key }" @click="choose({ kind: 'card', key })">
           <span>{{ dashboardLabels[key] || key }}</span><strong>{{ card.count }}</strong><small>上期 {{ card.previous_count }} · {{ card.change > 0 ? '+' : '' }}{{ card.change }} · {{ card.change_ratio === null ? '暂无可计算数据' : new Intl.NumberFormat('zh-CN', { style: 'percent', maximumFractionDigits: 1 }).format(card.change_ratio) }}</small>
         </button>
       </section>
-      <section class="chart-section" aria-label="上一周期同口径明细"><h2>上一周期</h2><p>{{ shown.comparison.definition }}</p><div class="filters"><button v-for="(card, key) in shown.comparison.cards" :key="key" type="button" class="secondary" @click="choose({ kind: 'comparison', key })">{{ dashboardLabels[key] }} · {{ card.count }}项</button></div></section><section class="chart-section" aria-labelledby="trend-title"><h2 id="trend-title">计划任务趋势</h2><p>{{ shown.definitions.task_trend || '完成率仅按已生成且已到服务时间的计划事项计算，人工任务不计入分母。' }}</p>
+      <section class="chart-section" aria-label="上一周期同口径明细"><h2>上一周期</h2><p>与上一时段相比，了解待处理工作量的变化。</p><div class="filters"><button v-for="(card, key) in shown.comparison.cards" :key="key" type="button" class="secondary" @click="choose({ kind: 'comparison', key })">{{ dashboardLabels[key] }} · {{ card.count }}项</button></div></section><section class="chart-section" aria-labelledby="trend-title"><h2 id="trend-title">计划任务趋势</h2><p>查看已到服务时间的计划任务完成情况；没有可计算服务时显示暂无数据。</p>
         <div v-if="shown.task_trend.length" class="trend-chart"><button v-for="point in shown.task_trend" :key="String(point.date)" type="button" class="trend-point" :class="{ selected: selection.kind === 'trend' && selection.key === point.date }" :aria-label="`${point.date}：完成${formatRatio(point.completion)}，${point.count}项；查看明细`" :title="`${point.date} · ${formatRatio(point.completion)} · ${point.count}项`" @click="choose({ kind: 'trend', key: String(point.date) })"><span class="trend-bar"><span :style="{ height: `${(point.completion as Row).ratio === null ? 0 : Number((point.completion as Row).ratio) * 100}%` }" /></span><strong>{{ formatRatio(point.completion) }}</strong><small>{{ point.date }}</small><small>{{ point.count }}项</small></button></div>
         <p v-else class="muted">当前窗口没有计划趋势数据。</p>
       </section>
       <section v-for="panel in distributionPanels" :key="panel.key" class="chart-section"><h2>{{ panel.label }}</h2><div class="distribution-list"><button v-for="group in panel.groups" :key="group.key" type="button" class="distribution" :class="{ selected: selection.kind === 'distribution' && selection.section === panel.key && selection.key === group.key }" :aria-pressed="selection.kind === 'distribution' && selection.section === panel.key && selection.key === group.key" @click="choose({ kind: 'distribution', section: panel.key, key: group.key })"><span>{{ dashboardGroupLabel(panel.key, group.key) }}</span><strong>{{ group.count }}</strong><span class="distribution-track"><span :style="{ width: barWidth(group.count, panel.groups.map(item => item.count)) }" /></span><small>查看 {{ group.ids.length }} 项</small></button></div></section>
-      <section class="pending-section"><div class="section-heading"><div><h2>优先待处理</h2><p>{{ shown.pending_work.definition }}</p></div><button type="button" class="secondary" @click="choose({ kind: 'pending' })">查看全部明细</button></div>
+      <section class="pending-section"><div class="section-heading"><div><h2>优先待处理</h2><p>优先关注待分级事件、人工标记的高风险事项和临近期限的任务。</p></div><button type="button" class="secondary" @click="choose({ kind: 'pending' })">查看全部明细</button></div>
         <ul><li v-for="item in shown.pending_work.items.slice(0, 8)" :key="String(item.kind)+':'+String(item.id)"><div><strong>{{ item.elder_name || '老人信息暂不可用' }} · {{ item.title }}</strong><p>{{ statusLabels[String(item.status)] || '状态待核实' }} · {{ item.priority_reason || '按业务状态办理' }}<span v-if="item.assigned_name"> · {{ item.assigned_name }}</span></p></div><RouterLink :to="dashboardLocation(item)">进入办理</RouterLink></li></ul>
         <p v-if="!shown.pending_work.items.length" role="status">当前筛选下暂无待处理事项。</p>
       </section>
-      <section class="drilldown" aria-live="polite"><div class="section-heading"><div><h2>{{ selectedTitle }}</h2><p>明细编号由服务器返回，链接打开对应业务对象。</p></div><span>{{ selectedRows.length }} 项</span></div>
+      <section class="drilldown" aria-live="polite"><div class="section-heading"><div><h2>{{ selectedTitle }}</h2><p>进入对应事项，查看来源并跟进处理。</p></div><span>{{ selectedRows.length }} 项</span></div>
         <ul><li v-for="row in displayedRows" :key="dashboardRowKey(row)"><div><strong>{{ row.elder_name || elderNameFallback(row) }} · {{ row.title || dashboardLabels[String(row.kind)] || '业务事项' }}</strong><p>{{ statusLabels[String(row.status)] || '状态待核实' }} · {{ formatTime(row.metric_at || row.created_at) }}<span v-if="row.assigned_name"> · 负责人：{{ row.assigned_name }}</span></p><details><summary>查看编号与来源</summary><p>{{ row.id }}<span v-if="row.source_id"> · 来源 {{ row.source_id }}</span><span v-if="row.due_at"> · 截止 {{ formatTime(row.due_at) }}</span></p></details></div><RouterLink :to="dashboardLocation(row)">查看对象</RouterLink></li></ul>
-        <p v-if="!displayedRows.length" class="muted">当前指标没有可显示的同快照明细。</p>
+        <p v-if="!displayedRows.length" class="muted">当前指标暂无相关明细。</p>
         <nav v-if="selectedRows.length > pageSize" class="pagination"><button type="button" class="secondary" :disabled="page <= 1" @click="page--">上一页</button><span>第 {{ page }} / {{ pages }} 页</span><button type="button" class="secondary" :disabled="page >= pages" @click="page++">下一页</button></nav>
       </section>
-      <details class="definitions"><summary>统计口径与排除项</summary><dl><template v-for="(value, key) in shown.definitions" :key="key"><dt>{{ dashboardLabels[String(key)] || key }}</dt><dd>{{ value }}</dd></template></dl><p v-for="(value, key) in shown.excluded" :key="key">{{ key === 'future_trend_task_rows' ? '排除的未来任务行' : '无效任务时间行' }}：{{ value }}</p><p>同比或环比不能替代服务质量判断；上一周期比较采用当前处理状态，不还原历史时点。</p></details>
+      <details class="definitions"><summary>统计口径与排除项</summary><dl><template v-for="(value, key) in shown.definitions" :key="key"><dt>{{ dashboardLabels[String(key)] || key }}</dt><dd>{{ String(value).replaceAll('null', '暂无可计算数据') }}</dd></template></dl><p v-for="(value, key) in shown.excluded" :key="key">{{ key === 'future_trend_task_rows' ? '排除的未来任务行' : '无效任务时间行' }}：{{ value }}</p><p>同比或环比不能替代服务质量判断；上一周期比较采用当前处理状态，不还原历史时点。</p></details>
     </template>
   </main>
 </template>
@@ -155,10 +155,12 @@ button { min-height: 40px; padding: 8px 12px; color: white; background: var(--hl
 .snapshot-meta { padding: 10px 0; }
 .metric-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .metric { display: grid; min-height: 112px; gap: 5px; justify-items: start; color: var(--hl-ink, #20282e); text-align: left; background: #fff; border-color: var(--hl-border, #dce3e7); }
+.metric { border-radius: 14px; padding: 18px; background: var(--hl-glass-bg); box-shadow: 0 5px 20px rgb(52 42 87 / 4%); }
 .metric strong { font-size: 26px; }
 .metric small { color: var(--hl-muted, #5f6b73); }
 .selected { outline: 2px solid var(--hl-primary, #1767cf); outline-offset: 1px; }
 .chart-section, .pending-section, .drilldown, .definitions { padding-block: 16px; border-bottom: 1px solid var(--hl-border, #dce3e7); }
+.chart-section, .pending-section, .drilldown { margin-top: 18px; padding: 20px; border: 1px solid var(--hl-border); border-radius: 16px; background: var(--hl-glass-bg); }
 .trend-chart { display: grid; grid-template-columns: repeat(auto-fit, minmax(58px, 1fr)); align-items: end; gap: 8px; min-height: 170px; overflow-x: auto; }
 .trend-point { display: grid; justify-items: center; gap: 4px; min-width: 54px; min-height: 154px; padding: 6px 2px; color: var(--hl-ink, #20282e); background: transparent; border: 0; }
 .trend-point strong, .trend-point small { font-size: 12px; }
@@ -167,7 +169,7 @@ button { min-height: 40px; padding: 8px 12px; color: white; background: var(--hl
 .distribution-list { display: flex; flex-wrap: wrap; gap: 8px; }
 .distribution { display: grid; grid-template-columns: minmax(100px, 1fr) auto; align-items: center; gap: 5px 10px; width: min(100%, 280px); min-height: 78px; color: var(--hl-ink, #20282e); text-align: left; background: #fff; border-color: var(--hl-border, #dce3e7); }
 .distribution-track { grid-column: 1 / -1; height: 8px; background: #edf1f3; border-radius: 4px; overflow: hidden; }
-.distribution-track > span { display: block; height: 100%; background: #1767cf; }
+.distribution-track > span { display: block; height: 100%; background: var(--hl-primary); }
 .distribution small { grid-column: 1 / -1; color: var(--hl-muted, #5f6b73); }
 ul { padding: 0; list-style: none; }
 li { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding-block: 12px; border-bottom: 1px solid var(--hl-border, #dce3e7); }
