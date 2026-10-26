@@ -22,7 +22,8 @@ def api(tmp_path, monkeypatch):
     def seed(data):
         data['users'] = [
             {'id': name, 'username': name, 'display_name': name, 'role': role,
-             'password_hash': hash_password('test-password'), 'active': True}
+             'password_hash': hash_password('test-password'), 'active': True,
+             'demo_login_enabled': name in {'staff', 'manager', 'family'}}
             for name, role in [('staff', 'caregiver'), ('other', 'caregiver'), ('manager', 'supervisor'), ('family', 'family')]
         ]
         data['elders'] = [{'id': 'E1', 'name': '虚构老人', 'status': 'active'}]

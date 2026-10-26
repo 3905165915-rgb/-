@@ -39,6 +39,10 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class DemoLoginRequest(BaseModel):
+    role: Literal["admin", "supervisor", "caregiver", "family"]
+
+
 class LoginResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"

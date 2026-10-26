@@ -20,6 +20,7 @@ class User(BaseModel):
     password_hash: str
     active: bool = True
     token_version: int = 0
+    demo_login_enabled: bool = False
 
 
 class Elder(BaseModel):
