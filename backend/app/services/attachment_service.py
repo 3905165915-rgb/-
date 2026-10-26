@@ -34,14 +34,16 @@ def view(item):
 def normalize(content, mime):
     if not content or len(content) > MAX_BYTES:
         raise DomainError('attachment_size_invalid', 413)
-    if mime not in {'image/jpeg', 'image/png'}:
+    if mime not in {'image/jpeg', 'image/jpg', 'image/png', 'image/webp'}:
         raise DomainError('attachment_format_invalid', 415)
     try:
         with warnings.catch_warnings():
             warnings.simplefilter('error', Image.DecompressionBombWarning)
             with Image.open(io.BytesIO(content)) as source:
-                if source.format not in {'JPEG', 'PNG'} or ('image/jpeg' if source.format == 'JPEG' else 'image/png') != mime:
-                    raise DomainError('attachment_format_mismatch', 415)
+                # Browser MIME and downloaded filename extensions are only hints.
+                # Trust a decoded, allowlisted raster format, then re-encode it.
+                if source.format not in {'JPEG', 'PNG', 'WEBP'}:
+                    raise DomainError('attachment_format_invalid', 415)
                 if source.width * source.height > MAX_PIXELS or getattr(source, 'n_frames', 1) != 1:
                     raise DomainError('attachment_dimensions_invalid', 422)
                 source.load()
