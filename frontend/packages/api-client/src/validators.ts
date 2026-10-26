@@ -13,8 +13,61 @@ import {
 } from '@hulao/shared'
 import { ContractError } from './errors'
 import type { LoginResponse } from './index'
+import type { InlineRecordEnvelope } from './types'
 
 export type Parser<T> = (value: unknown, endpoint: string, path?: string) => T
+
+export function parseInlineRecordResponse(
+  value: unknown,
+  elderId: string,
+  endpoint = 'POST /elders/:id/record',
+): InlineRecordEnvelope {
+  const envelope = object(value, endpoint, '$')
+  const record = object(envelope.record, endpoint, '$.record')
+  strings(record, ['id', 'elder_id', 'status', 'raw_text', 'admission_id', 'created_at'], endpoint, '$.record', true)
+  if (record.elder_id !== elderId || !['confirmed', 'corrected'].includes(String(record.status)) ||
+    !Number.isSafeInteger(record.revision) || Number(record.revision) < 1 || !Number.isFinite(Date.parse(String(record.created_at))) ||
+    (record.happened_at != null && !Number.isFinite(Date.parse(String(record.happened_at)))))
+    invalid(endpoint, '$.record', '正式记录编号、老人、状态、版本或时间无效')
+  enumeration(envelope.analysis_status, ['ready', 'failed', 'confirmed'], endpoint, '$.analysis_status')
+  if (envelope.analysis_status === 'failed' && envelope.analysis === null)
+    return envelope as unknown as InlineRecordEnvelope
+  const analysis = object(envelope.analysis, endpoint, '$.analysis')
+  strings(analysis, ['id', 'record_id', 'status', 'created_at'], endpoint, '$.analysis', true)
+  if (analysis.record_id !== record.id || analysis.record_revision !== record.revision ||
+    !['ready', 'confirmed'].includes(String(analysis.status)) || !Number.isFinite(Date.parse(String(analysis.created_at))))
+    invalid(endpoint, '$.analysis', '分析必须对应当前正式记录版本')
+  const sourceText = String(record.raw_text)
+  const cited = (value: unknown, path: string) => {
+    const quote = object(value, endpoint, path)
+    enumeration(quote.source_field, ['raw_text', 'observations'], endpoint, `${path}.source_field`)
+    string(quote.quote, endpoint, `${path}.quote`, true)
+    const source = quote.source_field === 'raw_text'
+      ? sourceText
+      : Array.isArray(record.observations) ? record.observations.join('\n') : ''
+    if (!source.includes(String(quote.quote))) invalid(endpoint, path, '引文不在正式记录原文中')
+  }
+  const scene = object(analysis.scene, endpoint, '$.analysis.scene')
+  if (scene.citation !== null) cited(scene.citation, '$.analysis.scene.citation')
+  for (const [index, item] of (Array.isArray(analysis.observations) ? analysis.observations : []).entries()) {
+    const observation = object(item, endpoint, `$.analysis.observations[${index}]`)
+    strings(observation, ['id', 'text'], endpoint, `$.analysis.observations[${index}]`, true)
+    cited(observation.citation, `$.analysis.observations[${index}].citation`)
+  }
+  for (const [field, fields] of [
+    ['task_suggestions', ['id', 'title', 'evidence_text']],
+    ['preference_suggestions', ['id', 'content', 'evidence_text']],
+  ] as const) {
+    if (!Array.isArray(analysis[field])) invalid(endpoint, `$.analysis.${field}`, '需要列表')
+    for (const [index, item] of (analysis[field] as unknown[]).entries()) {
+      const suggestion = object(item, endpoint, `$.analysis.${field}[${index}]`)
+      strings(suggestion, fields, endpoint, `$.analysis.${field}[${index}]`, true)
+      if (!sourceText.includes(String(suggestion.evidence_text)))
+        invalid(endpoint, `$.analysis.${field}[${index}].evidence_text`, '引文不在正式记录原文中')
+    }
+  }
+  return envelope as unknown as InlineRecordEnvelope
+}
 
 function invalid(endpoint: string, path: string, expected: string): never {
   throw new ContractError(

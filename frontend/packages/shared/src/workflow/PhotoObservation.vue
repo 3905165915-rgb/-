@@ -6,7 +6,8 @@ import { request, requestBinary, requestBlob, type Row } from './model'
 import { sameCareSession } from './task-care-context'
 import { canReviewPhoto, parsePhotoRecovery, photoContentType, photoFileIssue, photoUploadRejected, reviewedObservations, validatePhoto, validatePhotoAnalysis, validatePhotoPage, type PhotoRecovery } from './photo-observation'
 
-const props = defineProps<{ elderId: string; attachmentId?: string; analysisId?: string; readOnly?: boolean }>()
+const props = defineProps<{ elderId: string; attachmentId?: string; analysisId?: string; readOnly?: boolean; inlineSelection?: boolean; modelValue?: string[] }>()
+const emit = defineEmits<{ 'update:modelValue': [ids: string[]] }>()
 const session = ref(readSession())
 const manager = computed(() => ['admin', 'supervisor'].includes(session.value?.role || ''))
 const photos = ref<Row[]>([]), selected = ref<Row | null>(null), analysis = ref<Row | null>(null)
@@ -206,6 +207,12 @@ function fieldList(field: string): string[] { return ((analysis.value?.output as
 function requiresProfessionalReview() { return (analysis.value?.output as Row | null)?.requires_professional_review === true }
 function inputValue(event: Event) { return (event.target as HTMLTextAreaElement).value }
 function statusLabel(row: Row) { return stateLabels[String(row.id === selected.value?.id && analysis.value ? analysis.value.status : row.status)] || '状态待核实' }
+function linked(row: Row) { return (props.modelValue || []).includes(String(row.id)) }
+function toggleLink(row: Row) {
+  if (!props.inlineSelection || row.elder_id !== props.elderId || row.status !== 'approved') return
+  const id = String(row.id), current = props.modelValue || []
+  emit('update:modelValue', linked(row) ? current.filter(item => item !== id) : [...current, id])
+}
 async function initialize() {
   reset(); session.value = readSession(); const ticket = epoch, elderId = props.elderId
   if (!elderId || session.value?.mode !== 'api' || !['admin', 'supervisor', 'caregiver'].includes(session.value.role || '')) return
@@ -260,7 +267,7 @@ onBeforeUnmount(() => { reset(); window.removeEventListener('focus', changed); w
         <div class="row-heading"><strong>已上传照片</strong><button type="button" aria-label="刷新已上传照片" :disabled="loadingPhotos || busy" @click="loadPhotos"><RefreshCw :size="16" /></button></div>
         <p v-if="loadingPhotos" class="muted" role="status">正在载入照片…</p>
         <p v-else-if="!photos.length" class="muted">暂无可查看的已上传照片。</p>
-        <ul v-else><li v-for="photo in photos" :key="String(photo.id)"><button type="button" class="photo-choice" :disabled="busy" @click="loadPhoto(photo)"><span>{{ photo.caption || '照片观察' }} · {{ new Date(String(photo.occurred_at)).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }) }}</span><span>{{ statusLabel(photo) }}</span></button></li></ul>
+        <ul v-else><li v-for="photo in photos" :key="String(photo.id)"><div class="photo-row"><button type="button" class="photo-choice" :disabled="busy" @click="loadPhoto(photo)"><span>{{ photo.caption || '照片观察' }} · {{ new Date(String(photo.occurred_at)).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }) }}</span><span>{{ statusLabel(photo) }}</span></button><button v-if="inlineSelection" type="button" class="link-photo" :disabled="photo.status !== 'approved'" :aria-pressed="linked(photo)" @click="toggleLink(photo)">{{ linked(photo) ? '已加入记录' : photo.status === 'approved' ? '关联这张照片' : '仅可关联已确认照片' }}</button></div></li></ul>
       </div>
       <div v-if="selected" class="photo-review">
         <img v-if="photoUrl" :src="photoUrl" alt="服务器授权读取的私有照片" class="preview" />
@@ -312,9 +319,12 @@ ul { padding: 0; list-style: none; }
 li { border-top: 1px solid var(--hl-border, #dce3e7); }
 .photo-choice { display: flex; justify-content: space-between; width: 100%; color: var(--hl-ink, #20282e); text-align: left; background: #fff; border: 0; }
 .photo-choice span { min-width: 0; }
+.photo-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; }
+.link-photo { color: var(--hl-ink, #20282e); background: #fff; border-color: var(--hl-border, #dce3e7); }
+.link-photo[aria-pressed="true"] { color: #14532d; background: #ecfdf3; border-color: #86c99d; }
 .muted { color: var(--hl-muted, #5f6b73); }
 .warning { padding: 8px; color: #714b08; background: #fff8e8; border-left: 3px solid #b7791f; }
 .error { color: var(--hl-danger, #b52d38); }
 .actions { flex-wrap: wrap; }
-@media (max-width: 360px) { .photo-choice { align-items: flex-start; flex-direction: column; } }
+@media (max-width: 520px) { .photo-row { grid-template-columns: minmax(0, 1fr); } .photo-choice { align-items: flex-start; flex-direction: column; } }
 </style>

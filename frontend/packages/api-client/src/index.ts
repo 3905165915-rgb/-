@@ -8,10 +8,12 @@ import {
   parseHandoverItem,
   parseList,
   parseLoginResponse,
+  parseInlineRecordResponse,
   parseRecordDraft,
   parseTask,
   parseTimelineEvent,
 } from './validators'
+import type { InlineRecordEnvelope, RecordAnalysisConfirmation } from './types'
 export { toUiError, ContractError } from './errors'
 
 export interface LoginPayload {
@@ -99,6 +101,41 @@ export function createApi(baseURL?: string) {
         .post(
           `/records/${encodeURIComponent(id)}/confirm`,
           confirmBody(payload),
+        )
+        .then((response) => confirmedResponse(response.data))
+    },
+    saveElderRecord(
+      elderId: string,
+      payload: { text: string; shift_id?: string | null; happened_at?: string | null; scene?: string | null; attachment_ids?: string[] },
+      idempotencyKey: string,
+    ): Promise<InlineRecordEnvelope> {
+      return client
+        .post<unknown>(`/elders/${encodeURIComponent(elderId)}/record`, payload, {
+          headers: { 'Idempotency-Key': idempotencyKey },
+        })
+        .then((response) =>
+          parseInlineRecordResponse(response.data, elderId, 'POST /elders/:id/record'),
+        )
+    },
+    retryElderRecordAnalysis(elderId: string, recordId: string): Promise<InlineRecordEnvelope> {
+      return client
+        .post<unknown>(`/elders/${encodeURIComponent(elderId)}/records/${encodeURIComponent(recordId)}/analyze`)
+        .then((response) =>
+          parseInlineRecordResponse(response.data, elderId, 'POST /elders/:id/records/:record_id/analyze'),
+        )
+    },
+    confirmElderRecordAnalysis(
+      elderId: string,
+      recordId: string,
+      analysisId: string,
+      payload: RecordAnalysisConfirmation,
+      idempotencyKey: string,
+    ) {
+      return client
+        .post<unknown>(
+          `/elders/${encodeURIComponent(elderId)}/records/${encodeURIComponent(recordId)}/analysis/${encodeURIComponent(analysisId)}/confirm`,
+          payload,
+          { headers: { 'Idempotency-Key': idempotencyKey } },
         )
         .then((response) => confirmedResponse(response.data))
     },
