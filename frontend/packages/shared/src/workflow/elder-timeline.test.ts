@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { FrontendSession } from '../session'
-import { createElderTimeline, type ElderTimelineFilter } from './elder-activity'
+import { createElderTimeline, groupTimelineEvents, type ElderTimelineFilter } from './elder-activity'
 
 const session: FrontendSession = { mode: 'api', accountKey: 'synthetic', userId: 'U1', accessToken: 'synthetic-token', role: 'caregiver' }
 const filter: ElderTimelineFilter = { type: 'task', start: '2026-10-25', end: '2026-10-25' }
@@ -10,6 +10,44 @@ function page(elderId: string, offset: number, events: unknown[], total: number,
 }
 
 describe('server elder timeline pagination', () => {
+  it('groups by Asia/Shanghai registration date and keeps occurrence time separate', () => {
+    const groups = groupTimelineEvents([
+      { id: 'R1', recordedAt: '2026-10-26T16:30:00Z', happenedAt: '2026-10-20T09:00:00Z' },
+      { id: 'R2', recordedAt: '2026-10-26T16:00:00Z', happenedAt: null },
+      { id: 'R3', recordedAt: '2026-10-25T15:59:59Z' },
+    ])
+    expect(groups.map(group => group.date)).toEqual(['2026-10-27', '2026-10-25'])
+    expect(groups[0].events.map(event => event.id)).toEqual(['R1', 'R2'])
+    expect(groups[0].events[0].happenedAt).toBe('2026-10-20T09:00:00Z')
+  })
+
+  it('uses recorded_at for event ordering and retains legacy entered_at as fallback', async () => {
+    const request = vi.fn().mockResolvedValue(page('E1', 0, [
+      { ...event('EV1', 'T1'), recorded_at: '2026-10-27T09:00:00+08:00', entered_at: '2026-10-01T09:00:00+08:00', happened_at: '2020-01-01T09:00:00+08:00' },
+      { ...event('EV2', 'T2'), recorded_at: undefined, entered_at: '2026-10-26T09:00:00+08:00', happened_at: null },
+    ], 2, false))
+    const timeline = createElderTimeline({ request, session: () => session })
+    await timeline.load('E1', { type: '', start: '', end: '' })
+    expect(timeline.state.value.items.map(item => item.times)).toEqual([
+      [
+        { label: '登记', value: '2026-10-27T09:00:00+08:00', timestamp: Date.parse('2026-10-27T09:00:00+08:00') },
+        { label: '实际发生', value: '2020-01-01T09:00:00+08:00', timestamp: Date.parse('2020-01-01T09:00:00+08:00') },
+      ],
+      [{ label: '登记', value: '2026-10-26T09:00:00+08:00', timestamp: Date.parse('2026-10-26T09:00:00+08:00') }],
+    ])
+    expect(timeline.state.value.items[0].timestamp).toBe(Date.parse('2026-10-27T09:00:00+08:00'))
+  })
+
+  it('keeps malformed legacy registration values visible for date verification', async () => {
+    const request = vi.fn().mockResolvedValue(page('E1', 0, [
+      { ...event('EV1', 'T1'), recorded_at: undefined, entered_at: 'unknown-date', happened_at: null },
+    ], 1, false))
+    const timeline = createElderTimeline({ request, session: () => session })
+    await timeline.load('E1', { type: '', start: '', end: '' })
+    expect(timeline.state.value.status).toBe('ready')
+    expect(timeline.state.value.items[0].times[0]).toMatchObject({ label: '登记', value: 'unknown-date', timestamp: null })
+  })
+
   it('sends type and timezone-aware inclusive-day filters then appends a unique next page', async () => {
     const request = vi.fn()
       .mockResolvedValueOnce(page('E1', 0, [event('EV1', 'T1')], 2, true))

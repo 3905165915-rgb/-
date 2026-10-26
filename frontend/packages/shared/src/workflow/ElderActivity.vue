@@ -5,11 +5,13 @@ import { readSession, type AppMode, type FrontendSession } from '../session'
 import { display, listAll, request } from './model'
 import { sameCareSession } from './task-care-context'
 import {
+  activityTimestamp,
   activityFilterError,
   activityTypes,
   createElderActivity,
   createElderTimeline,
   filterElderActivity,
+  groupTimelineEvents,
   type ActivityFilter,
   type ActivityReference,
 } from './elder-activity'
@@ -37,6 +39,19 @@ let opener: HTMLElement | null = null
 const items = computed(() => state.value.elderId !== props.elderId ? [] : props.mode === 'api'
   ? serverTimeline.state.value.items : Object.values(context.state.value.slots).flatMap((slot) => slot.items))
 const filtered = computed(() => filterElderActivity(items.value, props.elderId, filter.value))
+const visible = computed(() => filtered.value.slice(0, limit.value))
+const timelineGroups = computed(() => {
+  const dated = visible.value.flatMap(item => {
+    const recordedAt = item.times.find(stamp => stamp.label === '登记')?.value
+    return recordedAt ? [{ ...item, recordedAt }] : []
+  })
+  const groups = groupTimelineEvents(dated)
+  const undated = visible.value.filter(item => {
+    const registered = item.times.find(stamp => stamp.label === '登记')
+    return !registered || activityTimestamp(registered.value) === null
+  })
+  return undated.length ? [...groups, { date: '登记日期待核实', events: undated }] : groups
+})
 const filterError = computed(() => activityFilterError(filter.value))
 const missingTimes = computed(() => items.value.filter((item) => item.timestamp === null).length)
 const failures = computed(() => props.mode === 'api' ? [] : Object.entries(context.state.value.slots).flatMap(([type, slot]) =>
@@ -108,7 +123,7 @@ onBeforeUnmount(() => {
       <label>结束日期<input v-model="filter.end" type="date" :aria-invalid="!!filterError" /></label>
       <button type="button" @click="reset">重置筛选</button>
     </fieldset>
-    <p :id="filterId" class="activity-scope">按每项首个有效活动时间筛选，北京时间，含结束日期当天。</p>
+    <p :id="filterId" class="activity-scope">按服务器登记时间筛选，北京时间，含结束日期当天；实际发生时间单独显示。</p>
     <p v-if="mode === 'api' && serverTimeline.state.value.notice" class="activity-scope">{{ serverTimeline.state.value.notice }}</p>
     <p v-if="filterError" role="alert">{{ filterError }}</p>
     <p v-if="missingTimes" class="activity-scope">{{ missingTimes }} 项未提供有效活动时间；选择日期后隐藏。</p>
@@ -151,9 +166,12 @@ onBeforeUnmount(() => {
     <p v-if="!filterError && (state.status === 'ready' || state.status === 'partial') && !filtered.length" role="status">
       {{ state.status === 'partial' ? '已载入部分暂无匹配动态，请重试未载入的列表。' : '当前可访问列表中暂无匹配动态。' }}
     </p>
-    <p v-if="filtered.length" class="activity-scope" role="status">匹配 {{ filtered.length }} 项，显示 {{ Math.min(limit, filtered.length) }} 项</p>
+    <p v-if="filtered.length" class="activity-scope" role="status">匹配 {{ filtered.length }} 项，显示 {{ visible.length }} 项</p>
     <ol v-if="!filterError && filtered.length" class="activity-list" aria-label="当前老人的可访问动态">
-      <li v-for="item in filtered.slice(0, limit)" :key="item.key" class="activity-item">
+      <li v-for="group in timelineGroups" :key="group.date" class="activity-date-group">
+        <h3 class="activity-date">{{ group.date }}</h3>
+        <ol class="activity-date-events">
+      <li v-for="item in group.events" :key="item.key" class="activity-item">
         <p class="activity-kind">{{ activityTypes[item.type] }} · {{ display(item.status, 'status') }}</p>
         <h3>{{ item.title }}</h3>
         <p v-if="item.actor" class="activity-scope">操作人：{{ item.actor }}</p>
@@ -171,6 +189,8 @@ onBeforeUnmount(() => {
           </template>
           <RouterLink v-if="item.replayUrl" :to="item.replayUrl">事项回放</RouterLink>
         </div>
+      </li>
+        </ol>
       </li>
     </ol>
     <button v-if="filtered.length > limit" type="button" @click="limit += 30">显示更多动态</button>
@@ -191,6 +211,9 @@ onBeforeUnmount(() => {
 .elder-activity button { border: 1px solid var(--hl-border, #cdd6e0); border-radius: 6px; padding: 8px 12px; background: var(--hl-surface, #fff); cursor: pointer; }
 .elder-activity button:disabled { color: var(--hl-muted, #4d6078); cursor: wait; }
 .activity-list { list-style: none; padding: 0; margin: 12px 0; }
+.activity-date-group { list-style: none; }
+.activity-date { margin: 18px 0 4px; padding: 8px 0; border-bottom: 1px solid var(--hl-border, #cdd6e0); font-size: 15px; }
+.activity-date-events { list-style: none; padding: 0; margin: 0; }
 .activity-item { padding: 14px 0; border-bottom: 1px solid var(--hl-border, #cdd6e0); }
 .activity-item h3 { font-size: 16px; margin: 6px 0; }
 .activity-item p { margin: 6px 0; }

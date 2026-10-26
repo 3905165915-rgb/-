@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { compactReference } from '@hulao/shared'
+import { compactReference, groupTimelineEvents } from '@hulao/shared'
 import { useTasks, useTimeline, mode } from '../../services/data'
 import FeedbackState from '../../components/FeedbackState.vue'
 const route = useRoute()
@@ -18,6 +18,16 @@ const items = computed(() => [
   ).values(),
 ])
 const timeline = useTimeline(() => itemId.value)
+const timelineGroups = computed(() => {
+  const events = (timeline.data.value ?? []).flatMap(event => {
+  const recordedAt = (event as typeof event & { recordedAt?: string }).recordedAt || event.enteredAt
+  return recordedAt ? [{ ...event, recordedAt }] : []
+  })
+  const groups = groupTimelineEvents(events)
+  const groupedIds = new Set(groups.flatMap(group => group.events.map(event => event.id)))
+  const uncertain = events.filter(event => !groupedIds.has(event.id))
+  return uncertain.length ? [...groups, { date: '登记日期待核实', events: uncertain }] : groups
+})
 function select(value: string) {
   void router.push(
     value ? '/timeline/' + encodeURIComponent(value) : '/timeline',
@@ -68,35 +78,21 @@ function select(value: string) {
         @retry="timeline.refetch()"
       />
       <ol
-        v-if="
-          !timeline.isPending.value &&
-            !timeline.error.value &&
-            timeline.data.value?.length
-        "
+        v-if="!timeline.isPending.value && !timeline.error.value && timelineGroups.length"
         class="timeline-events"
         aria-label="事项时间线"
       >
-        <li
-          v-for="event in timeline.data.value"
-          :key="event.id"
-        >
-          <h2>{{ event.label }}</h2>
-          <p class="timeline-detail">
-            {{ event.detail }}
-          </p>
-          <p class="muted">
-            发生：{{ event.happenedAt || '未提供' }}
-          </p>
-          <p class="muted">
-            录入：{{ event.enteredAt || '未提供' }} ·
-            {{ event.actor || '操作者未提供' }}
-          </p>
-          <van-tag
-            v-if="mode === 'demo' && event.source === 'demo'"
-            type="warning"
-          >
-            演示
-          </van-tag>
+        <li v-for="group in timelineGroups" :key="group.date" class="timeline-date-group">
+          <h2>{{ group.date }}</h2>
+          <ol>
+            <li v-for="event in group.events" :key="event.id">
+              <h3>{{ event.label }}</h3>
+              <p class="timeline-detail">{{ event.detail }}</p>
+              <p class="muted">登记：{{ event.recordedAt }} · {{ event.actor || '操作者未提供' }}</p>
+              <p v-if="event.happenedAt" class="muted">实际发生：{{ event.happenedAt }}</p>
+              <van-tag v-if="mode === 'demo' && event.source === 'demo'" type="warning">演示</van-tag>
+            </li>
+          </ol>
         </li>
       </ol>
     </template>

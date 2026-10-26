@@ -41,6 +41,16 @@ export interface ActivityFilter {
   start: string
   end: string
 }
+export interface TimelineEventForGrouping {
+  recordedAt: string
+  happenedAt?: string | null
+  id?: string
+  [key: string]: unknown
+}
+export interface TimelineEventGroup<T extends TimelineEventForGrouping = TimelineEventForGrouping> {
+  date: string
+  events: T[]
+}
 const string = (value: unknown) => typeof value === 'string' ? value : ''
 const object = (value: unknown): Row | null =>
   value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -60,6 +70,25 @@ export function activityTimestamp(value: unknown): number | null {
     Number(value.slice(17, 19)) > 59) return null
   const timestamp = Date.parse(value)
   return Number.isFinite(timestamp) ? timestamp : null
+}
+export function groupTimelineEvents<T extends TimelineEventForGrouping>(events: T[]): TimelineEventGroup<T>[] {
+  const groups = new Map<string, T[]>()
+  for (const event of events) {
+    const timestamp = activityTimestamp(event.recordedAt)
+    if (timestamp === null) continue
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',
+    }).formatToParts(timestamp)
+    const date = `${parts.find(part => part.type === 'year')?.value}-${parts.find(part => part.type === 'month')?.value}-${parts.find(part => part.type === 'day')?.value}`
+    groups.set(date, [...(groups.get(date) ?? []), event])
+  }
+  return [...groups.entries()]
+    .sort(([a], [b]) => b.localeCompare(a))
+    .map(([date, grouped]) => ({
+      date,
+      events: grouped.sort((a, b) => (activityTimestamp(b.recordedAt) ?? -Infinity) -
+        (activityTimestamp(a.recordedAt) ?? -Infinity) || (a.id ?? '').localeCompare(b.id ?? '')),
+    }))
 }
 export function activityFilterError(filter: ActivityFilter): string {
   if ((filter.start && !calendarDay(filter.start)) || (filter.end && !calendarDay(filter.end)))
@@ -283,11 +312,12 @@ function timelineItem(value: unknown, elderId: string): ActivityItem {
     typeof row.label !== 'string' || !row.label.trim() || typeof row.event_type !== 'string' || !timelineEventTypes.has(row.event_type as ActivityType) ||
     typeof row.action !== 'string' || typeof row.detail !== 'string' || typeof row.actor !== 'string') throw new Error('老人时间线数据格式异常')
   const type = row.event_type as ActivityType
-  const times = (['happened_at', 'entered_at'] as const).flatMap((field, index) => {
-    const raw = row[field]
-    if (typeof raw !== 'string') return []
-    return [{ label: index === 0 ? '发生' : '登记', value: raw, timestamp: activityTimestamp(raw) }]
-  })
+  const recordedAt = typeof row.recorded_at === 'string' ? row.recorded_at : row.entered_at
+  const happenedAt = row.happened_at
+  const times = [
+    ...(typeof recordedAt === 'string' ? [{ label: '登记', value: recordedAt, timestamp: activityTimestamp(recordedAt) }] : []),
+    ...(typeof happenedAt === 'string' ? [{ label: '实际发生', value: happenedAt, timestamp: activityTimestamp(happenedAt) }] : []),
+  ]
   const sourceId = row.source_id
   const directActions: Partial<Record<ActivityType, string[]>> = {
     record: ['create_manual_record', 'create_photo_record', 'correct_record', 'review_record_impact'],
@@ -298,7 +328,7 @@ function timelineItem(value: unknown, elderId: string): ActivityItem {
   const direct = directActions[type]?.includes(row.action) === true
   return {
     key: String(row.id), elderId, type, title: row.label, text: row.detail, status: row.action, actor: row.actor,
-    times, timestamp: times.find(time => time.timestamp !== null)?.timestamp ?? null,
+    times, timestamp: times[0]?.timestamp ?? null,
     reference: { type, id: sourceId }, sources: [],
     detailAvailable: direct,
     ...(type === 'task' && direct ? { detailUrl: '/tasks/' + encodeURIComponent(sourceId) } : {}),
@@ -344,7 +374,7 @@ export function createElderTimeline(deps: { request: (path: string) => Promise<u
         !Number.isSafeInteger(response.total) || Number(response.total) < 0 || response.offset !== offset ||
         response.limit !== 100 || typeof response.has_more !== 'boolean' || typeof response.notice !== 'string') throw new Error('老人时间线数据格式异常')
       const rows = response.events.map(row => timelineItem(row, elderId))
-      if (rows.length > 100 || offset + rows.length > Number(response.total) || rows.some(row => row.timestamp === null || row.times.length !== 2 || row.times.some(time => time.timestamp === null))) throw new Error('老人时间线缺少有效活动时间或分页异常')
+      if (rows.length > 100 || offset + rows.length > Number(response.total) || rows.some(row => row.times[0]?.label !== '登记')) throw new Error('老人时间线缺少登记时间或分页异常')
       if (response.has_more !== (offset + rows.length < Number(response.total))) throw new Error('老人时间线分页状态不一致')
       const merged = append ? [...state.value.items, ...rows] : rows
       const unique = [...new Map(merged.map(row => [row.key, row])).values()]
