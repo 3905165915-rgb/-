@@ -25,6 +25,9 @@ class MockAIProvider:
     def summarize(self, sources):
         return {'points': [{'text': item['text'], 'citations': [{'source_id': item['source_id'], 'quote': item['text']}]} for item in sources[:30]]}
 
+    def family_insight(self, sources):
+        return {'points': [{'text': item['text'], 'citations': [{'source_id': item['source_id'], 'quote': item['text']}]} for item in sources[:12]]}
+
     def quality(self, sources):
         return {'findings': []}
 
@@ -151,6 +154,17 @@ class DeepSeekAIProvider:
             '根据交班资料整理待人工核对的摘要，保留条件和否定，不写新事实或处置方案。'
             '返回JSON：{"points":[{"text":"摘要条目","citations":[{"source_id":"输入中的source_id","quote":"逐字原文片段"}]}]}。'
             '每个条目至少一处引用，重点保留未完成任务及其条件。', json.dumps(sources, ensure_ascii=False))
+        return self._validate_citations(parsed, sources, 'summary')
+
+    def family_insight(self, sources):
+        parsed = self._request(
+            '为老人家属整理温暖、简短、尊重隐私的生活近况。输入仅包含已审核并公开发布的简报。'
+            '只概括已写明的日常活动、生活状态与后续关注，不作诊断、不推断情绪或风险、不提供治疗建议、不制造家属焦虑。'
+            '语言自然亲切，避免行政报告腔；每条须保留原文依据，不确定处明确说记录未提及。'
+            '返回JSON：{"points":[{"text":"面向家属的简短近况","citations":[{"source_id":"输入编号","quote":"输入中的逐字原文"}]}]}。'
+            '最多5条，每条至少引用一段原文，不输出置信概率或未发生的活动。',
+            json.dumps(sources, ensure_ascii=False),
+        )
         return self._validate_citations(parsed, sources, 'summary')
 
     def impression(self, sources, candidates=None):

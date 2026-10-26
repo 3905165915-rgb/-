@@ -5,7 +5,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.api.deps import StaffUser, ManagementUser, Store
 from app.api.routes.records import IdempotencyKey
-from app.schemas.photo import PhotoReview, PhotoLink, ImageReview
+from app.schemas.photo import PhotoReview, PhotoLink, ImageReview, PhotoFamilyShare
 from app.services import attachment_service as service
 from app.services import vision_service as vision
 from app.services.workflow import DomainError
@@ -74,3 +74,9 @@ def review(attachment_id: str, payload: PhotoReview, current: ManagementUser, st
 def link(attachment_id: str, payload: PhotoLink, current: StaffUser, store: Store,
          idempotency_key: IdempotencyKey = None):
     return service.link(store, attachment_id, payload, current['sub'], current['role'], idempotency_key)
+
+
+@router.post('/{attachment_id}/family-sharing')
+def family_sharing(attachment_id: str, payload: PhotoFamilyShare, current: ManagementUser, store: Store,
+                   idempotency_key: IdempotencyKey = None):
+    return service.family_sharing(store, attachment_id, payload, current['sub'], current['role'], idempotency_key)

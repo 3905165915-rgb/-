@@ -146,21 +146,21 @@ def build_demo(previous: dict, password: str) -> dict:
                 expected_task_revision=task.get('revision', 1), memory_id=memory['id'],
                 expected_memory_revision=memory['revision'], scene=scene,
                 reason='演示初始化：人工角色明确采用已确认的相关偏好'), caregiver, 'caregiver')
+            family_service.create_binding(store, BindingCreate(
+                elder_id=elder_id, admission_id=admission_id, family_id=family,
+                relationship='演示家属', consent_reference='虚构授权记录，仅用于测试',
+                scopes=['summary', 'feedback'], expires_at=instant + timedelta(days=30)), admin, 'admin')
+            summary = family_service.create_summary(store, SummaryCreate(
+                elder_id=elder_id, admission_id=admission_id,
+                period_start=recorded - timedelta(minutes=1), period_end=instant,
+                text=f'已记录{name}本人表达的生活习惯：“{quote}”具体活动会先征求本人当次意愿。',
+                evidence=evidence), supervisor, 'supervisor')
+            family_service.review_summary(store, summary['id'], SummaryReview(
+                expected_revision=summary['revision'], action='publish',
+                reason='虚构简报已人工核对，仅公开必要内容'), supervisor, 'supervisor')
             if index == 0:
                 task_service.complete(store, task['id'], caregiver, 'caregiver',
                                       '预置虚构已完成示例：询问后本人愿意听戏，已按本人意愿安排。')
-                family_service.create_binding(store, BindingCreate(
-                    elder_id=elder_id, admission_id=admission_id, family_id=family,
-                    relationship='女儿', consent_reference='虚构授权记录，仅用于测试',
-                    scopes=['summary', 'feedback'], expires_at=instant + timedelta(days=30)), admin, 'admin')
-                summary = family_service.create_summary(store, SummaryCreate(
-                    elder_id=elder_id, admission_id=admission_id,
-                    period_start=recorded - timedelta(minutes=1), period_end=instant,
-                    text='今天已记录张阿姨的听戏偏好和日常协助需求，具体活动将在征求本人同意后安排。',
-                    evidence=evidence), supervisor, 'supervisor')
-                family_service.review_summary(store, summary['id'], SummaryReview(
-                    expected_revision=summary['revision'], action='publish',
-                    reason='虚构简报已人工核对，仅公开必要内容'), supervisor, 'supervisor')
                 followup = task_service.create(store, TaskCreateRequest(
                     elder_id=elder_id, title='再次询问本次活动意愿', shift_id=shift_id,
                     assigned_to=caregiver, due_at=instant + timedelta(hours=1),

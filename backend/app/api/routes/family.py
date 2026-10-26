@@ -1,6 +1,7 @@
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Header, Query, HTTPException
+from fastapi.responses import FileResponse
 
 from app.api.deps import ManagementUser, FamilyUser, Store
 from app.schemas import family as schema
@@ -82,6 +83,27 @@ def my_bindings(current: FamilyUser, store: Store):
 @router.get('/family/me/bindings/{binding_id}/summaries')
 def summaries(binding_id: str, current: FamilyUser, store: Store, limit: int = Query(100, ge=1, le=200), offset: int = Query(0, ge=0)):
     return service.summaries(store, binding_id, current['sub'], limit, offset)
+
+
+@router.get('/family/me/bindings/{binding_id}/timeline')
+def family_timeline(binding_id: str, current: FamilyUser, store: Store,
+                    limit: int = Query(100, ge=1, le=200), offset: int = Query(0, ge=0)):
+    return service.family_timeline(store, binding_id, current['sub'], limit, offset)
+
+
+@router.get('/family/me/bindings/{binding_id}/photos/{attachment_id}/content')
+def family_photo(binding_id: str, attachment_id: str, current: FamilyUser, store: Store):
+    path = service.family_photo(store, binding_id, attachment_id, current['sub'])
+    return FileResponse(path, media_type='image/jpeg', filename='照护动态.jpg')
+
+
+@router.post('/family/me/bindings/{binding_id}/insights')
+def family_insights(binding_id: str, current: FamilyUser, store: Store):
+    from app.services.ai_service import AIProviderError
+    try:
+        return service.family_insight(store, binding_id, current['sub'])
+    except AIProviderError as exc:
+        raise HTTPException(503, detail='近况整理暂不可用，已保留原有动态，请稍后重试。') from exc
 
 
 @router.post('/family/me/feedback', status_code=201)
