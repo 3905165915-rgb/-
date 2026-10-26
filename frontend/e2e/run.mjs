@@ -68,8 +68,13 @@ async function noOverflow(page) {
 }
 async function loginMobile(page, role = 'caregiver') {
   await page.goto(`${base}/mobile/login`)
-  await page.locator('select').selectOption(role)
-  await page.getByRole('button', { name: '进入演示' }).click()
+  const label = {
+    caregiver: '护理员',
+    supervisor: '护士 / 主管',
+    admin: '管理员',
+    family: '家属',
+  }[role]
+  await page.getByRole('button', { name: new RegExp(label) }).click()
 }
 const mobile = await context.newPage()
 await mobile.setViewportSize({ width: 390, height: 844 })
@@ -205,7 +210,7 @@ try {
   await test('同源双端独立身份与移动端草稿刷新恢复', async () => {
     await loginMobile(mobile)
     await admin.goto(`${base}/admin/login`)
-    await admin.getByRole('button', { name: '进入演示' }).click()
+    await admin.getByRole('button', { name: /护士 \/ 主管/ }).click()
     await text(admin, '主管')
     await mobile.goto(`${base}/mobile/records/new`)
     await mobile.getByRole('button', { name: '使用演示原文' }).click()
@@ -572,14 +577,13 @@ try {
       const preview = await context.newPage()
       const root = process.env.PREVIEW_URL
       await preview.goto(`${root}/admin/elders`)
-      await preview.getByRole('button', { name: '进入演示' }).click()
+      await preview.getByRole('button', { name: /护士 \/ 主管/ }).click()
       await text(preview, '主管')
       await preview.goto(`${root}/admin/elders`)
       await text(preview, '王阿姨')
       const previewMobile = await context.newPage()
       await previewMobile.goto(`${root}/mobile/records/new`)
-      await previewMobile.locator('select').selectOption('caregiver')
-      await previewMobile.getByRole('button', { name: '进入演示' }).click()
+      await previewMobile.getByRole('button', { name: /护理员/ }).click()
       await previewMobile.goto(`${root}/mobile/records/new`)
       await previewMobile.getByRole('button', { name: '使用演示原文' }).click()
       await previewMobile.waitForFunction(

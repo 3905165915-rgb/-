@@ -203,7 +203,28 @@ function leaveAccount(event: FocusEvent) {
           }}</strong>
         </div>
         <div class="header-actions">
-          <RouterLink v-if="auth.role && auth.role !== 'family'" to="/notifications" class="icon-button" title="待我处理" aria-label="待我处理"><Bell :size="20" aria-hidden="true" /></RouterLink>
+          <button
+            type="button"
+            class="identity-switch"
+            @click="logout"
+          >
+            <ArrowLeftRight
+              :size="17"
+              aria-hidden="true"
+            /><span>切换身份</span>
+          </button>
+          <RouterLink
+            v-if="auth.role && auth.role !== 'family'"
+            to="/notifications"
+            class="icon-button"
+            title="待我处理"
+            aria-label="待我处理"
+          >
+            <Bell
+              :size="20"
+              aria-hidden="true"
+            />
+          </RouterLink>
           <span
             class="mode-label"
             :class="{ 'is-demo': mode === 'demo' }"

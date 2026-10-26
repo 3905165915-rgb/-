@@ -48,8 +48,11 @@ async function test(name, run) {
 }
 async function login(target, app = 'mobile') {
   await target.goto(`${base}/${app}/login`)
-  if (app === 'mobile') await target.locator('select').selectOption('caregiver')
-  await target.getByRole('button', { name: '进入演示' }).click()
+  await target
+    .getByRole('button', {
+      name: app === 'mobile' ? /护理员/ : /护士 \/ 主管/,
+    })
+    .click()
 }
 async function noOverflow(target) {
   assert.equal(

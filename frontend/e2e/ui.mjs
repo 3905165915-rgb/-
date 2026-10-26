@@ -70,8 +70,19 @@ async function capture(page, name) {
 
 async function login(page, app, role) {
   await page.goto(`${base}/${app}/login`)
-  if (role) await page.locator('select').selectOption(role)
-  await page.getByRole('button', { name: '进入演示' }).click()
+  const labels = {
+    caregiver: '护理员',
+    supervisor: '护士 / 主管',
+    admin: '管理员',
+    family: '家属',
+  }
+  await page
+    .getByRole('button', {
+      name: new RegExp(
+        labels[role || (app === 'mobile' ? 'caregiver' : 'supervisor')],
+      ),
+    })
+    .click()
   await page
     .locator(app === 'mobile' ? '.mobile-header' : '.admin-sidebar')
     .waitFor()
@@ -187,7 +198,8 @@ try {
         if (name === 'handover') {
           const navigationBounds = await tabbar.boundingBox()
           assert.ok(
-            navigationBounds && bounds.y + bounds.height <= navigationBounds.y + 1,
+            navigationBounds &&
+              bounds.y + bounds.height <= navigationBounds.y + 1,
             JSON.stringify({ footer: bounds, navigation: navigationBounds }),
           )
         }
@@ -244,9 +256,7 @@ try {
   })
 
   await test('降低透明度可开关并在刷新后恢复', async () => {
-    await mobile
-      .getByRole('button', { name: '我的', exact: true })
-      .click()
+    await mobile.getByRole('button', { name: '我的', exact: true }).click()
     await mobile.waitForURL('**/mobile/account')
     const toggle = mobile.getByRole('switch', {
       name: '降低透明度',
@@ -280,17 +290,15 @@ try {
   await test('恢复日志入口可达且演示环境不读取正式日志', async () => {
     await mobile.goto(`${base}/mobile/account`)
     await mobile.getByRole('link', { name: '恢复日志' }).click()
-    await mobile.getByRole('heading', { name: '恢复日志', exact: true }).waitFor()
     await mobile
-      .getByText(/仅在正式 API 环境中读取/)
+      .getByRole('heading', { name: '恢复日志', exact: true })
       .waitFor()
+    await mobile.getByText(/仅在正式 API 环境中读取/).waitFor()
     await admin.goto(`${base}/admin/recovery`)
     await admin
       .getByRole('heading', { name: '本机恢复日志', exact: true })
       .waitFor()
-    await admin
-      .getByText(/仅在正式 API 环境中读取/)
-      .waitFor()
+    await admin.getByText(/仅在正式 API 环境中读取/).waitFor()
   })
 
   await test('管理端1280/1440px任务、档案、抽屉与表格', async () => {

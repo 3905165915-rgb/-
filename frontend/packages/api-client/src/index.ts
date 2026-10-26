@@ -24,6 +24,7 @@ export interface LoginResponse {
   user_id?: string
   token_type?: string
   role?: string
+  display_name?: string
 }
 
 export function createApi(baseURL?: string) {
@@ -72,6 +73,13 @@ export function createApi(baseURL?: string) {
         .post<unknown>('/auth/login', payload)
         .then((response) =>
           parseLoginResponse(response.data, 'POST /auth/login'),
+        )
+    },
+    demoLogin(role: 'admin' | 'supervisor' | 'caregiver' | 'family') {
+      return client
+        .post<unknown>('/auth/demo-login', { role })
+        .then((response) =>
+          parseLoginResponse(response.data, 'POST /auth/demo-login'),
         )
     },
     elders(params?: Record<string, string | number>) {

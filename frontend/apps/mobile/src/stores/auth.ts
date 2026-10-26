@@ -34,6 +34,25 @@ export const useAuthStore = defineStore('auth', () => {
     session.value = next
     queryClient.clear()
   }
+  async function demoRoleLogin(selected: Role) {
+    if (mode === 'demo') {
+      demoLogin(selected)
+      return
+    }
+    const result = await gateway.demoLogin(selected)
+    const next: FrontendSession = {
+      mode,
+      accountKey: result.display_name || roleLabels[selected],
+      userId: result.user_id,
+      role: normalizeRole(result.role),
+      accessToken: result.access_token,
+    }
+    if (!next.accessToken || next.role !== selected)
+      throw new Error('演示登录响应与所选身份不一致，请重试。')
+    saveSession(next)
+    session.value = next
+    queryClient.clear()
+  }
   function demoLogin(selected: Role) {
     if (mode !== 'demo') return
     const next: FrontendSession = {
@@ -50,5 +69,5 @@ export const useAuthStore = defineStore('auth', () => {
     session.value = null
     queryClient.clear()
   }
-  return { session, role, login, demoLogin, logout }
+  return { session, role, login, demoLogin, demoRoleLogin, logout }
 })

@@ -343,7 +343,13 @@ export const parseLoginResponse: Parser<LoginResponse> = (
 ) => {
   const row = object(value, endpoint, path)
   strings(row, ['access_token'], endpoint, path, true)
-  optionalStrings(row, ['token_type', 'user_id'], endpoint, path, true)
+  optionalStrings(
+    row,
+    ['token_type', 'user_id', 'display_name'],
+    endpoint,
+    path,
+    true,
+  )
   if (row.role !== undefined && normalizeRole(row.role) === null)
     invalid(endpoint, `${path}.role`, '未知角色')
   return value as LoginResponse
