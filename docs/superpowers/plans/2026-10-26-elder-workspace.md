@@ -18,4 +18,4 @@ No passwords, keys or real elder data in Git. Server enforces roles and elder sc
 - [x] Add authorised ordinary followups, plan generation rules, and supervisor decision summary; verify explicit source/time/person/scope/duplicate gates.
 - [x] Replace distributed elder content with shared workspace; connect assessment/advice/feedback/decisions and preserve compatibility paths.
 - [x] Run full backend and frontend tests, type checks, builds and browser integration against synthetic data; fix failures and verify diffs.
-- [ ] Commit backend and frontend separately, push respective branches, deploy if authenticated access is available; record actual outcomes and deliver the checklist.
+- [x] Commit backend and frontend separately; push `feat/backend` and `feat/frontend`; backup and migrate schema8, deploy, verify public routes/permissions, and record results.
