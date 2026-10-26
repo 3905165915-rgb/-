@@ -49,8 +49,10 @@ def test_private_upload_review_scope_and_file_limits(api):
     assert response.status_code == 200 and response.headers['content-type'] == 'image/jpeg'
     assert response.headers['cache-control'] == 'no-store'
     reviewed = post(api, '/attachments/' + image['id'] + '/review',
-                    {'expected_revision': 1, 'decision': 'approve', 'note': '核对照片适用范围'}, expected=200)
+                    {'expected_revision': 1, 'decision': 'approve', 'note': '核对照片适用范围',
+                     'share_with_family': True}, expected=200)
     assert reviewed['status'] == 'approved' and reviewed['reviews'][0]['by'] == 'manager'
+    assert reviewed['family_visible'] is True
     assert client.get(endpoint, headers=headers('other')).status_code == 200
     assignment = next(a for a in store.read()['care_assignments'] if a['caregiver_id'] == 'other')
     post(api, '/elders/work-assignments/' + assignment['id'] + '/revoke',

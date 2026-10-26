@@ -273,6 +273,89 @@ def handovers(store, binding_id, user_id, limit=100, offset=0):
             for summary in selected]
 
 
+def family_timeline(store, binding_id, user_id, limit=100, offset=0):
+    """Only publish-reviewed summaries and explicitly shared, linked photos."""
+    data = store.read()
+    binding = authorize(data, binding_id, user_id, 'summary')
+    published = [row for row in reversed(rows(data, 'summary'))
+                 if row['elder_id'] == binding['elder_id']
+                 and row['admission_id'] == binding['admission_id']
+                 and row['status'] == 'published'
+                 and evidence_service.sources_current(data, row)]
+    published.sort(key=lambda row: parse_time(row['period_end']), reverse=True)
+    events = []
+    for item in published:
+        source_records = {source['record_id'] for source in item['evidence']}
+        photos = []
+        for photo in data['attachments']:
+            if (photo['elder_id'] != binding['elder_id'] or
+                photo.get('admission_id') != binding['admission_id'] or
+                photo.get('status') != 'approved' or
+                photo.get('family_visible') is not True or
+                not any(link.get('target_type') == 'record' and link.get('target_id') in source_records
+                        for link in photo.get('links', []))):
+                continue
+            photos.append({'id': photo['id'], 'caption': photo['caption'],
+                           'occurred_at': photo['occurred_at'],
+                           'content_path': f"/family/me/bindings/{binding_id}/photos/{photo['id']}/content"})
+        events.append({
+            'id': item['id'], 'elder_id': item['elder_id'],
+            'happened_at': item['period_end'], 'period_start': item['period_start'],
+            'period_end': item['period_end'], 'title': '照护近况', 'text': item['text'],
+            'published_at': item['reviewed_at'], 'photos': photos, 'kind': 'published_summary',
+        })
+    return {'elder_id': binding['elder_id'], 'elder_name': next(
+        row['name'] for row in data['elders'] if row['id'] == binding['elder_id']),
+        'items': events[offset:offset + limit], 'total': len(events)}
+
+
+def family_photo(store, binding_id, attachment_id, user_id):
+    data = store.read()
+    binding = authorize(data, binding_id, user_id, 'summary')
+    item = find(data, 'attachments', attachment_id, 'attachment_not_found')
+    if (item['elder_id'] != binding['elder_id'] or
+        item.get('admission_id') != binding['admission_id'] or
+        item.get('status') != 'approved' or item.get('family_visible') is not True):
+        raise DomainError('family_photo_not_published', 404)
+    published = [row for row in rows(data, 'summary')
+        if row['elder_id'] == binding['elder_id'] and row['admission_id'] == binding['admission_id']
+        and row['status'] == 'published' and evidence_service.sources_current(data, row)]
+    source_records = {source['record_id'] for row in published for source in row['evidence']}
+    if not any(link.get('target_type') == 'record' and link.get('target_id') in source_records
+               for link in item.get('links', [])):
+        raise DomainError('family_photo_not_published', 404)
+    from app.services import attachment_service
+    path = attachment_service.file_path(store, item)
+    if not path.is_file():
+        raise DomainError('attachment_file_missing', 404)
+    return path
+
+
+def family_insight(store, binding_id, user_id):
+    from time import perf_counter
+    from app.services.ai_service import AIProviderError, get_ai_provider
+    from app.services.ai_outputs import validate_citations
+
+    timeline = family_timeline(store, binding_id, user_id, limit=30)
+    sources = [{'source_id': item['id'], 'text': item['text']} for item in timeline['items']]
+    if not sources:
+        return {'elder_id': timeline['elder_id'], 'points': [], 'provider': 'none',
+                'model_status': 'no_public_updates', 'elapsed_ms': 0}
+    provider = get_ai_provider()
+    started = perf_counter()
+    try:
+        output = validate_citations(provider.family_insight(sources), sources, 'summary')
+    except (ValueError, TypeError, KeyError) as exc:
+        raise AIProviderError('family_insight_output_invalid') from exc
+    current = family_timeline(store, binding_id, user_id, limit=30)
+    if [(r['id'], r['text']) for r in current['items']] != [(r['id'], r['text']) for r in timeline['items']]:
+        raise DomainError('family_updates_changed', 409)
+    return {'elder_id': timeline['elder_id'], 'points': output['points'],
+            'provider': provider.name, 'model_status': 'demo' if provider.name == 'mock' else 'available',
+            'elapsed_ms': round((perf_counter() - started) * 1000),
+            'source_ids': [source['source_id'] for source in sources]}
+
+
 def feedback_view(item):
     return {key: item.get(key) for key in ('id', 'binding_id', 'elder_id', 'text', 'status', 'revision', 'created_at', 'reply', 'replied_at')}
 

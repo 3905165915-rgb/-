@@ -54,9 +54,11 @@ def test_rebuild_two_clean_journeys_preserves_ids_and_revokes_sessions(tmp_path)
             assert not context['needs_review']
     family_id = next(u['id'] for u in data['users'] if u['role'] == 'family')
     bindings = family_service.my_bindings(store, family_id)
-    assert len(bindings) == 1
+    assert len(bindings) == 2
     assert bindings[0]['elder_id'] == data['elders'][0]['id']
-    assert len(family_service.summaries(store, bindings[0]['id'], family_id)) == 1
+    assert {row['elder_id'] for row in bindings} == {row['id'] for row in data['elders']}
+    for item in bindings:
+        assert len(family_service.family_timeline(store, item['id'], family_id)['items']) == 1
     old_elder_ids = {elder['id'] for elder in data['elders']}
     for collection in data.values():
         if isinstance(collection, list):
