@@ -28,6 +28,10 @@ beforeEach(() => {
   vi.stubGlobal('window', new EventTarget())
 })
 describe('business form contracts', () => {
+  it('explains occupied beds even when an older server only returns the error code', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ detail: 'bed_occupied' }), { status: 409 })))
+    await expect(request('/elders/E1/admissions', 'post', {})).rejects.toThrow('所选床位已被占用，请选择空闲床位')
+  })
   it('allows raw-only manual entry without reviving AI task candidates removed by a reviewer', () => {
     const value = initial(schemas.ManualRecordRequest) as Record<string, unknown>
     Object.assign(value, { elder_id: 'E1', raw_text: '虚构：家属已回复，下午愿意参加活动' })

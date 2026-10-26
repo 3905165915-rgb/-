@@ -96,6 +96,10 @@ export const labels: Record<string, string> = {
   completed_by: '完成人',
   completed_at: '完成时间',
   source_record_id: '来源正式记录',
+  task_reference: '任务编号',
+  source_advice_id: '来源照护建议',
+  source_handover_item_id: '来源交班事项',
+  continuity_key: '跨班接续关联',
   source_draft_id: '来源AI草稿',
   draft_id: 'AI草稿',
   record_id: '正式记录',
@@ -301,6 +305,9 @@ export const labels: Record<string, string> = {
   created: '新增数量',
 }
 export const valueLabels: Record<string, string> = {
+  available: '空闲可入住',
+  occupied: '已占用',
+  inactive: '已停用',
   admin: '管理员',
   supervisor: '主管',
   caregiver: '护理员',
@@ -336,7 +343,7 @@ export const valueLabels: Record<string, string> = {
   cancel: '取消',
   reopen: '重新开启',
   admit: '新入住',
-  legacy_registration: '补登记既有入住',
+  legacy_registration: '原有在院老人补登记',
   return: '返院／退回',
   discharge: '离院',
   confirm: '确认',
@@ -631,6 +638,18 @@ export async function request(
       }
       const detail = data?.detail
       const errors: Record<string, string> = {
+        bed_occupied: '所选床位已被占用，请选择空闲床位，不能重复入住。',
+        bed_inactive: '所选床位已停用，请选择启用的空闲床位。',
+        bed_relation_inconsistent: '该床位的占用资料存在冲突，请联系管理员核对，暂不能分配。',
+        elder_already_admitted: '这位老人已办理入住，请查看入住历史；换床或返院请使用“转床／外出／返院／离院”。',
+        existing_in_care_elder_requires_legacy_registration: '这位老人已有在院状态但缺少入住单，请核实后选择“原有在院老人补登记”。',
+        legacy_registration_requires_in_care_elder: '补登记仅用于原有在院或外出老人，待入住老人请选择“新入住”。',
+        legacy_registration_must_keep_existing_bed: '补登记必须沿用老人的现有床位，不能同时换床。',
+        elder_bed_relation_inconsistent: '老人档案与床位关系不一致，请联系管理员核对后再入住。',
+        duplicate_room_bed_label: '该房间已有同名床位，请修改床位名称或使用现有空床。',
+        admission_is_closed: '该入住单已关闭，请使用当前有效入住单。',
+        admission_relation_inconsistent: '入住单、老人和床位资料不一致，请刷新并联系管理员核对。',
+        different_bed_required: '转床请选择另一张空闲床位。',
         'Insufficient permissions':
           '此操作仅限主管或管理员办理。护理员可查看并处理本人负责的任务。',
         insufficient_permissions:
@@ -677,7 +696,7 @@ export async function request(
           : JSON.stringify(detail || data)
       throw new WorkflowRequestError(
         res.status,
-        `${res.status === 409 ? '资料或状态已变化，请刷新后核对。' : res.status === 503 ? 'AI暂不可用，可重试或转人工记录。' : ''}${message}`,
+        `${res.status === 409 && !errors[String(detail)] ? '资料或状态已变化，请刷新后核对。' : res.status === 503 ? 'AI暂不可用，可重试或转人工记录。' : ''}${message}`,
       )
     }
     if (data === null && res.status !== 204)
@@ -838,6 +857,7 @@ export function optionLabel(
   catalogs: Record<string, Row[]> = {},
 ): string {
   const raw = rowName(row)
+  if (resourceFor[field] === 'beds') return `${raw} · ${row.status === 'conflict' ? '占用关系待核对' : display(row.status)}`
   const index = Math.max(
     0,
     choices.findIndex((item) => item.id === row.id),

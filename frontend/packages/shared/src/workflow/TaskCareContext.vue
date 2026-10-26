@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, watch } from 'vue'
 import { readSession, type AppMode, type FrontendSession } from '../session'
-import { request } from './model'
+import { request, display } from './model'
 import {
   careScenes,
   contextDisplayLimit,
@@ -161,20 +161,16 @@ onBeforeUnmount(() => {
         {{ task.title }}
       </h3>
       <dl class="tcc-meta">
-        <dt>任务</dt>
-        <dd>
-          {{ task.id }} · 版本 {{ task.revision }} ·
-          {{ statuses[task.status] || task.status }}
-        </dd>
+        <dt>状态</dt>
+        <dd>{{ statuses[task.status] || task.status }}</dd>
         <dt>老人</dt>
         <dd>
           <template v-if="resident">
-            {{ resident.name }} · {{ resident.id }} ·
+            {{ resident.name }} ·
             {{ resident.status === 'pending' ? '待入住' : statuses[resident.status] || resident.status
-            }}<span v-if="resident.bed_id">
-              · 床位编号 {{ resident.bed_id }}</span>
+            }}
           </template>
-          <span v-else>{{ task.elder_id }} ·
+          <span v-else>
             {{
               state.resident.status === 'loading'
                 ? '正在读取老人资料…'
@@ -182,11 +178,12 @@ onBeforeUnmount(() => {
             }}</span>
         </dd>
         <dt>负责人</dt>
-        <dd>{{ task.assigned_to || '未分配' }}</dd>
+        <dd>{{ task.assigned_to ? '已分配，可在下方任务信息查看' : '未分配' }}</dd>
         <dt>截止时间</dt>
-        <dd>{{ task.due_at || '未提供' }}</dd>
-        <dt>执行条件</dt>
-        <dd>{{ task.condition || '未提供' }}</dd>
+        <dd>{{ display(task.due_at, 'due_at') }}</dd>
+        <template v-if="task.condition">
+          <dt>执行条件</dt><dd>{{ task.condition }}</dd>
+        </template>
         <dt>完成标准</dt>
         <dd>{{ task.completion_criteria || '未提供，请核对具体任务要求' }}</dd>
       </dl>
@@ -198,11 +195,15 @@ onBeforeUnmount(() => {
         {{ state.resident.message }}
       </p>
 
-      <section
+      <details
+        :key="task.id + '-source'"
         class="tcc-band"
         aria-label="任务来源"
       >
-        <h3>任务来源</h3>
+        <summary>任务来源与版本 <span class="tcc-muted">点击展开</span></summary>
+        <p class="tcc-muted">
+          任务编号 {{ task.id }} · 当前版本 {{ task.revision }}
+        </p>
         <p v-if="task.source_plan_id">
           照护计划 {{ task.source_plan_id }} · 版本
           {{ task.source_plan_revision ?? '未提供' }} · 条目
@@ -222,8 +223,16 @@ onBeforeUnmount(() => {
           来源记录 {{ task.source_record_id }}：{{ state.source.message }}
         </p>
         <template v-else-if="source">
-          <p v-if="task.source_revision">创建任务时引用第{{ task.source_revision }}版。</p>
-          <p v-if="task.source_revision && task.source_revision !== source.revision" class="tcc-error" role="alert">来源已更正，以下为当前记录；请核对原安排的影响，不能视为已经自动更新任务。</p>
+          <p v-if="task.source_revision">
+            创建任务时引用第{{ task.source_revision }}版。
+          </p>
+          <p
+            v-if="task.source_revision && task.source_revision !== source.revision"
+            class="tcc-error"
+            role="alert"
+          >
+            来源已更正，以下为当前记录；请核对原安排的影响，不能视为已经自动更新任务。
+          </p>
           <p>
             正式记录 {{ source.id }} · 当前版本 {{ source.revision }} ·
             {{ statuses[source.status] || source.status }}
@@ -269,13 +278,14 @@ onBeforeUnmount(() => {
         >
           任务未关联来源记录或照护计划。
         </p>
-      </section>
+      </details>
 
-      <section
+      <details
+        :key="task.id + '-memories'"
         class="tcc-band"
         aria-label="场景适用的确认记忆"
       >
-        <h3>场景适用的确认记忆</h3>
+        <summary>个性化照护提示 <span class="tcc-muted">按服务场景展开查看</span></summary>
         <label class="tcc-scene">服务场景
           <select
             :value="state.scene"
@@ -397,13 +407,21 @@ onBeforeUnmount(() => {
         <p class="tcc-muted">
           场景由工作人员选择，仍须核对本次服务与老人当前意愿。查询结果不代表任务已采用，也不代表医学安全或专业计划批准。
         </p>
-      </section>
+      </details>
 
-      <section
+      <p
+        v-if="references?.needs_review"
+        class="tcc-warning"
+        role="status"
+      >
+        已采用的照护依据有变化，请展开核验后再处理任务。
+      </p>
+      <details
+        :key="task.id + '-references'"
         class="tcc-band"
         aria-label="任务已采用依据"
       >
-        <h3>任务已采用依据</h3>
+        <summary>已采用的照护依据 <span class="tcc-muted">{{ references ? references.references.length + ' 条' : '点击展开' }}</span></summary>
         <p
           v-if="state.references.status === 'loading'"
           role="status"
@@ -558,7 +576,7 @@ onBeforeUnmount(() => {
         <p class="tcc-muted">
           采用关系与当时快照仅记录人工选择的依据，不证明服务已完成。未撤回不代表当前仍有效。
         </p>
-      </section>
+      </details>
     </template>
   </section>
 </template>
@@ -673,6 +691,20 @@ onBeforeUnmount(() => {
 }
 .task-care-context summary {
   color: var(--hl-primary, #1767cf);
+}
+.task-care-context .tcc-band {
+  margin: 10px 0 0;
+  padding: 0;
+}
+.tcc-band > summary {
+  min-height: 44px;
+  padding: 12px 0;
+  font-weight: 600;
+}
+.tcc-band > summary span {
+  margin-left: 8px;
+  font-size: 12px;
+  font-weight: 400;
 }
 .tcc-muted {
   color: var(--hl-muted, #5f6b73);

@@ -122,6 +122,12 @@ async function submit() {
           让每一次照护，都接得上。
         </h1>
         <p>从老人的日常习惯到每班照护安排。</p>
+        <figure class="login-photo">
+          <img
+            :src="image"
+            alt="两位微笑的长者在绿意环绕的户外相伴"
+          >
+        </figure>
       </div>
       <section
         class="role-panel hl-glass"

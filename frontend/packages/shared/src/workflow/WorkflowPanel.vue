@@ -30,6 +30,7 @@ import {
   writableShifts,
 } from './shift-access'
 import WorkflowField from './WorkflowField.vue'
+import { admissionOptions, admissionIssue, isAdmissionCreate } from './admission'
 import WorkflowResult from './WorkflowResult.vue'
 import WorkflowMenu from './WorkflowMenu.vue'
 import RecordResults from './RecordResults.vue'
@@ -143,6 +144,7 @@ const fieldOptions = computed(() => {
   const options = isQualityScan(active.value)
     ? qualityScopeOptions(body.value, catalogs.value)
     : shiftFieldOptions(active.value, catalogs.value, readSession())
+  Object.assign(options, admissionOptions(active.value, params.value, body.value, catalogs.value))
   if (taskSelectionEnabled.value) {
     const permitted = new Set((options.task_id || (catalogs.value.tasks || [])).map((row) => row.id))
     options.task_id = (catalogs.value.tasks || []).filter(
@@ -315,6 +317,9 @@ const reviewElderName = computed(() => String((catalogs.value.elders || []).find
 const reviewOwners = computed(() => recordTaskOwners(catalogs.value, readSession(), reviewShiftId.value))
 const recordTaskCount = computed(() => selectedRecordTasks(body.value.task_candidates).length)
 const visibleBodySchema = computed(() => {
+  if (active.value && isAdmissionCreate(active.value) && bodySchema.value) {
+    const schema = structuredClone(bodySchema.value); delete schema.properties?.kind; return schema
+  }
   if (props.taskCreation && bodySchema.value) {
     const schema = structuredClone(bodySchema.value)
     delete schema.properties?.elder_id
@@ -452,6 +457,8 @@ const versionIssue = computed(() => {
   )
     return '服务器资料已变化，当前表单仍保留原版本。请刷新并核对差异，再采用当前版本。'
   for (const [id, version] of [
+    ['elder_id', 'expected_elder_revision'],
+    ['bed_id', 'expected_bed_revision'],
     ['task_id', 'expected_task_revision'],
     ['memory_id', 'expected_memory_revision'],
     ['source_record_id', 'source_revision'],
@@ -739,6 +746,7 @@ function setParam(field: string, value: unknown) {
     body.value.evidence = []
   params.value[field] = value
   selected.value[field] = value
+  if (field === 'elder_id' && active.value && isAdmissionCreate(active.value)) body.value.bed_id = ''
   if (field === 'task_id') {
     const task = catalogs.value.tasks?.find((row) => row.id === value)
     if (task) selected.value.elder_id = task.elder_id
@@ -778,6 +786,16 @@ function setBody(value: unknown) {
     active.value && isQualityScan(active.value)
       ? updateQualityScope(body.value, value as Row, catalogs.value)
       : (value as Row)
+  if (active.value && isAdmissionCreate(active.value)) {
+    if (previousTaskBody.kind !== body.value.kind) {
+      params.value.elder_id = ''; selected.value.elder_id = ''; body.value.bed_id = ''
+      body.value.expected_elder_revision = ''; body.value.expected_bed_revision = ''
+    }
+    if (previousTaskBody.bed_id !== body.value.bed_id) body.value.expected_bed_revision = ''
+  }
+  if (active.value?.path === '/admissions/{admission_id}/actions' && previousTaskBody.action !== body.value.action && body.value.action !== 'transfer') {
+    body.value.bed_id = ''; body.value.expected_bed_revision = ''
+  }
   // Generic form edits must not drop the separately reviewed task cards.
   if (recordTaskReview.value && !Object.hasOwn(body.value, 'task_candidates'))
     body.value.task_candidates = previousTasks || []
@@ -840,6 +858,8 @@ async function run() {
         withoutSecrets(payload),
       ])
       if (versionIssue.value) throw new Error(versionIssue.value)
+      const admissionProblem = admissionIssue(op, params.value, body.value, catalogs.value)
+      if (admissionProblem) throw new Error(admissionProblem)
       if (op.method !== 'get' && catalogErrors.value.length)
         throw new Error(
           '所需目录未完整读取，请刷新可选数据并处理异常后再提交。',
@@ -1627,6 +1647,10 @@ onMounted(async () => {
           </p>
           <form class="wf-form" @submit.prevent="run">
             <h3>{{ taskCreation ? '任务内容' : operationTitle(active) }}</h3>
+            <p v-if="isAdmissionCreate(active)" class="wf-muted">
+              新入住：先为老人建档，再选择待入住老人和空闲床位。已在院老人无需重复入住；没有历史入住单时才使用补登记。
+              {{ fieldOptions.bed_id?.length === 0 && params.elder_id ? '当前没有符合条件的床位，可在功能菜单中新建床位。' : '' }}
+            </p>
             <p v-if="group === 'incidents'" class="wf-notice">
               可先提交已知事实和立即措施，无需等待AI或先创建正式记录。证据为可选项；有引用时请确认属于当前老人和入住关系。主管后续负责分类、分级与整改。
             </p>
@@ -1721,6 +1745,12 @@ onMounted(async () => {
               :disabled="busy || frozen || recording || transcribing"
               class="wf-inputs"
             >
+              <WorkflowField
+                v-if="isAdmissionCreate(active) && bodySchema?.properties?.kind"
+                :schema="bodySchema.properties.kind" field="kind"
+                :model-value="body.kind" :catalogs="catalogs"
+                @update:model-value="setBody({ ...body, kind: $event })"
+              />
               <label v-if="taskSelectionEnabled" class="wf-field">
                 <span>先选择老人<b> *</b></span>
                 <select
@@ -1928,7 +1958,7 @@ onMounted(async () => {
               :catalogs="catalogs"
               @select="selectResult"
             />
-            <WorkflowResult v-else :value="result" @select="selectResult" />
+            <WorkflowResult v-else :value="result" :catalogs="catalogs" @select="selectResult" />
           </section>
           <section
             v-if="recordDetail && (recordHistory !== null || historyError)"
