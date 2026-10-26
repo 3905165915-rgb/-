@@ -13,10 +13,11 @@ const photos = ref<Row[]>([]), selected = ref<Row | null>(null), analysis = ref<
 const configured = ref<boolean | null>(null), file = ref<File | null>(null)
 const preview = ref(''), photoUrl = ref(''), occurredAt = ref(localDateTime()), caption = ref('')
 const observations = ref<string[]>([]), note = ref(''), error = ref('')
+const familyNote = ref('')
 const busy = ref(false), loadingPhotos = ref(false)
 const recovery = ref<PhotoRecovery>({})
 const recoveryBlocked = ref(false)
-const locked = computed(() => busy.value || recoveryBlocked.value || !!recovery.value.upload || !!recovery.value.review)
+const locked = computed(() => busy.value || recoveryBlocked.value || !!recovery.value.upload || !!recovery.value.review || !!recovery.value.publication)
 let epoch = 0
 const fileName = computed(() => file.value?.name || '')
 const stateLabels: Record<string, string> = {
@@ -33,7 +34,7 @@ function readRecovery() {
 }
 function releasePreview() { if (preview.value) URL.revokeObjectURL(preview.value); preview.value = '' }
 function releasePhoto() { if (photoUrl.value) URL.revokeObjectURL(photoUrl.value); photoUrl.value = '' }
-function clearSelection() { selected.value = null; analysis.value = null; observations.value = []; note.value = ''; releasePhoto() }
+function clearSelection() { selected.value = null; analysis.value = null; observations.value = []; note.value = ''; familyNote.value = ''; releasePhoto() }
 function reset() {
   epoch++; clearSelection(); releasePreview(); file.value = null; photos.value = []; configured.value = null
   occurredAt.value = localDateTime(); caption.value = ''; busy.value = false; loadingPhotos.value = false; error.value = ''; recovery.value = {}; recoveryBlocked.value = false
@@ -201,6 +202,27 @@ async function review(decision: 'confirm' | 'reject' | 'request_management') {
   finally { if (ticket === epoch) busy.value = false }
 }
 function setObservations(value: string) { if (!locked.value) observations.value = value.split('\n') }
+function hasRecordLink() { return Array.isArray(selected.value?.links) && (selected.value.links as Row[]).some(link => link.target_type === 'record') }
+async function publishPhoto() {
+  const photo = selected.value
+  if (!photo || !manager.value || props.readOnly || busy.value || recoveryBlocked.value || !sameCareSession(readSession(), session.value)) return
+  if (!recovery.value.publication && (!familyNote.value.trim() || !hasRecordLink())) { error.value = '请先确认照片观察形成正式记录，并填写照片分享说明。'; return }
+  const ticket = ++epoch, elderId = props.elderId, id = String(photo.id)
+  busy.value = true; error.value = ''
+  try {
+    recovery.value.publication ||= { key: crypto.randomUUID(), id,
+      path: `/attachments/${encodeURIComponent(id)}/${photo.status === 'pending_review' ? 'review' : 'family-sharing'}`,
+      payload: { expected_revision: photo.revision, share_with_family: photo.family_visible !== true, note: familyNote.value.trim(), ...(photo.status === 'pending_review' ? { decision: 'approve' } : {}) } }
+    saveRecovery()
+    const attempt = recovery.value.publication
+    if (attempt.id !== id) throw new Error('请先回到上次分享的照片，核对原请求。')
+    const row = validatePhoto(await request(attempt.path, 'post', attempt.payload, attempt.key), elderId, id)
+    if (!current(ticket, elderId)) return
+    delete recovery.value.publication; saveRecovery(); selected.value = row; familyNote.value = ''
+    await fetchPhotos(ticket, elderId)
+  } catch (failure) { showFailure(failure, ticket, elderId) }
+  finally { if (ticket === epoch) busy.value = false }
+}
 function setNote(value: string) { if (!locked.value) note.value = value }
 function fieldList(field: string): string[] { return ((analysis.value?.output as Row | null)?.[field] as string[]) || [] }
 function requiresProfessionalReview() { return (analysis.value?.output as Row | null)?.requires_professional_review === true }
@@ -225,7 +247,7 @@ async function initialize() {
     if (!current(ticket, elderId)) return
     const id = props.analysisId || recovery.value.review?.id || recovery.value.analyze?.id
     if (id) await resume(id, ticket, elderId)
-    else if (props.attachmentId) await fetchPhoto(props.attachmentId, ticket, elderId)
+    else if (props.attachmentId || recovery.value.publication?.id) await fetchPhoto(props.attachmentId || recovery.value.publication!.id, ticket, elderId)
   } catch (failure) { showFailure(failure, ticket, elderId) }
   finally { if (ticket === epoch) { loadingPhotos.value = false; busy.value = false } }
 }
@@ -237,58 +259,320 @@ onBeforeUnmount(() => { reset(); window.removeEventListener('focus', changed); w
 </script>
 
 <template>
-  <section class="photo-observation" aria-label="照片辅助观察">
-    <h4><ImagePlus :size="18" aria-hidden="true" />照片辅助观察</h4>
-    <p class="warning">AI识别可能有误，不构成诊断或处置建议，请人工核对。专业处理请由有权限人员审核决定。</p>
-    <p v-if="configured === false" class="muted" role="status">视觉服务当前未配置。照片可安全上传；不要把照片或识别结果当作已保存的正式观察。</p>
-    <p v-else-if="configured === null && !readOnly" class="muted" role="status">正在检查视觉服务状态…</p>
-    <p v-if="!elderId" class="muted">选择老人后可添加照片。</p>
+  <section
+    class="photo-observation"
+    aria-label="照片辅助观察"
+  >
+    <h4>
+      <ImagePlus
+        :size="18"
+        aria-hidden="true"
+      />照片辅助观察
+    </h4>
+    <p class="warning">
+      AI识别可能有误，不构成诊断或处置建议，请人工核对。专业处理请由有权限人员审核决定。
+    </p>
+    <p
+      v-if="configured === false"
+      class="muted"
+      role="status"
+    >
+      视觉服务当前未配置。照片可安全上传；不要把照片或识别结果当作已保存的正式观察。
+    </p>
+    <p
+      v-else-if="configured === null && !readOnly"
+      class="muted"
+      role="status"
+    >
+      正在检查视觉服务状态…
+    </p>
+    <p
+      v-if="!elderId"
+      class="muted"
+    >
+      选择老人后可添加照片。
+    </p>
     <template v-else>
-      <div v-if="!readOnly" class="photo-form">
-        <label>拍照或选择照片<input type="file" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" capture="environment" :disabled="busy || recoveryBlocked" @change="chooseFile" /></label>
-        <p class="muted">支持JPEG、PNG、WebP，单张不超过4MB；系统按实际图片内容识别格式。</p>
-        <label>观察时间<input v-model="occurredAt" type="datetime-local" :disabled="locked" required /></label>
-        <label>照片说明<input v-model="caption" maxlength="1000" :disabled="locked" placeholder="可选，描述观察背景" /></label>
-        <img v-if="preview" :src="preview" alt="待上传照片本机预览" class="preview" />
-        <p v-if="fileName" class="muted">{{ fileName }} · {{ Math.ceil((file?.size || 0) / 1024) }} KB</p>
-        <button v-if="file" type="button" :disabled="busy || recoveryBlocked" @click="upload"><Upload :size="16" aria-hidden="true" />{{ busy ? '上传中…' : '上传并保存照片' }}</button>
+      <div
+        v-if="!readOnly"
+        class="photo-form"
+      >
+        <label>拍照或选择照片<input
+          type="file"
+          accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+          capture="environment"
+          :disabled="busy || recoveryBlocked"
+          @change="chooseFile"
+        ></label>
+        <p class="muted">
+          支持JPEG、PNG、WebP，单张不超过4MB；系统按实际图片内容识别格式。
+        </p>
+        <label>观察时间<input
+          v-model="occurredAt"
+          type="datetime-local"
+          :disabled="locked"
+          required
+        ></label>
+        <label>照片说明<input
+          v-model="caption"
+          maxlength="1000"
+          :disabled="locked"
+          placeholder="可选，描述观察背景"
+        ></label>
+        <img
+          v-if="preview"
+          :src="preview"
+          alt="待上传照片本机预览"
+          class="preview"
+        >
+        <p
+          v-if="fileName"
+          class="muted"
+        >
+          {{ fileName }} · {{ Math.ceil((file?.size || 0) / 1024) }} KB
+        </p>
+        <button
+          v-if="file"
+          type="button"
+          :disabled="busy || recoveryBlocked"
+          @click="upload"
+        >
+          <Upload
+            :size="16"
+            aria-hidden="true"
+          />{{ busy ? '上传中…' : '上传并保存照片' }}
+        </button>
       </div>
-      <p v-if="recovery.upload" class="warning" role="status">上传结果待核实，已固定原文件和原请求。刷新后请重新选择原文件，再重试上传。</p>
-      <p v-if="recovery.review" class="warning" role="status">审核结果待核实，已锁定原审核内容。可重试原操作或核实服务器状态。</p>
-      <button v-if="analysis || recovery.review || recovery.analyze?.id" type="button" :disabled="busy" @click="refreshAnalysis">核实服务器识别与审核状态</button>
-      <div v-if="!readOnly" class="saved-photos">
-        <div class="row-heading"><strong>已上传照片</strong><button type="button" aria-label="刷新已上传照片" :disabled="loadingPhotos || busy" @click="loadPhotos"><RefreshCw :size="16" /></button></div>
-        <p v-if="loadingPhotos" class="muted" role="status">正在载入照片…</p>
-        <p v-else-if="!photos.length" class="muted">暂无可查看的已上传照片。</p>
-        <ul v-else><li v-for="photo in photos" :key="String(photo.id)"><button type="button" class="photo-choice" :disabled="busy" @click="loadPhoto(photo)"><span>{{ photo.caption || '照片观察' }} · {{ new Date(String(photo.occurred_at)).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }) }}</span><span>{{ statusLabel(photo) }}</span></button></li></ul>
+      <p
+        v-if="recovery.upload"
+        class="warning"
+        role="status"
+      >
+        上传结果待核实，已固定原文件和原请求。刷新后请重新选择原文件，再重试上传。
+      </p>
+      <p
+        v-if="recovery.review"
+        class="warning"
+        role="status"
+      >
+        审核结果待核实，已锁定原审核内容。可重试原操作或核实服务器状态。
+      </p>
+      <button
+        v-if="analysis || recovery.review || recovery.analyze?.id"
+        type="button"
+        :disabled="busy"
+        @click="refreshAnalysis"
+      >
+        核实服务器识别与审核状态
+      </button>
+      <div
+        v-if="!readOnly"
+        class="saved-photos"
+      >
+        <div class="row-heading">
+          <strong>已上传照片</strong><button
+            type="button"
+            aria-label="刷新已上传照片"
+            :disabled="loadingPhotos || busy"
+            @click="loadPhotos"
+          >
+            <RefreshCw :size="16" />
+          </button>
+        </div>
+        <p
+          v-if="loadingPhotos"
+          class="muted"
+          role="status"
+        >
+          正在载入照片…
+        </p>
+        <p
+          v-else-if="!photos.length"
+          class="muted"
+        >
+          暂无可查看的已上传照片。
+        </p>
+        <ul v-else>
+          <li
+            v-for="photo in photos"
+            :key="String(photo.id)"
+          >
+            <button
+              type="button"
+              class="photo-choice"
+              :disabled="busy"
+              @click="loadPhoto(photo)"
+            >
+              <span>{{ photo.caption || '照片观察' }} · {{ new Date(String(photo.occurred_at)).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }) }}</span><span>{{ statusLabel(photo) }}</span>
+            </button>
+          </li>
+        </ul>
       </div>
-      <div v-if="selected" class="photo-review">
-        <img v-if="photoUrl" :src="photoUrl" alt="服务器授权读取的私有照片" class="preview" />
+      <div
+        v-if="selected"
+        class="photo-review"
+      >
+        <img
+          v-if="photoUrl"
+          :src="photoUrl"
+          alt="服务器授权读取的私有照片"
+          class="preview"
+        >
         <p>照片状态：{{ stateLabels[String(analysis?.status || selected.status)] || '状态待核实' }}<span v-if="analysis?.revision"> · 版本 {{ analysis.revision }}</span></p>
-        <p v-if="analysis?.record_id" role="status">人工确认记录已创建：{{ analysis.record_id }}</p>
-        <p v-if="analysis?.warning || analysis?.notice" class="warning">{{ analysis.warning }} {{ analysis.notice }}</p>
-        <button v-if="!readOnly && !analysis && selected.status !== 'rejected'" type="button" :disabled="busy || configured !== true" @click="analyze"><ShieldCheck :size="16" aria-hidden="true" />{{ busy ? '正在识别…' : configured === false ? '视觉服务未配置' : '整理可见观察' }}</button>
-        <p v-if="analysis && ['failed', 'unavailable', 'unable_to_determine'].includes(String(analysis.model_status))" class="muted">{{ analysis.model_status === 'unable_to_determine' ? '照片信息不足，无法判断；请勿据此推断正常或异常。可由人工补充观察。' : '识别不可用或失败；已上传照片保留，可手工补充观察。' }}</p>
-        <p v-if="readOnly && observations.length">人工核对观察：{{ observations.join('；') }}</p>
+        <p
+          v-if="analysis?.record_id"
+          role="status"
+        >
+          人工确认记录已创建：{{ analysis.record_id }}
+        </p>
+        <section
+          v-if="manager && !readOnly && selected.status !== 'rejected'"
+          class="photo-family-sharing"
+          aria-label="家属照片展示"
+        >
+          <strong>让家人看见生活瞬间</strong>
+          <p class="muted">
+            {{ selected.family_visible === true ? '已允许家属查看。' : '这张照片尚未向家属展示。' }}只有关联的生活近况已发布，照片才会出现在家属相册。
+          </p>
+          <p
+            v-if="!hasRecordLink()"
+            class="muted"
+          >
+            先人工确认照片观察、保存正式记录，再分享相关生活近况。
+          </p>
+          <template v-else>
+            <label>分享说明<input
+              v-model="familyNote"
+              maxlength="1000"
+              :disabled="locked"
+              placeholder="核对照片人物、内容和分享范围"
+            ></label>
+            <button
+              type="button"
+              :disabled="busy || recoveryBlocked || (!recovery.publication && !familyNote.trim())"
+              @click="publishPhoto"
+            >
+              {{ recovery.publication ? '核对并重试原分享操作' : selected.family_visible === true ? '停止向家属展示' : '向家属展示这张照片' }}
+            </button>
+          </template>
+          <p
+            v-if="recovery.publication"
+            class="warning"
+          >
+            照片分享结果待核实，重试将使用原请求，不会重复提交。
+          </p>
+        </section>
+        <p
+          v-if="analysis?.warning || analysis?.notice"
+          class="warning"
+        >
+          {{ analysis.warning }} {{ analysis.notice }}
+        </p>
+        <button
+          v-if="!readOnly && !analysis && selected.status !== 'rejected'"
+          type="button"
+          :disabled="busy || configured !== true"
+          @click="analyze"
+        >
+          <ShieldCheck
+            :size="16"
+            aria-hidden="true"
+          />{{ busy ? '正在识别…' : configured === false ? '视觉服务未配置' : '整理可见观察' }}
+        </button>
+        <p
+          v-if="analysis && ['failed', 'unavailable', 'unable_to_determine'].includes(String(analysis.model_status))"
+          class="muted"
+        >
+          {{ analysis.model_status === 'unable_to_determine' ? '照片信息不足，无法判断；请勿据此推断正常或异常。可由人工补充观察。' : '识别不可用或失败；已上传照片保留，可手工补充观察。' }}
+        </p>
+        <p v-if="readOnly && observations.length">
+          人工核对观察：{{ observations.join('；') }}
+        </p>
         <template v-if="readOnly && analysis && Array.isArray(analysis.reviews)">
-          <p v-for="(reviewed, index) in (analysis.reviews as Row[])" :key="index">审核说明：{{ reviewed.note }}</p>
+          <p
+            v-for="(reviewed, index) in (analysis.reviews as Row[])"
+            :key="index"
+          >
+            审核说明：{{ reviewed.note }}
+          </p>
         </template>
         <template v-if="!readOnly && analysis && ['pending_review', 'pending_management'].includes(String(analysis.status))">
-          <label>人工核对观察<textarea :value="observations.join('\n')" :disabled="locked || (analysis.status === 'pending_management' && !manager)" rows="4" @input="setObservations(($event.target as HTMLTextAreaElement).value)" /></label>
-          <p v-if="fieldList('missing_information').length">待补充：{{ fieldList('missing_information').join('、') }}</p>
-          <p v-if="fieldList('verification_items').length">请核实：{{ fieldList('verification_items').join('、') }}</p>
-          <label>核对说明<textarea :value="note" :disabled="locked || (analysis.status === 'pending_management' && !manager)" rows="2" @input="setNote(inputValue($event))" /></label>
-          <p v-if="analysis.status === 'pending_management' && !manager" role="status">已提交主管审核，护理员不能绕过专业审核。</p>
+          <label>人工核对观察<textarea
+            :value="observations.join('\n')"
+            :disabled="locked || (analysis.status === 'pending_management' && !manager)"
+            rows="4"
+            @input="setObservations(($event.target as HTMLTextAreaElement).value)"
+          /></label>
+          <p v-if="fieldList('missing_information').length">
+            待补充：{{ fieldList('missing_information').join('、') }}
+          </p>
+          <p v-if="fieldList('verification_items').length">
+            请核实：{{ fieldList('verification_items').join('、') }}
+          </p>
+          <label>核对说明<textarea
+            :value="note"
+            :disabled="locked || (analysis.status === 'pending_management' && !manager)"
+            rows="2"
+            @input="setNote(inputValue($event))"
+          /></label>
+          <p
+            v-if="analysis.status === 'pending_management' && !manager"
+            role="status"
+          >
+            已提交主管审核，护理员不能绕过专业审核。
+          </p>
           <div class="actions">
-            <button v-if="analysis.status === 'pending_review' && !manager && !requiresProfessionalReview()" type="button" :disabled="busy" @click="review('confirm')">人工核对并保存正式记录</button>
-            <button v-if="analysis.status === 'pending_review' && !manager && requiresProfessionalReview()" type="button" :disabled="busy" @click="review('request_management')">提交主管审核</button>
-            <button v-if="manager" type="button" :disabled="busy" @click="review('confirm')">主管核对并保存正式记录</button>
-            <button type="button" class="secondary" :disabled="busy || (analysis.status === 'pending_management' && !manager)" @click="review('reject')"><X :size="16" aria-hidden="true" />放弃此观察</button>
+            <button
+              v-if="analysis.status === 'pending_review' && !manager && !requiresProfessionalReview()"
+              type="button"
+              :disabled="busy"
+              @click="review('confirm')"
+            >
+              人工核对并保存正式记录
+            </button>
+            <button
+              v-if="analysis.status === 'pending_review' && !manager && requiresProfessionalReview()"
+              type="button"
+              :disabled="busy"
+              @click="review('request_management')"
+            >
+              提交主管审核
+            </button>
+            <button
+              v-if="manager"
+              type="button"
+              :disabled="busy"
+              @click="review('confirm')"
+            >
+              主管核对并保存正式记录
+            </button>
+            <button
+              type="button"
+              class="secondary"
+              :disabled="busy || (analysis.status === 'pending_management' && !manager)"
+              @click="review('reject')"
+            >
+              <X
+                :size="16"
+                aria-hidden="true"
+              />放弃此观察
+            </button>
           </div>
         </template>
-        <p v-if="analysis?.status === 'confirmed'" role="status">已由人工确认并生成正式记录；原图和审核记录保留在服务器。</p>
+        <p
+          v-if="analysis?.status === 'confirmed'"
+          role="status"
+        >
+          已由人工确认并生成正式记录；原图和审核记录保留在服务器。
+        </p>
       </div>
-      <p v-if="error" class="error" role="alert">{{ error }}</p>
+      <p
+        v-if="error"
+        class="error"
+        role="alert"
+      >
+        {{ error }}
+      </p>
     </template>
   </section>
 </template>

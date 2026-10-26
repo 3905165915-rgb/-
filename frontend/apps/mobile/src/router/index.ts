@@ -118,10 +118,7 @@ router.beforeEach((to) => {
   if (to.meta.requiresAuth && !current) return '/login'
   if (to.path === '/login' && current) return homeForRole(current.role)
   // Recover bookmarks and open tabs left on the old mobile forbidden page.
-  if (
-    to.path === '/403' &&
-    (!current || canAccess(current.role, internalRoles))
-  )
+  if (to.path === '/403')
     return homeForRole(current?.role ?? null)
   const roles = to.meta.roles as readonly Role[] | undefined
   if (roles && !canAccess(current?.role ?? null, roles)) return '/403'

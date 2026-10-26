@@ -16,6 +16,7 @@ export type PhotoRecovery = {
   upload?: { key: string; signature: string; query: string; type: PhotoContentType }
   analyze?: { key: string; attachmentId: string; id?: string }
   review?: { key: string; id: string; payload: Row }
+  publication?: { key: string; id: string; path: string; payload: Row }
 }
 export function parsePhotoRecovery(raw: string, elderId: string): PhotoRecovery {
   const saved = object(JSON.parse(raw))
@@ -32,6 +33,13 @@ export function parsePhotoRecovery(raw: string, elderId: string): PhotoRecovery 
     const item = object(saved.review), payload = object(item.payload)
     if (!text(item.key) || !text(item.id) || !revision(payload.expected_revision) || !['confirm', 'reject', 'request_management'].includes(String(payload.decision)) ||
       !strings(payload.observations, 20) || !text(payload.note)) return invalid()
+  }
+  if (saved.publication !== undefined) {
+    const item = object(saved.publication), payload = object(item.payload)
+    if (!text(item.key) || !text(item.id) || !revision(payload.expected_revision) || !text(payload.note) ||
+      typeof payload.share_with_family !== 'boolean' ||
+      ![`/attachments/${encodeURIComponent(item.id)}/review`, `/attachments/${encodeURIComponent(item.id)}/family-sharing`].includes(String(item.path)) ||
+      (String(item.path).endsWith('/review') && (payload.decision !== 'approve' || payload.share_with_family !== true))) return invalid()
   }
   return saved as PhotoRecovery
 }

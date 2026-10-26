@@ -61,6 +61,10 @@ async function openRole(role: Role) {
   submitting.value = true
   try {
     await auth.demoRoleLogin(role)
+    if (auth.role === 'family') {
+      window.location.replace('/mobile/family')
+      return
+    }
     if (
       route.query.view !== 'admin' &&
       role !== 'admin' &&
@@ -83,6 +87,10 @@ async function submit() {
   submitting.value = true
   try {
     await auth.login(form.value.username, form.value.password)
+    if (auth.role === 'family') {
+      window.location.replace('/mobile/family')
+      return
+    }
     await router.replace(homeForRole(auth.role))
   } catch (failure) {
     error.value = errorMessage(failure)
