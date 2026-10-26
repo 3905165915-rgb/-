@@ -3,8 +3,17 @@ import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import WorkflowPanel from '@hulao/shared/workflow'
 import CareSafety from '@hulao/shared/care-safety'
+import ElderRecordEntry from '../../../../../packages/shared/src/workflow/ElderRecordEntry.vue'
 const route = useRoute()
 const group = computed(() => String(route.params.group || 'records'))
+const quickRecord = computed(
+  () =>
+    group.value === 'records' &&
+    !['record_id', 'draft_id', 'attachment_id', 'analysis_id', 'read'].some(
+      (key) => typeof route.query[key] === 'string',
+    ) &&
+    (!route.query.action || route.query.action === '/records/manual'),
+)
 const titles: Record<string, string> = {
   elders: '老人档案办理',
   admission: '入住与床位',
@@ -25,8 +34,42 @@ const titles: Record<string, string> = {
 </script>
 <template>
   <section>
-    <CareSafety v-if="group === 'incidents'" :context="route.query" record-path="/workflows/records" :report="route.query.report === '1'" />
-    <template v-else><h1>{{ titles[group] || '业务办理' }}</h1>
-    <WorkflowPanel :key="group" :group="group" :context="route.query" :initial-action="typeof route.query.action === 'string' ? route.query.action : ''" :auto-read="route.query.read === '1'" /></template>
+    <CareSafety
+      v-if="group === 'incidents'"
+      :context="route.query"
+      record-path="/workflows/records"
+      :report="route.query.report === '1'"
+    />
+    <template v-else-if="quickRecord">
+      <ElderRecordEntry
+        :key="String(route.query.elder || route.query.elder_id || 'choose')"
+        :elder-id="
+          typeof route.query.elder === 'string'
+            ? route.query.elder
+            : typeof route.query.elder_id === 'string'
+              ? route.query.elder_id
+              : undefined
+        "
+      />
+      <details>
+        <summary>记录历史、AI草稿与更正办理</summary>
+        <WorkflowPanel
+          group="records"
+          :context="route.query"
+        />
+      </details>
+    </template>
+    <template v-else>
+      <h1>{{ titles[group] || '业务办理' }}</h1>
+      <WorkflowPanel
+        :key="group"
+        :group="group"
+        :context="route.query"
+        :initial-action="
+          typeof route.query.action === 'string' ? route.query.action : ''
+        "
+        :auto-read="route.query.read === '1'"
+      />
+    </template>
   </section>
 </template>

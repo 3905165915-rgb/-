@@ -10,10 +10,8 @@ import {
   ShieldAlert,
 } from 'lucide-vue-next'
 import { taskStatusLabels } from '@hulao/shared'
-import ElderImpression from '@hulao/shared/elder-impression'
-import ElderMemories from '../../../../../packages/shared/src/workflow/ElderMemories.vue'
-import ElderActivity from '../../../../../packages/shared/src/workflow/ElderActivity.vue'
-import { mode, session, useElders, useTasks } from '../../services/data'
+import ElderWorkspace from '../../../../../packages/shared/src/workflow/ElderWorkspace.vue'
+import { useElders, useTasks } from '../../services/data'
 import FeedbackState from '../../components/FeedbackState.vue'
 
 const route = useRoute()
@@ -35,8 +33,14 @@ const related = computed(() =>
 
 <template>
   <section class="elder-detail-page">
-    <RouterLink to="/elders" class="back-link">
-      <ArrowLeft :size="18" aria-hidden="true" />老人列表
+    <RouterLink
+      to="/elders"
+      class="back-link"
+    >
+      <ArrowLeft
+        :size="18"
+        aria-hidden="true"
+      />老人列表
     </RouterLink>
     <FeedbackState
       :loading="elders.isPending.value"
@@ -53,35 +57,63 @@ const related = computed(() =>
       <p class="elder-bed">
         {{ elder.bedLabel || '床位未提供' }}
       </p>
-      <p class="muted elder-id">编号：{{ elder.id }}</p>
+      <p class="muted elder-id">
+        编号：{{ elder.id }}
+      </p>
       <RouterLink
         :to="{ path: '/records/new', query: { elder: elder.id } }"
         class="record-link"
       >
-        <PenLine :size="18" aria-hidden="true" />记一条
-        <ChevronRight :size="18" aria-hidden="true" />
+        <PenLine
+          :size="18"
+          aria-hidden="true"
+        />记一条
+        <ChevronRight
+          :size="18"
+          aria-hidden="true"
+        />
       </RouterLink>
 
       <RouterLink
         :to="{ path: '/tasks/new', query: { elder: elder.id } }"
         class="create-task-link"
       >
-        <ListPlus :size="18" aria-hidden="true" />新建任务
-        <ChevronRight :size="18" aria-hidden="true" />
+        <ListPlus
+          :size="18"
+          aria-hidden="true"
+        />新建任务
+        <ChevronRight
+          :size="18"
+          aria-hidden="true"
+        />
       </RouterLink>
 
       <RouterLink
         :to="{ path: '/safety', query: { report: '1', elder: elder.id } }"
         class="safety-report-link"
       >
-        <ShieldAlert :size="18" aria-hidden="true" />照护安全与事件上报
-        <ChevronRight :size="18" aria-hidden="true" />
+        <ShieldAlert
+          :size="18"
+          aria-hidden="true"
+        />照护安全与事件上报
+        <ChevronRight
+          :size="18"
+          aria-hidden="true"
+        />
       </RouterLink>
 
-      <ElderMemories :key="elder.id" :elder-id="elder.id" record-path="/records/new" />
-      <ElderImpression :key="String(route.query.impression_id || elder.id)" :elder-id="elder.id" :report-id="typeof route.query.impression_id === 'string' ? route.query.impression_id : undefined" :point-id="typeof route.query.point_id === 'string' ? route.query.point_id : undefined" />
-      <section class="profile-section" aria-labelledby="elder-profile-title">
-        <h2 id="elder-profile-title">基本资料</h2>
+      <ElderWorkspace
+        :key="elder.id"
+        :elder-id="elder.id"
+        mobile
+      />
+      <section
+        class="profile-section"
+        aria-labelledby="elder-profile-title"
+      >
+        <h2 id="elder-profile-title">
+          基本资料
+        </h2>
         <dl class="elder-facts">
           <div>
             <dt>年龄</dt>
@@ -108,11 +140,19 @@ const related = computed(() =>
         </template>
       </section>
 
-      <section class="profile-section" aria-labelledby="elder-tasks-title">
+      <section
+        class="profile-section"
+        aria-labelledby="elder-tasks-title"
+      >
         <div class="page-title-row">
-          <h2 id="elder-tasks-title">相关任务</h2>
+          <h2 id="elder-tasks-title">
+            相关任务
+          </h2>
           <RouterLink :to="{ path: '/caregiver', query: { elder: elder.id } }">
-            查看全部<ChevronRight :size="16" aria-hidden="true" />
+            查看全部<ChevronRight
+              :size="16"
+              aria-hidden="true"
+            />
           </RouterLink>
         </div>
         <FeedbackState
@@ -122,32 +162,45 @@ const related = computed(() =>
           empty-text="暂无可查看的相关任务"
           @retry="tasks.refetch()"
         />
-        <ul v-if="related.length" class="elder-tasks" aria-label="相关任务">
-          <li v-for="task in related" :key="task.id">
+        <ul
+          v-if="related.length"
+          class="elder-tasks"
+          aria-label="相关任务"
+        >
+          <li
+            v-for="task in related"
+            :key="task.id"
+          >
             <RouterLink
               :to="'/tasks/' + encodeURIComponent(task.id)"
               class="task-link"
             >
               <strong>{{ task.title }}</strong>
-              <ChevronRight :size="18" aria-hidden="true" />
+              <ChevronRight
+                :size="18"
+                aria-hidden="true"
+              />
             </RouterLink>
             <p class="muted">
               {{ taskStatusLabels[task.status] || '未知状态' }} ·
               {{ task.assignee || '负责人未提供' }}
             </p>
-            <p class="muted">到期：{{ task.dueAt || '未提供' }}</p>
+            <p class="muted">
+              到期：{{ task.dueAt || '未提供' }}
+            </p>
             <RouterLink
               v-if="task.itemId"
               :to="'/timeline/' + encodeURIComponent(task.itemId)"
               class="timeline-link"
             >
-              <History :size="17" aria-hidden="true" />事项回放
+              <History
+                :size="17"
+                aria-hidden="true"
+              />事项回放
             </RouterLink>
           </li>
         </ul>
       </section>
-
-      <ElderActivity :elder-id="elder.id" :mode="mode" :session="session" />
     </template>
   </section>
 </template>
@@ -184,7 +237,9 @@ const related = computed(() =>
   color: var(--hl-primary);
   margin: 12px 0 20px;
 }
-.safety-report-link svg:last-child { margin-left: auto; }
+.safety-report-link svg:last-child {
+  margin-left: auto;
+}
 .record-link svg:last-child,
 .create-task-link svg:last-child,
 .task-link svg {

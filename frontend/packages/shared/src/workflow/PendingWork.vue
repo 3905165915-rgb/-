@@ -4,6 +4,7 @@ import { CheckCheck, ChevronLeft, ChevronRight, RefreshCw, UserRoundCheck } from
 import { readSession } from '../session'
 import { listAll, request, type Row } from './model'
 import { sameCareSession } from './task-care-context'
+import WorkspaceDecisions from './WorkspaceDecisions.vue'
 import {
   clearNotificationAction, notificationActionKey, notificationLocation,
   notificationObjects, notificationStages, notificationStatuses,
@@ -130,37 +131,143 @@ onBeforeUnmount(() => { epoch++; window.removeEventListener('focus', load); wind
 </script>
 
 <template>
-  <section class="server-notifications" aria-label="服务器待处理通知">
-    <header><div><h1>待我处理</h1><p>通知已读或接单不会自动完成关联任务、交班或整改。</p></div><button class="icon-button" type="button" aria-label="刷新服务器通知" title="刷新服务器通知" :disabled="loading" @click="load"><RefreshCw :size="19" aria-hidden="true" /></button></header>
-    <p v-if="!permitted" role="alert">当前账号不能查看内部通知。</p>
-    <p v-else-if="session?.mode !== 'api'" role="status">服务器通知仅在服务器账号下提供；演示环境没有跨设备通知数据。</p>
+  <section
+    class="server-notifications"
+    aria-label="服务器待处理通知"
+  >
+    <header>
+      <div><h1>待我处理</h1><p>通知已读或接单不会自动完成关联任务、交班或整改。</p></div><button
+        class="icon-button"
+        type="button"
+        aria-label="刷新服务器通知"
+        title="刷新服务器通知"
+        :disabled="loading"
+        @click="load"
+      >
+        <RefreshCw
+          :size="19"
+          aria-hidden="true"
+        />
+      </button>
+    </header>
+    <p
+      v-if="!permitted"
+      role="alert"
+    >
+      当前账号不能查看内部通知。
+    </p>
+    <p
+      v-else-if="session?.mode !== 'api'"
+      role="status"
+    >
+      服务器通知仅在服务器账号下提供；演示环境没有跨设备通知数据。
+    </p>
     <template v-else>
+      <WorkspaceDecisions />
       <div class="filters">
-        <label><input type="checkbox" :checked="unread" @change="setFilter('unread', ($event.target as HTMLInputElement).checked)" />仅未读</label>
-        <label><input type="checkbox" :checked="pending" @change="setFilter('pending', ($event.target as HTMLInputElement).checked)" />仅待办理</label>
+        <label><input
+          type="checkbox"
+          :checked="unread"
+          @change="setFilter('unread', ($event.target as HTMLInputElement).checked)"
+        >仅未读</label>
+        <label><input
+          type="checkbox"
+          :checked="pending"
+          @change="setFilter('pending', ($event.target as HTMLInputElement).checked)"
+        >仅待办理</label>
       </div>
-      <p class="meta">{{ definition || '状态以服务器通知为准。' }}<span v-if="asOf">最近刷新：{{ when(asOf) }}</span></p>
-      <p v-if="loading && !loaded" role="status">正在读取服务器通知…</p>
-      <p v-if="error" class="error" role="alert">{{ error }}</p>
-      <p v-if="!loading && loaded && !notifications.length" role="status">{{ error ? '读取失败，当前结果不能代表服务器没有通知。' : '当前筛选范围没有通知。' }}</p>
+      <p class="meta">
+        {{ definition || '状态以服务器通知为准。' }}<span v-if="asOf">最近刷新：{{ when(asOf) }}</span>
+      </p>
+      <p
+        v-if="loading && !loaded"
+        role="status"
+      >
+        正在读取服务器通知…
+      </p>
+      <p
+        v-if="error"
+        class="error"
+        role="alert"
+      >
+        {{ error }}
+      </p>
+      <p
+        v-if="!loading && loaded && !notifications.length"
+        role="status"
+      >
+        {{ error ? '读取失败，当前结果不能代表服务器没有通知。' : '当前筛选范围没有通知。' }}
+      </p>
       <ul>
-        <li v-for="item in notifications" :key="item.id">
+        <li
+          v-for="item in notifications"
+          :key="item.id"
+        >
           <div class="notice-main">
-            <div class="notice-title"><strong>{{ item.title || notificationObjects[item.object_type] || '待办理事项' }}</strong><span>{{ status(item) }}</span></div>
+            <div class="notice-title">
+              <strong>{{ item.title || notificationObjects[item.object_type] || '待办理事项' }}</strong><span>{{ status(item) }}</span>
+            </div>
             <p>{{ elderName(item.elder_id) }} · {{ notificationStages[item.stage] || '阶段待核实' }} · {{ notificationObjects[item.object_type] || '业务对象待核实' }}</p>
             <p>通知时间：{{ when(item.created_at) }}<span v-if="item.accepted_at"> · 接单：{{ when(item.accepted_at) }}</span><span v-if="isRead(item)"> · 已读：{{ when(item.read_at) }}</span></p>
-            <RouterLink class="open-link" :to="notificationLocation(item, props.mobile)">进入关联业务<ChevronRight :size="16" aria-hidden="true" /></RouterLink>
+            <RouterLink
+              class="open-link"
+              :to="notificationLocation(item, props.mobile)"
+            >
+              进入关联业务<ChevronRight
+                :size="16"
+                aria-hidden="true"
+              />
+            </RouterLink>
           </div>
           <div class="notice-actions">
-            <button v-if="!isRead(item)" type="button" class="secondary" :disabled="loading || !!busyId" @click="act(item, 'read')"><CheckCheck :size="16" aria-hidden="true" />标记已读</button>
-            <button v-if="item.status === 'pending'" type="button" :disabled="loading || !!busyId" @click="act(item, 'accept')"><UserRoundCheck :size="16" aria-hidden="true" />{{ busyId === item.id ? '提交中…' : '接单办理' }}</button>
+            <button
+              v-if="!isRead(item)"
+              type="button"
+              class="secondary"
+              :disabled="loading || !!busyId"
+              @click="act(item, 'read')"
+            >
+              <CheckCheck
+                :size="16"
+                aria-hidden="true"
+              />标记已读
+            </button>
+            <button
+              v-if="item.status === 'pending'"
+              type="button"
+              :disabled="loading || !!busyId"
+              @click="act(item, 'accept')"
+            >
+              <UserRoundCheck
+                :size="16"
+                aria-hidden="true"
+              />{{ busyId === item.id ? '提交中…' : '接单办理' }}
+            </button>
           </div>
         </li>
       </ul>
-      <nav v-if="total > limit" class="pagination" aria-label="通知分页">
-        <button type="button" class="secondary" :disabled="loading || offset === 0" @click="previousPage"><ChevronLeft :size="16" />上一页</button>
+      <nav
+        v-if="total > limit"
+        class="pagination"
+        aria-label="通知分页"
+      >
+        <button
+          type="button"
+          class="secondary"
+          :disabled="loading || offset === 0"
+          @click="previousPage"
+        >
+          <ChevronLeft :size="16" />上一页
+        </button>
         <span>第 {{ pageNumber }} / {{ pages }} 页 · 共 {{ total }} 条</span>
-        <button type="button" class="secondary" :disabled="loading || offset + limit >= total" @click="nextPage">下一页<ChevronRight :size="16" /></button>
+        <button
+          type="button"
+          class="secondary"
+          :disabled="loading || offset + limit >= total"
+          @click="nextPage"
+        >
+          下一页<ChevronRight :size="16" />
+        </button>
       </nav>
     </template>
   </section>

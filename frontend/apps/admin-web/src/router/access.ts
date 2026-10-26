@@ -18,14 +18,19 @@ export interface NavigationItem {
 export const navigation: NavigationItem[] = [
   {
     path: '/dashboard',
-    label: '工作台',
+    label: '今日工作',
     group: '工作台',
     roles: internalRoles,
   },
-  { path: '/notifications', label: '待我处理', group: '工作台', roles: internalRoles },
+  {
+    path: '/notifications',
+    label: '待我处理',
+    group: '工作台',
+    roles: internalRoles,
+  },
   {
     path: '/elders',
-    label: '老人档案',
+    label: '老人',
     group: '老人照护',
     roles: internalRoles,
   },
@@ -48,14 +53,8 @@ export const navigation: NavigationItem[] = [
     roles: internalRoles,
   },
   {
-    path: '/workflows/memories',
-    label: '个性化照护记忆',
-    group: '老人照护',
-    roles: internalRoles,
-  },
-  {
     path: '/tasks',
-    label: '每日任务',
+    label: '今日任务',
     group: '当班工作',
     roles: internalRoles,
   },
@@ -112,6 +111,12 @@ export const navigation: NavigationItem[] = [
     label: '家属沟通',
     group: '家属沟通',
     roles: ['admin', 'supervisor', 'family'],
+  },
+  {
+    path: '/workflows/memories',
+    label: '既有照护资料管理',
+    group: '机构管理',
+    roles: internalRoles,
   },
   {
     path: '/workflows/staff',

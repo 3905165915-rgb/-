@@ -31,15 +31,18 @@ describe('route and menu policy', () => {
       expect(
         allowedRoutes(role).map(({ path, label }) => ({ path, label })),
       ).toEqual([
-        { path: '/caregiver', label: '今日' },
+        { path: '/caregiver', label: '今日工作' },
         { path: '/elders', label: '老人' },
-        { path: '/handover', label: '交班' },
-        { path: '/account', label: '我的' },
+        { path: '/records/new', label: '记录' },
+        { path: '/notifications', label: '待我处理' },
       ])
       expect(homeForRole(role)).toBe('/caregiver')
     },
   )
-  it('keeps quick recording as a work action outside the primary tabs', () => {
-    expect(navigation.some((item) => item.path === '/records/new')).toBe(false)
+  it('keeps quick recording in the daily tabs without exposing staff tabs to family', () => {
+    expect(navigation.some((item) => item.path === '/records/new')).toBe(true)
+    expect(
+      allowedRoutes('family').some((item) => item.path === '/records/new'),
+    ).toBe(false)
   })
 })

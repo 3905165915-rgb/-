@@ -11,7 +11,12 @@ export interface NavigationItem {
   icon?: string
 }
 export const navigation: NavigationItem[] = [
-  { path: '/caregiver', label: '今日', icon: 'home-o', roles: internalRoles },
+  {
+    path: '/caregiver',
+    label: '今日工作',
+    icon: 'home-o',
+    roles: internalRoles,
+  },
   {
     path: '/elders',
     label: '老人',
@@ -19,12 +24,17 @@ export const navigation: NavigationItem[] = [
     roles: internalRoles,
   },
   {
-    path: '/handover',
-    label: '交班',
+    path: '/records/new',
+    label: '记录',
+    icon: 'edit',
+    roles: internalRoles,
+  },
+  {
+    path: '/notifications',
+    label: '待我处理',
     icon: 'todo-list-o',
     roles: internalRoles,
   },
-  { path: '/account', label: '我的', icon: 'user-o', roles: internalRoles },
   { path: '/family', label: '家属动态', icon: 'chat-o', roles: ['family'] },
 ]
 export function homeForRole(role: Role | null) {

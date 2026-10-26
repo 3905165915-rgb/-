@@ -1,6 +1,7 @@
 <script setup lang="ts">
 const serverWorkflow = ['api'].includes(import.meta.env.VITE_APP_MODE || 'api')
 import WorkflowPanel from '@hulao/shared/workflow'
+import ElderRecordEntry from '../../../../../packages/shared/src/workflow/ElderRecordEntry.vue'
 import { computed, onMounted, ref, watch } from 'vue'
 import { Save, Send } from 'lucide-vue-next'
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute } from 'vue-router'
@@ -17,6 +18,17 @@ import { useRecordEditor } from '../../composables/useRecordEditor'
 import RecordReviewForm from '../../components/RecordReviewForm.vue'
 import FeedbackState from '../../components/FeedbackState.vue'
 const route = useRoute()
+const quickRecord = computed(
+  () =>
+    ![
+      'record_id',
+      'draft_id',
+      'draft',
+      'attachment_id',
+      'analysis_id',
+      'action',
+    ].some((key) => typeof route.query[key] === 'string'),
+)
 const elders = useElders()
 const tasks = useTasks()
 const {
@@ -157,17 +169,52 @@ async function restoreDraft() {
 }
 </script>
 <template>
-  <section v-if="serverWorkflow">
-    <RouterLink :to="{ path: '/safety', query: { report: '1', elder: typeof route.query.elder === 'string' ? route.query.elder : '' } }" class="secondary-link">照护安全与事件上报</RouterLink>
-  <WorkflowPanel
-    group="records"
-    title="记一条"
-    :context="{ ...route.query, ...(typeof route.query.elder === 'string' ? { elder_id: route.query.elder } : {}) }"
-    :initial-action="typeof route.query.record_id === 'string' ? '/records/{record_id}' : typeof route.query.draft_id === 'string' ? '/records/drafts/{draft_id}' : '/records/context-extract'"
-    :auto-read="typeof route.query.record_id === 'string' || typeof route.query.draft_id === 'string'"
+  <ElderRecordEntry
+    v-if="serverWorkflow && quickRecord"
+    :key="String(route.query.elder || 'choose')"
+    :elder-id="
+      typeof route.query.elder === 'string' ? route.query.elder : undefined
+    "
   />
+  <section v-else-if="serverWorkflow">
+    <RouterLink
+      :to="{
+        path: '/safety',
+        query: {
+          report: '1',
+          elder: typeof route.query.elder === 'string' ? route.query.elder : '',
+        },
+      }"
+      class="secondary-link"
+    >
+      照护安全与事件上报
+    </RouterLink>
+    <WorkflowPanel
+      group="records"
+      title="记一条"
+      :context="{
+        ...route.query,
+        ...(typeof route.query.elder === 'string'
+          ? { elder_id: route.query.elder }
+          : {}),
+      }"
+      :initial-action="
+        typeof route.query.record_id === 'string'
+          ? '/records/{record_id}'
+          : typeof route.query.draft_id === 'string'
+            ? '/records/drafts/{draft_id}'
+            : '/records/context-extract'
+      "
+      :auto-read="
+        typeof route.query.record_id === 'string' ||
+          typeof route.query.draft_id === 'string'
+      "
+    />
   </section>
-  <section v-else class="record-page editor-page">
+  <section
+    v-else
+    class="record-page editor-page"
+  >
     <div class="page-title-row">
       <h1>快速记录</h1>
       <van-tag
@@ -208,20 +255,21 @@ async function restoreDraft() {
       <summary>
         恢复本机草稿 <span class="muted">{{ drafts.length }} 项</span>
       </summary>
-      <label class="select-field"
-        >恢复草稿<select v-model="restoreId" :disabled="busy">
-          <option value="">请选择</option>
-          <option
-            v-for="draft in drafts"
-            :key="draft.localId"
-            :value="draft.localId"
-          >
-            {{ draft.recoveredFrom ? '其他窗口恢复 · ' : ''
-            }}{{ draft.text.slice(0, 20) || '空白草稿' }} ·
-            {{ phaseLabels[draft.phase] }} · {{ draft.updatedAt }}
-          </option>
-        </select></label
-      ><van-button
+      <label class="select-field">恢复草稿<select
+        v-model="restoreId"
+        :disabled="busy"
+      >
+        <option value="">请选择</option>
+        <option
+          v-for="draft in drafts"
+          :key="draft.localId"
+          :value="draft.localId"
+        >
+          {{ draft.recoveredFrom ? '其他窗口恢复 · ' : ''
+          }}{{ draft.text.slice(0, 20) || '空白草稿' }} ·
+          {{ phaseLabels[draft.phase] }} · {{ draft.updatedAt }}
+        </option>
+      </select></label><van-button
         size="small"
         :disabled="!restoreId || busy"
         @click="restoreDraft"
@@ -232,31 +280,29 @@ async function restoreDraft() {
     <template v-if="ready">
       <div class="form-band">
         <h2>护理记录</h2>
-        <label class="select-field"
-          >老人<select
-            v-model="editor.elderId"
-            :disabled="frozen"
-            @change="changed(true)"
-          >
-            <option value="">请选择老人</option>
-            <option
-              v-if="
-                editor.elderId &&
-                !elders.data.value?.some((item) => item.id === editor.elderId)
-              "
-              :value="editor.elderId"
-            >
-              {{ editor.elderId }}（当前列表未找到）
-            </option>
-            <option
-              v-for="elder in elders.data.value"
-              :key="elder.id"
-              :value="elder.id"
-            >
-              {{ elder.name }} · {{ elder.bedLabel }}
-            </option>
-          </select></label
+        <label class="select-field">老人<select
+          v-model="editor.elderId"
+          :disabled="frozen"
+          @change="changed(true)"
         >
+          <option value="">请选择老人</option>
+          <option
+            v-if="
+              editor.elderId &&
+                !elders.data.value?.some((item) => item.id === editor.elderId)
+            "
+            :value="editor.elderId"
+          >
+            {{ editor.elderId }}（当前列表未找到）
+          </option>
+          <option
+            v-for="elder in elders.data.value"
+            :key="elder.id"
+            :value="elder.id"
+          >
+            {{ elder.name }} · {{ elder.bedLabel }}
+          </option>
+        </select></label>
         <van-field
           v-model="editor.text"
           label="原文"
@@ -268,14 +314,31 @@ async function restoreDraft() {
           placeholder="输入护理观察、待办或沟通内容"
           @update:model-value="changed(true)"
         />
-        <p v-if="saveError" class="error-text" role="alert">
+        <p
+          v-if="saveError"
+          class="error-text"
+          role="alert"
+        >
           {{ saveError }}
         </p>
-        <p v-else-if="saved" class="muted" role="status">已保存到本机</p>
-        <p v-if="error" class="error-text" role="alert">
+        <p
+          v-else-if="saved"
+          class="muted"
+          role="status"
+        >
+          已保存到本机
+        </p>
+        <p
+          v-if="error"
+          class="error-text"
+          role="alert"
+        >
           {{ error }}
         </p>
-        <p v-if="notice" role="status">
+        <p
+          v-if="notice"
+          role="status"
+        >
           {{ notice }}
         </p>
         <van-notice-bar
@@ -288,15 +351,18 @@ async function restoreDraft() {
             :disabled="busy || frozen"
             @click="useExample"
           >
-            使用演示原文 </van-button
-          ><van-button
+            使用演示原文
+          </van-button><van-button
             type="primary"
             :loading="busy && editor.phase === 'extracting'"
             :disabled="busy || frozen || !editor.text.trim() || !validElder"
             @click="extractDraft"
           >
-            提取AI草稿 </van-button
-          ><van-button :disabled="busy || frozen" @click="manual = true">
+            提取AI草稿
+          </van-button><van-button
+            :disabled="busy || frozen"
+            @click="manual = true"
+          >
             手工录入
           </van-button>
         </div>
@@ -305,10 +371,13 @@ async function restoreDraft() {
           <p>
             来源：{{
               editor.ai.draft.provider ||
-              (mode === 'demo' ? 'mock（演示）' : '未知，请核实')
+                (mode === 'demo' ? 'mock（演示）' : '未知，请核实')
             }}
           </p>
-          <p v-if="stale" class="error-text">
+          <p
+            v-if="stale"
+            class="error-text"
+          >
             原文或老人已变更，旧结果不可确认。
           </p>
           <details class="evidence">
@@ -319,7 +388,10 @@ async function restoreDraft() {
             <p>后续：{{ editor.ai.draft.fields.followUp }}</p>
             <p>联系对象：{{ editor.ai.draft.fields.contactTarget }}</p>
             <ul>
-              <li v-for="item in editor.ai.draft.evidence" :key="item">
+              <li
+                v-for="item in editor.ai.draft.evidence"
+                :key="item"
+              >
                 {{ item }}
               </li>
             </ul>
@@ -346,14 +418,23 @@ async function restoreDraft() {
             "
             @update:model-value="changed()"
           />
-          <p v-if="!editor.review.observation.trim()" class="muted">
+          <p
+            v-if="!editor.review.observation.trim()"
+            class="muted"
+          >
             请填写观察结果。
           </p>
-          <p v-if="manual && mode === 'api'" class="muted">
+          <p
+            v-if="manual && mode === 'api'"
+            class="muted"
+          >
             确认后提交服务端；后续安排每行生成一项待办。
           </p>
         </template>
-        <details v-if="!frozen" class="discard-draft">
+        <details
+          v-if="!frozen"
+          class="discard-draft"
+        >
           <summary>放弃本机草稿</summary>
           <van-field
             v-model="editor.discardReason"
@@ -380,33 +461,38 @@ async function restoreDraft() {
             savingLocal
               ? '正在保存到本机…'
               : saveError || (saved ? '已保存到本机' : '有未保存修改')
-          }}<span v-if="editor.phase === 'submitted'"> · 已提交</span
-          ><span v-if="editor.phase === 'uncertain'"> · 提交待核实</span>
+          }}<span v-if="editor.phase === 'submitted'"> · 已提交</span><span v-if="editor.phase === 'uncertain'"> · 提交待核实</span>
         </p>
         <div class="footer-actions">
           <van-button
             :disabled="busy || !ready || savingLocal"
             @click="persist"
           >
-            <Save :size="17" aria-hidden="true" />保存本机
+            <Save
+              :size="17"
+              aria-hidden="true"
+            />保存本机
           </van-button>
           <van-button
             type="primary"
             :loading="editor.phase === 'submitting'"
             :disabled="
               busy ||
-              !validElder ||
-              frozen ||
-              !(manual || editor.ai) ||
-              (manual
-                ? !editor.elderId ||
-                  !editor.text.trim() ||
-                  !editor.review.observation.trim()
-                : !confirmable)
+                !validElder ||
+                frozen ||
+                !(manual || editor.ai) ||
+                (manual
+                  ? !editor.elderId ||
+                    !editor.text.trim() ||
+                    !editor.review.observation.trim()
+                  : !confirmable)
             "
             @click="confirm"
           >
-            <Send :size="17" aria-hidden="true" />{{
+            <Send
+              :size="17"
+              aria-hidden="true"
+            />{{
               manual && mode === 'demo' ? '提交演示记录' : '确认并提交'
             }}
           </van-button>
