@@ -4,6 +4,7 @@ import { resolve } from 'node:path'
 import { chromium } from 'playwright'
 
 const base = process.env.WORKFLOW_URL || 'http://127.0.0.1:5176'
+const testFilter = process.env.WORKFLOW_TEST_FILTER || ''
 const output = resolve('test-results/workflow')
 await mkdir(output, { recursive: true })
 const browser = await chromium.launch({ headless: true, channel: process.env.BROWSER_CHANNEL || 'msedge' })
@@ -13,13 +14,13 @@ const elder = { id: 'ELDER-test', name: '虚构测试老人', bed_id: 'BED-test'
 const staff = { id: 'USER-test', display_name: '虚构测试护理员', role: 'caregiver', enabled: true }
 const shift = { id: 'SHIFT-test', name: '虚构跨夜班', start_at: '2026-10-23T20:00:00+08:00', end_at: '2026-10-24T08:00:00+08:00', status: 'open', caregiver_ids: [staff.id], revision: 1 }
 const record = { id: 'REC-test', elder_id: elder.id, raw_text: '虚构来源', observations: ['虚构观察'], revision: 1, status: 'confirmed', created_by: staff.id, created_at: '2026-10-23T00:00:00Z' }
-const task = { id: 'TASK-test', elder_id: elder.id, title: '虚构回访任务', status: 'pending', shift_id: shift.id, assigned_to: staff.id, due_at: '2026-10-24T06:00:00Z', updated_at: '2026-10-23T00:00:00Z', revision: 1, source_record_id: record.id, memory_references: [] }
+const task = { id: 'TASK-test', elder_id: elder.id, title: '虚构回访任务', status: 'pending', shift_id: shift.id, shift: shift.name, assigned_to: staff.id, due_at: '2026-10-24T06:00:00Z', updated_at: '2026-10-23T00:00:00Z', revision: 1, source_record_id: record.id, memory_references: [] }
 const draft = { id: 'AI-test', elder_id: elder.id, shift_id: shift.id, raw_text: '虚构：今天想休息', status: 'pending_review', observations: ['虚构：今天想休息'], task_candidates: [], evidence: [{ quote: '今天想休息' }], warnings: [], generation_kind: 'context_record', created_at: '2026-10-24T00:00:00Z', created_by: staff.id }
 async function setup(role = 'caregiver') {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 } })
   const writes = []
   const requests = []
-  const state = { failManual: false, failExport: false, failAI: 503, task: { ...task }, draft: { ...draft } }
+  const state = { failManual: false, failExport: false, failAI: 503, failHandoverAI: false, task: { ...task }, draft: { ...draft }, handover: null }
   await context.addInitScript(({ role }) => {
     if (!sessionStorage.getItem('hulao:session:v2')) sessionStorage.setItem('hulao:session:v2', JSON.stringify({ mode: 'api', accountKey: 'isolated-' + role, userId: 'USER-test', role, accessToken: 'synthetic-not-a-real-token' }))
   }, { role })
@@ -31,6 +32,19 @@ async function setup(role = 'caregiver') {
     if (req.method() !== 'GET') {
       writes.push({ path, key: req.headers()['idempotency-key'], body: req.postDataJSON() })
       if (path.includes('/reports/elders/') && state.failExport) return route.abort('failed')
+      if (path === '/handovers') {
+        state.handover = { id: 'HO-inline-test', source_shift_id: shift.id, target_shift_id: 'SHIFT-next', status: 'draft', revision: 1, items: [{ id: 'HI-test', kind: 'task', elder_id: elder.id, source_id: task.id, detail: task.title }] }
+        return json(state.handover, 201)
+      }
+      if (path === '/handovers/HO-inline-test/ai-summary') {
+        if (state.failHandoverAI) return json({ detail: 'AI unavailable' }, 503)
+        state.handover = { ...state.handover, revision: 2, ai_summary: { status: 'pending_review', text: '交班摘要：沿用未完成回访，明天下午询问活动意愿。', points: [{ text: '明天下午询问活动意愿', citations: [{ quote: '明天下午三点询问是否愿意听戏' }] }] }, handover_suggestions: [{ id: 'HSUG-test', title: '询问活动意愿', evidence_text: '明天下午三点询问是否愿意听戏', condition: null, due_text: '明天下午三点' }] }
+        return json(state.handover)
+      }
+      if (path === '/handovers/HO-inline-test/submit') {
+        state.handover = { ...state.handover, ...req.postDataJSON(), status: 'submitted', revision: 3 }
+        return json(state.handover)
+      }
       if (path === '/quality/checks') return json({ id: 'QC-test', issues: [], scope: req.postDataJSON() }, 201)
       if (path === '/tasks') return json({ ...state.task, ...req.postDataJSON() }, 201)
       if (path === '/records/manual') {
@@ -48,7 +62,9 @@ async function setup(role = 'caregiver') {
     if (path === '/elders') return json([elder])
     if (path === '/tasks') return json([state.task])
     if (path === '/tasks/TASK-test') return json(state.task)
-    if (path === '/shifts') return json([shift, { ...shift, id: 'SHIFT-closed', name: '历史已关闭班', status: 'closed' }])
+    if (path === '/shifts') return json([shift, { ...shift, id: 'SHIFT-next', name: '虚构接班', start_at: '2099-10-28T08:00:00+08:00', end_at: '2099-10-28T20:00:00+08:00', caregiver_ids: [staff.id] }, { ...shift, id: 'SHIFT-closed', name: '历史已关闭班', status: 'closed' }])
+    if (path === '/handovers/HO-inline-test') return json(state.handover || { id: 'HO-inline-test', status: 'draft' })
+    if (path === '/handovers' && new URL(req.url()).searchParams.has('shift_id')) return json(state.handover ? [state.handover] : [])
     if (path === '/handovers') return json([
       { id: 'HO-test', source_shift_id: 'SHIFT-closed', target_shift_id: shift.id, status: 'draft', items: [] },
       { id: 'HO-other', source_shift_id: shift.id, target_shift_id: 'SHIFT-next', status: 'draft', items: [] },
@@ -81,6 +97,7 @@ async function submit(page) {
   await page.getByRole('button', { name: /^(确认提交|仅保存记录|保存记录并创建\d+项任务)$/ }).click()
 }
 async function test(name, fn, role = 'caregiver') {
+  if (testFilter && !name.includes(testFilter)) return
   const env = await setup(role)
   try { await fn(env); results.push({ name, passed: true }); console.log('PASS ' + name) }
   catch (e) {
@@ -216,6 +233,37 @@ try {
     await navigateMenu(page, '新增记录')
     await field(page, 'scene').waitFor()
     assert.equal(await page.locator('[data-field="record_id"]').count(), 0)
+  })
+  await test('护理员单页交班：原待办沿用，分析失败保留输入，确认新待办后只提交一次', async ({ page, writes, state }) => {
+    await page.goto(base + '/mobile/handover')
+    await page.getByText('虚构回访任务', { exact: true }).waitFor()
+    const note = page.getByLabel('交班内容')
+    await note.fill('明天下午三点询问是否愿意听戏')
+    state.failHandoverAI = true
+    await page.getByRole('button', { name: '分析并核对', exact: true }).click()
+    await page.getByText(/交班内容已保留；分析未完成/).waitFor()
+    assert.equal(await note.inputValue(), '明天下午三点询问是否愿意听戏')
+    assert.equal(writes.filter(row => row.path.endsWith('/submit')).length, 0)
+    await page.reload()
+    await page.getByLabel('交班内容').waitFor()
+    assert.equal(await page.getByLabel('交班内容').inputValue(), '明天下午三点询问是否愿意听戏')
+    assert.equal(writes.filter(row => row.path === '/handovers').length, 1)
+    state.failHandoverAI = false
+    await page.getByRole('button', { name: '分析并核对', exact: true }).click()
+    assert.equal(await page.getByLabel('摘要').inputValue(), '交班摘要：沿用未完成回访，明天下午询问活动意愿。')
+    await page.getByRole('checkbox', { name: '采纳新待办' }).check()
+    await page.getByLabel('老人').selectOption(elder.id)
+    await page.getByLabel('责任人').selectOption(staff.id)
+    await page.getByLabel('截止时间').fill('2099-10-28T14:00')
+    await page.getByLabel('完成标准').fill('询问本人并记录选择')
+    await page.getByRole('button', { name: '核对并提交交班', exact: false }).click()
+    await page.getByText('交班已提交，已有未完成任务沿用原编号接续。', { exact: true }).waitFor()
+    assert.deepEqual(writes.filter(row => row.path.endsWith('/submit')).map(row => row.body.accepted_tasks), [[{
+      suggestion_id: 'HSUG-test', elder_id: elder.id, title: '询问活动意愿', shift_id: 'SHIFT-next',
+      assigned_to: staff.id, due_at: '2099-10-28T06:00:00.000Z', completion_criteria: '询问本人并记录选择',
+    }]])
+    assert.equal(writes.filter(row => row.path.endsWith('/submit')).length, 1)
+    assert.ok(writes.some(row => row.path.endsWith('/ai-summary')))
   })
   await test('草稿统一入口：列表选择后继续核对，不恢复成旧的新增操作', async ({ page, writes }) => {
     await page.goto(base + '/mobile/records/new')

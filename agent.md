@@ -9,7 +9,10 @@
 - Keep the main elder workflow focused on today's care, understanding this elder, records, and assessment/planning.
 - Show confirmed care information separately from unverified AI observations. Clearly label evidence and pending decisions.
 - Incomplete assessments may be saved as pending observation, but must not appear as official scores or as care-plan inputs.
-- Distinguish saved records from background processing status; retries must not create duplicate submissions.
+- Save a formal record first, then show inline AI analysis on that saved record. A failed analysis retries with the original record ID; never create a second record to retry.
+- Display evidence and frequency classification for preferences. Explicit recurring wording may be confirmed by the submitting staff member as long-term; ambiguous frequency and one-time wishes stay recent observations.
+- Preserve existing task IDs during handover. New AI tasks require one submitter review and complete elder, assignee, shift, due time, and completion criteria.
+- Group and sort elder timelines by server registration time; show actual occurrence time separately.
 - AI suggestions and professional care decisions must not be presented as approved until the backend confirms an authorized human decision.
 
 ## Safety and data

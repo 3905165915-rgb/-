@@ -14,6 +14,8 @@ import { useTasks, useHandover, mode, session } from '../../services/data'
 import HandoverEditor from '../../components/HandoverEditor.vue'
 import HandoverReceiveList from '../../components/HandoverReceiveList.vue'
 import FeedbackState from '../../components/FeedbackState.vue'
+import HandoverQuick from '../../components/HandoverQuick.vue'
+import { readSession } from '@hulao/shared'
 const route = useRoute()
 const router = useRouter()
 const shift = ref(
@@ -64,8 +66,9 @@ onBeforeRouteLeave(() => (mode === 'api' ? true : leave()))
 onBeforeRouteUpdate(() => (mode === 'api' ? true : leave()))
 </script>
 <template>
+  <HandoverQuick v-if="serverWorkflow && readSession()?.role === 'caregiver'" />
   <WorkflowPanel
-    v-if="serverWorkflow"
+    v-else-if="serverWorkflow"
     group="handovers"
     title="交接班"
     :context="route.query"

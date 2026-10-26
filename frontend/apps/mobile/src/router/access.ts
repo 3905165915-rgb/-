@@ -30,6 +30,12 @@ export const navigation: NavigationItem[] = [
     roles: internalRoles,
   },
   {
+    path: '/handover',
+    label: '交班',
+    icon: 'exchange',
+    roles: internalRoles,
+  },
+  {
     path: '/notifications',
     label: '待我处理',
     icon: 'todo-list-o',
