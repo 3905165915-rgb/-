@@ -4,7 +4,7 @@ import { ImagePlus, RefreshCw, ShieldCheck, Upload, X } from 'lucide-vue-next'
 import { readSession } from '../session'
 import { request, requestBinary, requestBlob, type Row } from './model'
 import { sameCareSession } from './task-care-context'
-import { canReviewPhoto, parsePhotoRecovery, photoFileIssue, reviewedObservations, validatePhoto, validatePhotoAnalysis, validatePhotoPage, type PhotoRecovery } from './photo-observation'
+import { canReviewPhoto, parsePhotoRecovery, photoContentType, photoFileIssue, photoUploadRejected, reviewedObservations, validatePhoto, validatePhotoAnalysis, validatePhotoPage, type PhotoRecovery } from './photo-observation'
 
 const props = defineProps<{ elderId: string; attachmentId?: string; analysisId?: string; readOnly?: boolean }>()
 const session = ref(readSession())
@@ -126,21 +126,34 @@ async function upload() {
   if (props.readOnly || recoveryBlocked.value || !file.value || !props.elderId || busy.value || !sameCareSession(readSession(), session.value)) return
   const ticket = ++epoch, elderId = props.elderId, currentFile = file.value
   busy.value = true; error.value = ''
+  let uploaded = false
   try {
     if (!recovery.value.upload) {
+      const type = photoContentType(new Uint8Array(await currentFile.slice(0, 12).arrayBuffer()))
+      if (!current(ticket, elderId)) return
       const at = new Date(occurredAt.value)
       if (!Number.isFinite(at.getTime()) || at.getTime() > Date.now()) throw new Error('请填写有效且不晚于当前时间的观察时间。')
       const query = new URLSearchParams({ elder_id: elderId, occurred_at: at.toISOString(), caption: caption.value.trim() })
-      recovery.value.upload = { key: crypto.randomUUID(), signature: signature(currentFile), query: String(query), type: currentFile.type as 'image/jpeg' | 'image/png' }
+      recovery.value.upload = { key: crypto.randomUUID(), signature: signature(currentFile), query: String(query), type }
     }
     saveRecovery()
     const attempt = recovery.value.upload
     const row = validatePhoto(await requestBinary(`/attachments?${attempt.query}`, currentFile, attempt.type, attempt.key), elderId)
     if (!current(ticket, elderId)) return
+    uploaded = true
     delete recovery.value.upload; saveRecovery(); file.value = null; releasePreview()
     await fetchPhotos(ticket, elderId)
     if (current(ticket, elderId)) await fetchPhoto(String(row.id), ticket, elderId)
-  } catch (failure) { showFailure(failure, ticket, elderId) }
+  } catch (failure) {
+    if (!current(ticket, elderId)) return
+    if (!uploaded && photoUploadRejected(failure)) {
+      delete recovery.value.upload
+      try { saveRecovery() }
+      catch { recoveryBlocked.value = true; error.value = '照片未保存，但本机请求状态未能更新。请刷新后重新核对。'; return }
+    }
+    showFailure(failure, ticket, elderId)
+    if (uploaded) error.value = '照片已保存，但后续显示未完成。请刷新已上传照片列表，不要重复上传。'
+  }
   finally { if (ticket === epoch) busy.value = false }
 }
 async function analyze() {
@@ -232,7 +245,8 @@ onBeforeUnmount(() => { reset(); window.removeEventListener('focus', changed); w
     <p v-if="!elderId" class="muted">选择老人后可添加照片。</p>
     <template v-else>
       <div v-if="!readOnly" class="photo-form">
-        <label>拍照或选择照片<input type="file" accept="image/jpeg,image/png" capture="environment" :disabled="busy || recoveryBlocked" @change="chooseFile" /></label>
+        <label>拍照或选择照片<input type="file" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" capture="environment" :disabled="busy || recoveryBlocked" @change="chooseFile" /></label>
+        <p class="muted">支持JPEG、PNG、WebP，单张不超过4MB；系统按实际图片内容识别格式。</p>
         <label>观察时间<input v-model="occurredAt" type="datetime-local" :disabled="locked" required /></label>
         <label>照片说明<input v-model="caption" maxlength="1000" :disabled="locked" placeholder="可选，描述观察背景" /></label>
         <img v-if="preview" :src="preview" alt="待上传照片本机预览" class="preview" />

@@ -14,6 +14,7 @@ const jpeg = Buffer.from(await fixturePage.evaluate(() => {
   const context = canvas.getContext('2d'); context.fillStyle = '#d4e8df'; context.fillRect(0, 0, 2, 2)
   return canvas.toDataURL('image/jpeg').split(',')[1]
 }), 'base64')
+const png = Buffer.from(await fixturePage.evaluate(() => { const canvas = document.createElement('canvas'); canvas.width = 3; canvas.height = 3; return canvas.toDataURL('image/png').split(',')[1] }), 'base64')
 await fixturePage.close()
 const results = [], errors = []
 const elders = [
@@ -57,7 +58,7 @@ async function setup(role = 'caregiver') {
     if (req.method() !== 'GET') {
       const body = path === '/attachments' ? { bytes: req.postDataBuffer()?.length, contentType: req.headers()['content-type'] } : req.postData() ? req.postDataJSON() : null
       writes.push({ path, body, key: req.headers()['idempotency-key'] })
-      if (path === '/attachments') { if (!state.photos.length) state.photos.push(structuredClone(photo)); return state.failUpload ? json({ detail: 'synthetic uncertain upload' }, 503) : json(state.photos[0], 201) }
+      if (path === '/attachments') { if (state.rejectUpload) return json({ error_code: 'attachment_format_mismatch', safe_message: '照片格式无法确认，请转换后重试。' }, 415); if (!state.photos.length) state.photos.push(structuredClone(photo)); return state.failUpload ? json({ detail: 'synthetic uncertain upload' }, 503) : json(state.photos[0], 201) }
       if (path.endsWith('/analyze')) return json(state.analysis, 202)
       if (path.endsWith('/review')) {
         if (state.failReview) return json({ detail: 'synthetic uncertain review' }, 503)
@@ -110,6 +111,7 @@ async function setup(role = 'caregiver') {
 const field = (page, path) => page.locator(`[data-field="填写办理内容.${path}"]`).locator('input,textarea,select').first()
 async function noOverflow(page) { const size = await page.evaluate(() => ({ width: innerWidth, scroll: document.documentElement.scrollWidth })); assert.ok(size.scroll <= size.width + 1, JSON.stringify(size)) }
 async function test(name, fn, role) {
+  if (process.env.CHECKLIST_FILTER && !new RegExp(process.env.CHECKLIST_FILTER).test(name)) return
   const env = await setup(role)
   try { await fn(env); results.push({ name, passed: true }); console.log('PASS ' + name) }
   catch (error) { results.push({ name, passed: false, error: String(error.stack), body: await env.page.locator('body').innerText() }); await env.page.screenshot({ path: resolve(output, 'failure-' + results.length + '.png'), fullPage: true }); console.error('FAIL ' + name + ': ' + error.message) }
@@ -195,6 +197,32 @@ try {
     assert.equal(new URL(page.url()).searchParams.get('action'), '/family/summaries/{summary_id}/review')
     await noOverflow(page); assert.equal(writes.length, 0)
   }, 'supervisor')
+  await test('照片按实际字节识别格式，JPEG文件名下的PNG可以上传', async ({ page, writes }) => {
+    await page.goto(base + '/mobile/records/new?elder=ELDER-one')
+    const region = page.getByRole('region', { name: '照片辅助观察', exact: true })
+    await page.waitForFunction(() => document.querySelector('.photo-form input[type="file"]')?.disabled === false)
+    await region.getByLabel('拍照或选择照片').setInputFiles({ name: 'OIP.jpg', mimeType: 'image/jpeg', buffer: png })
+    await region.getByRole('button', { name: '上传并保存照片', exact: true }).click()
+    await region.getByRole('button', { name: '整理可见观察', exact: true }).waitFor()
+    assert.equal(writes.length, 1); assert.equal(writes[0].body.contentType, 'image/png')
+    assert.equal(await region.getByText(/上传结果待核实/).count(), 0)
+  })
+  await test('照片明确拒绝后解除锁定，可换文件重新上传', async ({ page, writes, state }) => {
+    await page.goto(base + '/mobile/records/new?elder=ELDER-one')
+    const region = page.getByRole('region', { name: '照片辅助观察', exact: true })
+    await page.waitForFunction(() => document.querySelector('.photo-form input[type="file"]')?.disabled === false)
+    state.rejectUpload = true
+    await region.getByLabel('拍照或选择照片').setInputFiles({ name: 'first.jpg', mimeType: 'image/jpeg', buffer: jpeg })
+    await region.getByRole('button', { name: '上传并保存照片', exact: true }).click()
+    await region.getByRole('alert').filter({ hasText: '照片格式无法确认' }).waitFor()
+    assert.equal(await region.getByText(/上传结果待核实/).count(), 0)
+    assert.equal(await region.getByLabel('照片说明').isDisabled(), false)
+    state.rejectUpload = false
+    await region.getByLabel('拍照或选择照片').setInputFiles({ name: 'second.png', mimeType: 'image/png', buffer: png })
+    await region.getByRole('button', { name: '上传并保存照片', exact: true }).click()
+    await region.getByRole('button', { name: '整理可见观察', exact: true }).waitFor()
+    assert.equal(writes.length, 2); assert.notEqual(writes[0].key, writes[1].key)
+  })
   await test('照片二进制上传、失败固定请求重试、专业审核和切换老人清理', async ({ page, writes, state, calls }) => {
     await page.goto(base + '/mobile/records/new?elder=ELDER-one')
     const region = page.getByRole('region', { name: '照片辅助观察', exact: true })

@@ -13,7 +13,7 @@ function strings(value: unknown, max: number): value is string[] {
   return Array.isArray(value) && value.length <= max && value.every(text)
 }
 export type PhotoRecovery = {
-  upload?: { key: string; signature: string; query: string; type: 'image/jpeg' | 'image/png' }
+  upload?: { key: string; signature: string; query: string; type: PhotoContentType }
   analyze?: { key: string; attachmentId: string; id?: string }
   review?: { key: string; id: string; payload: Row }
 }
@@ -22,7 +22,7 @@ export function parsePhotoRecovery(raw: string, elderId: string): PhotoRecovery 
   if (saved.upload !== undefined) {
     const item = object(saved.upload), query = new URLSearchParams(String(item.query))
     if (!text(item.key) || !text(item.signature) || typeof item.query !== 'string' || query.get('elder_id') !== elderId ||
-      !aware(query.get('occurred_at')) || !['image/jpeg', 'image/png'].includes(String(item.type))) return invalid()
+      !aware(query.get('occurred_at')) || !['image/jpeg', 'image/png', 'image/webp'].includes(String(item.type))) return invalid()
   }
   if (saved.analyze !== undefined) {
     const item = object(saved.analyze)
@@ -36,8 +36,24 @@ export function parsePhotoRecovery(raw: string, elderId: string): PhotoRecovery 
   return saved as PhotoRecovery
 }
 export function photoFileIssue(file: Pick<File, 'type' | 'size'>): string {
-  if (!['image/jpeg', 'image/png'].includes(file.type)) return '仅支持JPEG和PNG照片。'
+  if (!['', 'application/octet-stream', 'image/jpeg', 'image/jpg', 'image/png', 'image/webp'].includes(file.type)) return '仅支持JPEG、PNG和WebP照片，请转换后上传。'
   return !file.size || file.size > 4 * 1024 * 1024 ? '照片不能为空且不能超过4MiB。' : ''
+}
+export type PhotoContentType = 'image/jpeg' | 'image/png' | 'image/webp'
+export function photoContentType(header: Uint8Array): PhotoContentType {
+  if (header.length >= 3 && header[0] === 0xff && header[1] === 0xd8 && header[2] === 0xff) return 'image/jpeg'
+  if ([137, 80, 78, 71, 13, 10, 26, 10].every((byte, index) => header[index] === byte)) return 'image/png'
+  if (header.length >= 12 && String.fromCharCode(...header.slice(0, 4)) === 'RIFF' && String.fromCharCode(...header.slice(8, 12)) === 'WEBP') return 'image/webp'
+  throw new Error('无法识别照片的实际格式，仅支持JPEG、PNG和WebP。请重新拍摄或转换后上传。')
+}
+export function photoUploadRejected(failure: unknown): boolean {
+  // These upload responses are issued before a file is committed. A timeout,
+  // conflict, lost permission or malformed receipt may conceal an earlier write.
+  const error = failure as { status?: number; code?: string } | null
+  return [413, 415, 422].includes(Number(error?.status)) && [
+    'attachment_size_invalid', 'attachment_format_invalid', 'attachment_format_mismatch',
+    'attachment_dimensions_invalid', 'attachment_normalized_too_large', 'attachment_image_invalid',
+  ].includes(error?.code || '')
 }
 export function validatePhoto(value: unknown, elderId: string, id?: string): Row {
   const row = object(value)

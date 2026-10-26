@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { canReviewPhoto, parsePhotoRecovery, photoFileIssue, reviewedObservations, validatePhoto, validatePhotoAnalysis, validatePhotoPage } from './photo-observation'
+import { canReviewPhoto, parsePhotoRecovery, photoContentType, photoFileIssue, photoUploadRejected, reviewedObservations, validatePhoto, validatePhotoAnalysis, validatePhotoPage } from './photo-observation'
 
 const photo = { id: 'P1', elder_id: 'E1', admission_id: 'A1', revision: 1, status: 'pending_review', occurred_at: '2026-10-25T08:00:00+08:00', created_at: '2026-10-25T08:01:00+08:00', caption: '', reviews: [], links: [], mime: 'image/jpeg', size_bytes: 100 }
 const output = { status: 'visible_observations', observations: ['虚构可见观察'], missing_information: [], verification_items: [], requires_professional_review: true }
@@ -14,9 +14,23 @@ describe('private photo observation contract and human review', () => {
       expect(() => parsePhotoRecovery(raw, 'E2')).toThrow()
     }
   })
-  it('accepts only nonempty JPEG/PNG up to 4MiB', () => {
+  it('accepts nonempty common photo formats and checks unlabeled files by content', () => {
     expect(photoFileIssue({ type: 'image/jpeg', size: 4 * 1024 * 1024 })).toBe('')
-    for (const file of [{ type: 'image/webp', size: 1 }, { type: 'image/png', size: 0 }, { type: 'image/png', size: 4 * 1024 * 1024 + 1 }]) expect(photoFileIssue(file)).toBeTruthy()
+    expect(photoFileIssue({ type: 'image/webp', size: 1 })).toBe('')
+    expect(photoFileIssue({ type: '', size: 1 })).toBe('')
+    for (const file of [{ type: 'image/gif', size: 1 }, { type: 'image/png', size: 0 }, { type: 'image/png', size: 4 * 1024 * 1024 + 1 }]) expect(photoFileIssue(file)).toBeTruthy()
+  })
+  it('detects actual JPEG, PNG or WebP bytes instead of trusting the filename', () => {
+    expect(photoContentType(new Uint8Array([255, 216, 255, 224]))).toBe('image/jpeg')
+    expect(photoContentType(new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]))).toBe('image/png')
+    expect(photoContentType(new TextEncoder().encode('RIFF1234WEBP'))).toBe('image/webp')
+    for (const bytes of [[], [255, 216], [...new TextEncoder().encode('<svg></svg>')]]) expect(() => photoContentType(new Uint8Array(bytes))).toThrow()
+  })
+  it('releases only pre-write validation failures, preserving uncertain requests', () => {
+    for (const [status, code] of [[413, 'attachment_size_invalid'], [415, 'attachment_format_mismatch'], [422, 'attachment_image_invalid']]) expect(photoUploadRejected({ status, code })).toBe(true)
+    for (const status of [0, 401, 403, 404, 409, 413, 415, 422, 429, 500, 502, 503]) expect(photoUploadRejected({ status })).toBe(false)
+    expect(photoUploadRejected({ status: 422, code: 'elder_not_in_care' })).toBe(false)
+    expect(photoUploadRejected(null)).toBe(false)
   })
   it('rejects cross-elder, wrong-id, invalid metadata and duplicate pages', () => {
     expect(validatePhoto(photo, 'E1', 'P1')).toBe(photo)

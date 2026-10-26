@@ -719,7 +719,7 @@ async function authorizedRequest<T>(path: string, init: NonNullable<Parameters<t
       const message = typeof data?.safe_message === 'string'
         ? data.safe_message
         : typeof data?.detail === 'string' ? data.detail : '请求未完成，请核对后重试。'
-      throw new WorkflowRequestError(response.status, `${response.status === 409 ? '资料或状态已变化，请刷新后核对。' : ''}${message}`)
+      throw new WorkflowRequestError(response.status, `${response.status === 409 ? '资料或状态已变化，请刷新后核对。' : ''}${message}`, typeof data?.error_code === 'string' ? data.error_code : undefined)
     }
     return await consume(response)
   } catch (error) {
@@ -733,7 +733,7 @@ async function authorizedRequest<T>(path: string, init: NonNullable<Parameters<t
 export async function requestBinary(
   path: string,
   file: Blob,
-  contentType: 'image/jpeg' | 'image/png',
+  contentType: 'image/jpeg' | 'image/png' | 'image/webp',
   key: string,
   timeoutMs = 90000,
 ): Promise<unknown> {
@@ -759,6 +759,7 @@ export class WorkflowRequestError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    readonly code?: string,
   ) {
     super(message)
   }
