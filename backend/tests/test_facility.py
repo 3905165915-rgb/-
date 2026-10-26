@@ -261,6 +261,21 @@ def test_transfer_into_occupied_bed_rolls_back_every_relation(api):
     assert store.path.read_bytes() == before
 
 
+def test_admission_conflicts_return_actionable_chinese_messages(api):
+    _, store, _ = api
+    state = legacy(api)
+    waiting = elder(api, '王阿姨')
+    before = store.path.read_bytes()
+    occupied = admit(api, waiting, state['bed'], expected=409)
+    assert occupied['error_code'] == 'bed_occupied'
+    assert '已被占用' in occupied['safe_message'] and '空闲床位' in occupied['safe_message']
+    assert store.path.read_bytes() == before
+    duplicate = admit(api, state['elder'], state['bed'], expected=409)
+    assert duplicate['error_code'] == 'elder_already_admitted'
+    assert '已办理入住' in duplicate['safe_message']
+    assert store.path.read_bytes() == before
+
+
 def test_admission_and_profile_revision_conflicts_roll_back(api):
     _, store, _ = api
     state = legacy(api)

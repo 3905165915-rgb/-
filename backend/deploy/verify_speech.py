@@ -7,7 +7,7 @@ from pathlib import Path
 import httpx
 
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--base-url', default='https://99211314.xyz/api/v1')
+parser.add_argument('--base-url', default='https://sdau.fun/api/v1')
 parser.add_argument('--audio', type=Path, required=True, help='Synthetic PCM16 mono 16kHz WAV; never real care audio')
 args = parser.parse_args()
 accounts = {row['username']: row for row in json.loads(Path('/etc/hulaozhijiao/demo-accounts.json').read_text())}

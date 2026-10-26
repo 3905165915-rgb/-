@@ -19,7 +19,7 @@
 - 对外 API：`/api/v1`，由 Nginx 转发
 - 目前实际启用的养老域名 Nginx 配置：`/etc/nginx/sites-available/hulaozhijiao`；更新前检查sites-enabled链接，不要按域名猜配置文件，否则可能重复定义限流区。
 
-本次用户明确授权将 `https://99211314.xyz/` 原站入口替换为养老系统，继续使用现有有效 HTTPS 证书。`activate_nginx.py` 先备份 `/etc/nginx/sites-available/99211314.xyz` 为同目录的 `99211314.xyz.pre-hulaozhijiao`，仅移走指定域名，保留原应用进程及其他域名；`nginx -t` 成功后才 reload。HTTP 和 IP 请求重定向到 HTTPS 域名。
+当前养老系统域名为 `https://sdau.fun/`（同时接收 `www.sdau.fun`），使用 `/etc/letsencrypt/live/sdau.fun/` 下的 HTTPS 证书。`activate_nginx.py` 会优先备份并移走旧域名站点（默认 `/etc/nginx/sites-available/99211314.xyz`，可用 `LEGACY_SITE_CONFIG` 覆盖），然后替换 `hulaozhijiao` 配置；若服务器没有独立旧域名文件，则只替换现有养老配置并保留回滚内容。`nginx -t` 成功后才 reload。HTTP 和 IP 请求重定向到 `https://sdau.fun/`。
 
 部署必须先运行依赖安装、后端测试与前端构建。前端构建环境配置 `VITE_API_BASE_URL=/api/v1`；手机网页使用 Vite `--base=/mobile/`，路由 history 必须读取 `import.meta.env.BASE_URL`。
 

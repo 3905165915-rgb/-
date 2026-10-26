@@ -53,6 +53,18 @@ async def validation_error_handler(request: Request, exc: RequestValidationError
 @app.exception_handler(DomainError)
 async def domain_error_handler(_, exc: DomainError):
     messages = {
+        'bed_occupied': '所选床位已被占用，请选择空闲床位，不能重复入住',
+        'bed_inactive': '所选床位已停用，请选择启用的空闲床位',
+        'bed_relation_inconsistent': '床位占用资料存在冲突，请联系管理员核对，暂不能分配',
+        'elder_already_admitted': '这位老人已办理入住，请查看入住历史；换床或返院请使用入住变动操作',
+        'existing_in_care_elder_requires_legacy_registration': '这位老人已有在院状态但缺少入住单，请核实后选择原有在院老人补登记',
+        'legacy_registration_requires_in_care_elder': '补登记仅用于原有在院或外出老人，待入住老人请选择新入住',
+        'legacy_registration_must_keep_existing_bed': '补登记必须沿用老人的现有床位，不能同时换床',
+        'elder_bed_relation_inconsistent': '老人档案与床位关系不一致，请联系管理员核对后再入住',
+        'duplicate_room_bed_label': '该房间已有同名床位，请修改床位名称或使用现有空床',
+        'admission_is_closed': '该入住单已关闭，请使用当前有效入住单',
+        'admission_relation_inconsistent': '入住单、老人和床位资料不一致，请刷新并联系管理员核对',
+        'different_bed_required': '转床请选择另一张空闲床位',
         'elder_not_in_current_work_scope': '该老人不在你的当前照护范围，请主管安排照护分配或临时支援',
         'elder_not_in_care': '该老人当前不在可提供在院照护的状态，请先核对入住或离院信息',
         'attachment_size_invalid': '照片不能为空且不能超过4MB，请压缩后重试',

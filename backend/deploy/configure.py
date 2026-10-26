@@ -27,7 +27,7 @@ if not ENV.exists():
         'DEEPSEEK_MODEL': 'deepseek-flash',
         'DEEPSEEK_TIMEOUT_SECONDS': '45',
         'AI_FALLBACK_MOCK': 'false',
-        'CORS_ORIGINS': 'https://99211314.xyz,https://www.99211314.xyz,http://localhost:5173,http://localhost:5174',
+        'CORS_ORIGINS': 'https://sdau.fun,https://www.sdau.fun,http://localhost:5173,http://localhost:5174',
     }
     ENV.write_text(''.join(f'{k}={v}\n' for k, v in values.items()), encoding='utf-8')
     ENV.chmod(0o600)
