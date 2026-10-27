@@ -54,6 +54,18 @@ const analysis = {
 }
 
 describe('inline elder record workflow', () => {
+  it('accepts the actual datetime-local input as Beijing time and rejects invalid deadlines', () => {
+    const input = {
+      expectedRevision: 1, preferenceSuggestionIds: [], preferences: [],
+      tasks: [{ suggestionId: 'S1', accepted: true, title: '询问本次意愿',
+        shiftId: 'SHIFT1', assignedTo: 'STAFF1', dueAt: '2099-10-28T14:00',
+        completionCriteria: '记录本人回应' }],
+    }
+    const result = buildRecordAnalysisConfirmation(input)
+    expect(result.accepted_tasks).toMatchObject([{ due_at: '2099-10-28T06:00:00.000Z' }])
+    expect(() => buildRecordAnalysisConfirmation({ ...input,
+      tasks: [{ ...input.tasks[0], dueAt: '明天' }] })).toThrow()
+  })
   it('keeps the formal record when inline analysis failed so the UI can retry that ID', () => {
     const result = validateInlineRecordResponse(
       { record, analysis_status: 'failed', analysis: null },

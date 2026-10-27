@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { chromium } from 'playwright'
 import { mkdir, writeFile } from 'node:fs/promises'
-const base='http://127.0.0.1:5177',api='http://127.0.0.1:8769/api/v1'
+const base=process.env.FAMILY_API_URL || 'http://127.0.0.1:5177',api=process.env.FAMILY_BACKEND_URL || 'http://127.0.0.1:8769/api/v1'
 const out='test-results/family-life';await mkdir(out,{recursive:true})
 const login=await fetch(api+'/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:'family',password:'family-browser-test'})})
 assert.equal(login.status,200,'隔离合成账号应能登录')

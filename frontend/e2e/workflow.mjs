@@ -4,6 +4,8 @@ import { resolve } from 'node:path'
 import { chromium } from 'playwright'
 
 const base = process.env.WORKFLOW_URL || 'http://127.0.0.1:5176'
+// Retained record-form tests explicitly exercise the compatibility view.
+// The current inline workflow is covered by inline-record-real.mjs.
 const testFilter = process.env.WORKFLOW_TEST_FILTER || ''
 const output = resolve('test-results/workflow')
 await mkdir(output, { recursive: true })
@@ -133,7 +135,7 @@ try {
     assert.equal(writes.length, 1)
   })
   await test('未知提交：刷新后复用原请求编号及原文，不重复创建', async ({ page, writes, state }) => {
-    await page.goto(base + '/mobile/records/new')
+    await page.goto(base + '/mobile/records/new?action=compat')
     await page.getByRole('button', { name: '直接填写', exact: true }).click()
     await field(page, 'elder_id').selectOption(elder.id)
     await field(page, 'raw_text').fill('虚构：结果未知，不能重建')
@@ -150,7 +152,7 @@ try {
     assert.deepEqual(writes[0].body, writes[1].body)
   })
   await test('AI503：原文不丢失，人工模式不继承AI猜测', async ({ page, writes }) => {
-    await page.goto(base + '/mobile/records/new?elder=ELDER-test')
+    await page.goto(base + '/mobile/records/new?action=compat&elder=ELDER-test')
     await field(page, 'scene').selectOption('communication')
     await field(page, 'text').fill('明天再看看')
     await submit(page)
@@ -163,7 +165,7 @@ try {
   })
   await test('AI连接中断：保留未核实请求后可人工录入，不自动确认草稿', async ({ page, state, writes }) => {
     state.failAI = 'network'
-    await page.goto(base + '/mobile/records/new?elder=ELDER-test')
+    await page.goto(base + '/mobile/records/new?action=compat&elder=ELDER-test')
     await field(page, 'scene').selectOption('rest')
     await field(page, 'text').fill('今天想休息，明天下午再问我')
     await submit(page)
@@ -176,10 +178,10 @@ try {
     assert.equal(writes.length, 1)
   })
   await test('多窗口版本冲突：旧表单禁止提交并保留独立恢复日志', async ({ page, context }) => {
-    await page.goto(base + '/mobile/records/new?elder=ELDER-test')
+    await page.goto(base + '/mobile/records/new?action=compat&elder=ELDER-test')
     await field(page, 'text').fill('窗口甲原文')
     const other = await context.newPage()
-    await other.goto(base + '/mobile/records/new?elder=ELDER-test')
+    await other.goto(base + '/mobile/records/new?action=compat&elder=ELDER-test')
     await field(other, 'text').fill('窗口乙新原文')
     await page.getByText(/其他窗口已修改此表单/).first().waitFor()
     await field(page, 'text').fill('窗口甲未覆盖的最后输入')
@@ -187,7 +189,7 @@ try {
     assert.ok(await page.evaluate(() => Object.entries(localStorage).some(([key, value]) => key.includes(':writer:') && value.includes('窗口甲未覆盖的最后输入'))))
   })
   await test('记录入口合并：模式切换保留原文，列表往返可恢复输入', async ({ page, writes }) => {
-    await page.goto(base + '/mobile/records/new?elder=ELDER-test')
+    await page.goto(base + '/mobile/records/new?action=compat&elder=ELDER-test')
     for (const name of ['AI原文提取', '情境AI助手', '新建人工记录', '查看正式记录', '记录更正历史'])
       assert.equal(await page.getByRole('button', { name, exact: true }).count(), 0)
     await field(page, 'text').fill('今天想休息，晚些再问本人')
@@ -204,7 +206,7 @@ try {
   })
   await test('统一整理链路：只走上下文整理，人工核对后才保存正式记录', async ({ page, writes, state }) => {
     state.failAI = 200
-    await page.goto(base + '/mobile/records/new?elder=ELDER-test')
+    await page.goto(base + '/mobile/records/new?action=compat&elder=ELDER-test')
     await field(page, 'scene').selectOption('rest')
     await field(page, 'text').fill('虚构：今天想休息')
     await submit(page)
@@ -220,7 +222,7 @@ try {
     assert.deepEqual(writes.map(row => row.path), ['/records/context-extract', '/records/AI-test/confirm'])
   })
   await test('记录详情与历史同处一页，更正通过当前记录上下文进入', async ({ page, requests }) => {
-    await page.goto(base + '/mobile/records/new')
+    await page.goto(base + '/mobile/records/new?action=compat')
     await navigateMenu(page, '记录')
     await page.getByRole('button', { name: '读取当前数据', exact: true }).click()
     await page.locator('.wf-results .wf-select-row').first().click()
@@ -266,7 +268,7 @@ try {
     assert.ok(writes.some(row => row.path.endsWith('/ai-summary')))
   })
   await test('草稿统一入口：列表选择后继续核对，不恢复成旧的新增操作', async ({ page, writes }) => {
-    await page.goto(base + '/mobile/records/new')
+    await page.goto(base + '/mobile/records/new?action=compat')
     await field(page, 'text').fill('未提交的新增内容')
     await navigateMenu(page, '草稿')
     await page.getByRole('button', { name: '读取当前数据', exact: true }).click()
@@ -279,10 +281,10 @@ try {
   })
   await test('旧原文提取的未知请求仍可恢复，不能通过合并入口重复保存', async ({ page, context }) => {
     await context.addInitScript(() => {
-      const key = 'hulao:workflow:v2:' + JSON.stringify(['isolated-caregiver', 'records', {}])
+      const key = 'hulao:workflow:v2:' + JSON.stringify(['isolated-caregiver', 'records', { action: 'compat' }])
       if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify({ version: 1, operation: 'extract_api_v1_records_extract_post', params: {}, body: { elder_id: 'ELDER-test', text: '旧版本未核实原文' }, phase: 'pending', pending: { signature: 'legacy-signature', key: 'legacy-request', path: '/records/extract', method: 'post', payload: { elder_id: 'ELDER-test', text: '旧版本未核实原文' }, retryable: false }, updatedAt: new Date().toISOString() }))
     })
-    await page.goto(base + '/mobile/records/new')
+    await page.goto(base + '/mobile/records/new?action=compat')
     await page.getByText(/本次写入结果待核实/).waitFor()
     assert.equal(await field(page, 'text').inputValue(), '旧版本未核实原文')
     assert.equal(await page.getByRole('button', { name: '直接填写', exact: true }).isDisabled(), true)
@@ -382,7 +384,7 @@ try {
   await test('记录菜单适配：电脑侧栏、手机抽屉、键盘关闭及窄屏无溢出', async ({ page }) => {
     for (const width of [320, 390, 768, 1024, 1440]) {
       await page.setViewportSize({ width, height: 900 })
-      await page.goto(base + '/admin/workflows/records')
+      await page.goto(base + '/admin/workflows/records?action=compat')
       await page.waitForLoadState('networkidle')
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false, 'record width ' + width)
       assert.equal(await page.locator('.wf-actions').count(), 0)

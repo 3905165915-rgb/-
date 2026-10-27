@@ -1,4 +1,5 @@
 import type { Row } from './model'
+import { date } from './workspace-time'
 
 export interface RecordCitation {
   source_field: 'raw_text' | 'observations'
@@ -175,8 +176,13 @@ export function buildRecordAnalysisConfirmation(input: {
     throw new Error('请逐项确认或拒绝每条偏好建议。')
   const acceptedTasks = input.tasks.filter((item) => item.accepted)
   if (acceptedTasks.some((item) => !text(item.title) || !text(item.shiftId) ||
-    !text(item.assignedTo) || !text(item.completionCriteria) || !aware(item.dueAt)))
+    !text(item.assignedTo) || !text(item.completionCriteria) || !text(item.dueAt)))
     throw new Error('已接受的待办需要完整填写标题、班次、责任人、截止时间和完成标准。')
+  // Browser datetime-local inputs have no suffix. Interpret them as Beijing
+  // time, matching the other care forms, before sending an aware API value.
+  const deadlines = acceptedTasks.map((item) => aware(item.dueAt)
+    ? new Date(item.dueAt).toISOString()
+    : date(item.dueAt))
   return {
     expected_revision: input.expectedRevision,
     preference_decisions: input.preferences.map((item) => ({
@@ -184,12 +190,12 @@ export function buildRecordAnalysisConfirmation(input: {
       decision: item.decision,
       ...(item.decision === 'adopt' ? { content: item.content.trim() } : {}),
     })),
-    accepted_tasks: acceptedTasks.map((item) => ({
+    accepted_tasks: acceptedTasks.map((item, index) => ({
       suggestion_id: item.suggestionId,
       title: item.title.trim(),
       shift_id: item.shiftId,
       assigned_to: item.assignedTo,
-      due_at: new Date(item.dueAt).toISOString(),
+      due_at: deadlines[index],
       completion_criteria: item.completionCriteria.trim(),
     })),
   }

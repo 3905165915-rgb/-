@@ -12,7 +12,7 @@ import {
   workspaceStorageKey,
 } from './workspace-action'
 import { useWorkspaceScope } from './workspace-scope'
-import { date } from './workspace-time'
+import { date, localTime } from './workspace-time'
 import { careScenes } from './task-care-context'
 import {
   buildRecordAnalysisConfirmation,
@@ -62,9 +62,7 @@ let stream: MediaStream | undefined
 let deadline: ReturnType<typeof setTimeout> | undefined
 let transcription: AbortController | undefined
 function localDateTime() {
-  return new Date(Date.now() - new Date().getTimezoneOffset() * 60000)
-    .toISOString()
-    .slice(0, 16)
+  return localTime(new Date()).slice(0, 16)
 }
 function alive(ticket: number) {
   return ticket === epoch && scope.valid()
@@ -218,7 +216,7 @@ async function confirm() {
       '/confirm'
     const row = await confirmation.submit(url, payload, validateConfirmation)
     if (row) {
-      notice.value = '本次核对已保存；正式待辦和长期偏好以服务器回执为准。'
+      notice.value = '本次核对已保存；正式待办和长期偏好以服务器回执为准。'
       result.value!.analysis!.status = 'confirmed'
     }
   } catch (failure) {
@@ -515,7 +513,7 @@ onBeforeUnmount(() => {
                   ? '单次意愿'
                   : '频率不明确'
             }}
-            · 表达者：{{ analysis.preferenceSuggestions[index]?.attributedTo }}
+            · 表达者：{{ ({ elder: '老人本人', family: '家属', staff: '工作人员', unknown: '待核实' } as Record<string, string>)[analysis.preferenceSuggestions[index]?.attributedTo || 'unknown'] || '待核实' }}
           </p>
           <label
             >核对决定<select
