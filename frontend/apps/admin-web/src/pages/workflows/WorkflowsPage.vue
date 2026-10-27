@@ -57,10 +57,6 @@ const titles: Record<string, string> = {
               : undefined
         "
       />
-      <details>
-        <summary>记录历史、AI草稿与更正办理</summary>
-        <WorkflowPanel group="records" :context="route.query" />
-      </details>
     </template>
     <template v-else>
       <h1>{{ titles[group] || '业务办理' }}</h1>

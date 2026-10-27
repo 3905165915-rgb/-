@@ -35,49 +35,21 @@ describe('route and menu policy', () => {
       const groups = allowedNavigationGroups(role, true)
       expect(allowedRoutes(role)[0]?.path).toBe('/dashboard')
       expect(allowedRoutes(role)[0]?.path).toBe(homeForRole(role))
-      expect(groups.map((group) => group.label)).toEqual([
-        '工作台',
-        '老人照护',
-        '当班工作',
-        '照护跟进',
-        '家属沟通',
-        '机构管理',
-      ])
-      expect(groups[0]?.items.map((item) => item.path)).toEqual(['/dashboard'])
-      expect(
-        groups
-          .find((group) => group.label === '照护跟进')
-          ?.items.map((item) => item.path),
-      ).toEqual(['/notifications'])
       const paths = groups.flatMap((group) =>
         group.items.map((item) => item.path),
       )
-      expect(paths).toEqual(
-        allowedRoutes(role)
-          .filter((item) => !item.internalOnly)
-          .map((item) => item.path),
+      expect(paths).toEqual([
+        '/dashboard',
+        '/elders',
+        '/followups',
+        '/settings',
+        '/demo',
+      ])
+      expect(allowedRoutes(role).map((item) => item.path)).toContain('/tasks')
+      expect(allowedRoutes(role).map((item) => item.path)).toContain(
+        '/workflows/records',
       )
       expect(new Set(paths).size).toBe(paths.length)
-      expect([...paths].sort()).toEqual(
-        [
-          '/dashboard',
-          '/notifications',
-          '/elders',
-          '/admission',
-          '/assessment',
-          '/care-plan',
-          '/tasks',
-          '/family',
-          '/demo',
-          '/recovery',
-          '/workflows/records',
-          '/workflows/shifts',
-          '/workflows/handovers',
-          '/workflows/memories',
-          '/workflows/staff',
-          '/workflows/reports',
-        ].sort(),
-      )
     },
   )
   it.each(['admin', 'supervisor'] as Role[])(

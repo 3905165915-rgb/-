@@ -186,7 +186,10 @@ watch(
         <ShieldAlert :size="18" aria-hidden="true" />照护安全与事件上报
         <ChevronRight :size="18" aria-hidden="true" />
       </RouterLink>
-      <p class="scope-label">已载入任务统计</p>
+      <p class="scope-label">
+        <RouterLink to="/followups">查看需要跟进的事项</RouterLink>
+        已载入任务统计
+      </p>
       <dl class="work-summary" aria-label="已载入任务统计">
         <div>
           <dd>{{ ready ? statistics.total : '—' }}</dd>

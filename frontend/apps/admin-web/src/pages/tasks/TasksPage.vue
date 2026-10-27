@@ -310,10 +310,11 @@ watch(
                 >
               </RouterLink>
               <span v-else class="muted"
-                >{{ row.elderId }} ·
-                {{
-                  elders.isPending.value ? '档案加载中' : '姓名及床位未提供'
-                }}</span
+                >{{
+                  row.elderName ||
+                  (elders.isPending.value ? '档案加载中' : '老人信息待核对')
+                }}
+                · {{ row.bedLabel || '床位待核对' }}</span
               >
             </template> </el-table-column
           ><el-table-column label="班次 · 责任人" min-width="140">
@@ -396,11 +397,14 @@ watch(
         :assignees="assignees"
         @close="closeTask"
       />
-      <WorkflowPanel
-        group="tasks"
-        title="任务办理与依据核验"
-        @changed="tasks.refetch()"
-      />
+      <details>
+        <summary>转交、条件核验与其他办理</summary>
+        <WorkflowPanel
+          group="tasks"
+          title="任务办理与依据核验"
+          @changed="tasks.refetch()"
+        />
+      </details>
     </template>
   </section>
 </template>

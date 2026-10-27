@@ -1,6 +1,7 @@
 import type { RecordEditor } from './editor'
 import type { HandoverEditor } from './handover-editor'
-import type { AppMode } from './session'
+import { readSession, type AppMode } from './session'
+import { demoBatch } from './demo-batch'
 
 const databaseName = 'hulao-frontend-v2'
 export const stores = [
@@ -14,10 +15,25 @@ export const stores = [
 ] as const
 export type StoreName = (typeof stores)[number]
 let database: Promise<IDBDatabase> | undefined
+let openedBatch = ''
 export function openDatabase(): Promise<IDBDatabase> {
+  const batch = readSession()?.mode === 'api' ? demoBatch() : ''
+  if (openedBatch !== batch) {
+    const old = database
+    database = undefined
+    openedBatch = batch
+    if (old)
+      void old.then(
+        (db) => db.close(),
+        () => undefined,
+      )
+  }
   if (!database)
     database = new Promise((resolve, reject) => {
-      const request = indexedDB.open(databaseName, 2)
+      const request = indexedDB.open(
+        batch ? databaseName + '-' + batch : databaseName,
+        2,
+      )
       request.onupgradeneeded = () => {
         for (const name of stores)
           if (!request.result.objectStoreNames.contains(name))
@@ -452,35 +468,52 @@ export async function finishWriteAttempt(id: string) {
 export function demoRecoveryEntries(): Array<[string, string]> {
   const entries: Array<[string, string]> = []
   try {
-  for (let index = 0; index < localStorage.length; index++) {
-    const name = localStorage.key(index)
-    if (
-      name?.startsWith(journalPrefix) ||
-      name?.startsWith('hulao:working-journal:') ||
-      name?.startsWith('hulao:demo-form:') ||
-      (name?.startsWith('hulao:workflow:v2:') && name.includes('care-plan-guide:demo'))
-    ) {
-      try {
-        const raw = localStorage.getItem(name)
-        const value = JSON.parse(raw || 'null')
-        if (raw && (value?.mode === 'demo' || name.startsWith('hulao:demo-form:') || value?.body?.kind === 'demo')) entries.push([name, raw])
-      } catch {
-        /* Leave unrelated storage alone. */
+    for (let index = 0; index < localStorage.length; index++) {
+      const name = localStorage.key(index)
+      if (
+        name?.startsWith(journalPrefix) ||
+        name?.startsWith('hulao:working-journal:') ||
+        name?.startsWith('hulao:demo-form:') ||
+        (name?.startsWith('hulao:workflow:v2:') &&
+          name.includes('care-plan-guide:demo'))
+      ) {
+        try {
+          const raw = localStorage.getItem(name)
+          const value = JSON.parse(raw || 'null')
+          if (
+            raw &&
+            (value?.mode === 'demo' ||
+              name.startsWith('hulao:demo-form:') ||
+              value?.body?.kind === 'demo')
+          )
+            entries.push([name, raw])
+        } catch {
+          /* Leave unrelated storage alone. */
+        }
       }
     }
+  } catch {
+    /* IDB batch fencing still rejects stale forms if storage is denied. */
   }
-  } catch { /* IDB batch fencing still rejects stale forms if storage is denied. */ }
   return entries
 }
 export function clearDemoJournals(entries = demoRecoveryEntries()) {
   for (const [name, raw] of entries) {
-    try { if (localStorage.getItem(name) === raw) localStorage.removeItem(name) }
-    catch { /* Never turn a committed rebuild into a reported failure. */ }
+    try {
+      if (localStorage.getItem(name) === raw) localStorage.removeItem(name)
+    } catch {
+      /* Never turn a committed rebuild into a reported failure. */
+    }
   }
   try {
-    const keys = Object.keys(sessionStorage).filter(name => name.startsWith('hulao:active-handover:') && name.includes('["demo",'))
+    const keys = Object.keys(sessionStorage).filter(
+      (name) =>
+        name.startsWith('hulao:active-handover:') && name.includes('["demo",'),
+    )
     for (const name of keys) sessionStorage.removeItem(name)
-  } catch { /* Stale pointers are harmless: draft loading checks the epoch. */ }
+  } catch {
+    /* Stale pointers are harmless: draft loading checks the epoch. */
+  }
 }
 
 export async function deletedDraftKeys(store: StoreName, epoch?: string) {

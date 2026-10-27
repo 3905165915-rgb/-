@@ -1,9 +1,15 @@
 <script setup lang="ts">
 const serverWorkflow = ['api'].includes(import.meta.env.VITE_APP_MODE || 'api')
-import WorkflowPanel from '@hulao/shared/workflow'
+import TaskExecution from '../../../../../packages/shared/src/workflow/TaskExecution.vue'
 import TaskCareContext from '@hulao/shared/task-care-context'
 import DemoServiceHints from '../../../../../packages/shared/src/workflow/DemoServiceHints.vue'
-import { computed, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
+const contextRevision = ref(0)
+const taskExecution = ref<{ canClose: () => boolean }>()
+function refreshTaskContext() {
+  tasks.refetch()
+  contextRevision.value++
+}
 import { Clock3, Save, Send, Paperclip } from 'lucide-vue-next'
 import {
   compactReference,
@@ -106,8 +112,12 @@ async function leave() {
     return false
   }
 }
-onBeforeRouteLeave(() => (mode === 'api' ? true : leave()))
-onBeforeRouteUpdate(() => (mode === 'api' ? true : leave()))
+onBeforeRouteLeave(() =>
+  mode === 'api' ? (taskExecution.value?.canClose() ?? true) : leave(),
+)
+onBeforeRouteUpdate(() =>
+  mode === 'api' ? (taskExecution.value?.canClose() ?? true) : leave(),
+)
 async function saveAsNew() {
   await copyAsNew()
   if (saved.value && form.value?.localId && route.query.draft)
@@ -122,11 +132,19 @@ async function saveAsNew() {
     :task-id="String(route.params.id)"
     :mode="mode"
     :session="session"
+    :refresh-key="contextRevision"
+  />
+  <TaskExecution
+    ref="taskExecution"
+    v-if="serverWorkflow"
+    :task-id="String(route.params.id)"
+    @changed="refreshTaskContext"
   />
   <DemoServiceHints v-else :task="task" mobile />
   <section
+    v-if="!serverWorkflow"
     class="task-detail-page"
-    :class="{ 'editor-page': !serverWorkflow && editable }"
+    :class="{ 'editor-page': editable }"
   >
     <p class="page-kicker">任务详情</p>
     <FeedbackState

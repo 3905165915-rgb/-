@@ -1,3 +1,4 @@
+import { businessDay } from '../business-time'
 import type { Row } from './model'
 import { date } from './workspace-time'
 
@@ -19,6 +20,9 @@ export interface RecordAnalysis {
     evidenceText: string
     condition: string | null
     dueText: string | null
+    suggestedAt?: string | null
+    timeMissing?: string[]
+    timeSemantics?: string
   }>
   preferenceSuggestions: Array<{
     id: string
@@ -32,7 +36,7 @@ export interface RecordAnalysis {
 
 export interface InlineRecordResponse {
   record: Row
-  analysisStatus: 'ready' | 'failed' | 'confirmed'
+  analysisStatus: 'ready' | 'failed' | 'confirmed' | 'queued' | 'processing'
   analysis: RecordAnalysis | null
   analysisError?: { code: string; message: string }
 }
@@ -53,9 +57,7 @@ function revision(value: unknown): value is number {
 
 function aware(value: unknown): value is string {
   return (
-    text(value) &&
-    /(Z|[+-]\d{2}:\d{2})$/.test(value) &&
-    Number.isFinite(Date.parse(value))
+    text(value) && /(Z|[+-]\d{2}:\d{2})$/.test(value) && !!businessDay(value)
   )
 }
 
@@ -66,12 +68,14 @@ function citation(value: unknown, record: Row): RecordCitation {
     !text(row.quote)
   )
     throw new Error('分析引用格式异常，请核对服务器原始记录。')
-  const source =
-    row.source_field === 'raw_text'
-      ? record.raw_text
-      : Array.isArray(record.observations)
-        ? record.observations.filter(text).join('\n')
-        : ''
+  // Once a formal record has been corrected, the reviewed observations are
+  // the effective source for every displayed AI citation.  Do not allow a
+  // stale quote from the superseded raw text to survive a correction merely
+  // because the provider labelled it as `raw_text`.
+  const correctedSource = Array.isArray(record.observations)
+    ? record.observations.filter(text).join('\n')
+    : ''
+  const source = correctedSource || String(record.raw_text || '')
   if (typeof source !== 'string' || !source.includes(row.quote))
     throw new Error('分析引用与原始记录不一致，请刷新核实。')
   return {
@@ -97,19 +101,31 @@ export function validateInlineRecordResponse(
     (record.happened_at != null && !aware(record.happened_at))
   )
     throw new Error('正式记录回执异常，请核实保存状态后再操作。')
-  const rawText = record.raw_text as string
+  // Suggestions cite the current corrected observations. Retained original text
+  // must not validate an obsolete statement after a correction.
+  const sourceText =
+    Array.isArray(record.observations) && record.observations.length
+      ? record.observations.filter(text).join('\n')
+      : (record.raw_text as string)
 
   const status = envelope.analysis_status
-  if (!['ready', 'failed', 'confirmed'].includes(String(status)))
+  if (
+    !['ready', 'failed', 'confirmed', 'queued', 'processing'].includes(
+      String(status),
+    )
+  )
     throw new Error('即时分析状态异常，正式记录已保留，请刷新核实。')
-  if (status === 'failed' && envelope.analysis === null) {
+  if (
+    ['failed', 'queued', 'processing'].includes(String(status)) &&
+    envelope.analysis === null
+  ) {
     const failure =
       envelope.analysis_error == null ? null : object(envelope.analysis_error)
     if (failure && (!text(failure.code) || !text(failure.message)))
       throw new Error('分析状态说明格式异常，原记录仍已保存。')
     return {
       record,
-      analysisStatus: 'failed',
+      analysisStatus: status as InlineRecordResponse['analysisStatus'],
       analysis: null,
       ...(failure
         ? {
@@ -168,17 +184,39 @@ export function validateInlineRecordResponse(
       !text(task.id) ||
       !text(task.title) ||
       !text(task.evidence_text) ||
-      !rawText.includes(task.evidence_text) ||
+      !sourceText.includes(task.evidence_text) ||
       (task.condition !== null && !text(task.condition)) ||
       (task.due_text !== null && !text(task.due_text))
     )
       throw new Error('待办建议缺少有效原文依据，请刷新核实。')
+    const proposal =
+      task.time_proposal == null ? null : object(task.time_proposal)
+    if (
+      proposal &&
+      ((proposal.suggested_at != null && !aware(proposal.suggested_at)) ||
+        (proposal.semantics != null &&
+          typeof proposal.semantics !== 'string') ||
+        (proposal.missing != null &&
+          (!Array.isArray(proposal.missing) ||
+            proposal.missing.some((item) => !text(item)))))
+    )
+      throw new Error('待办建议时间格式异常，请核实原文后人工填写。')
     return {
       id: task.id,
       title: task.title,
       evidenceText: task.evidence_text,
       condition: task.condition as string | null,
       dueText: task.due_text as string | null,
+      suggestedAt: task.time_proposal
+        ? String(object(task.time_proposal).suggested_at || '')
+        : null,
+      timeSemantics: task.time_proposal
+        ? String(object(task.time_proposal).semantics || '')
+        : '',
+      timeMissing:
+        task.time_proposal && Array.isArray(object(task.time_proposal).missing)
+          ? (object(task.time_proposal).missing as string[])
+          : [],
     }
   })
   const preferenceSuggestions = row.preference_suggestions.map((item) => {
@@ -193,7 +231,7 @@ export function validateInlineRecordResponse(
         String(preference.attributed_to),
       ) ||
       !text(preference.evidence_text) ||
-      !rawText.includes(preference.evidence_text)
+      !sourceText.includes(preference.evidence_text)
     )
       throw new Error('偏好建议缺少有效原文依据，请刷新核实。')
     return {
@@ -239,6 +277,8 @@ export interface TaskInput {
   assignedTo: string
   dueAt: string
   completionCriteria: string
+  scheduledAt?: string
+  timeChangeReason?: string
 }
 
 export function buildRecordAnalysisConfirmation(input: {
@@ -287,7 +327,17 @@ export function buildRecordAnalysisConfirmation(input: {
       shift_id: item.shiftId,
       assigned_to: item.assignedTo,
       due_at: deadlines[index],
+      ...(item.scheduledAt
+        ? {
+            scheduled_at: aware(item.scheduledAt)
+              ? new Date(item.scheduledAt).toISOString()
+              : date(item.scheduledAt),
+          }
+        : {}),
       completion_criteria: item.completionCriteria.trim(),
+      ...(item.timeChangeReason?.trim()
+        ? { time_change_reason: item.timeChangeReason.trim() }
+        : {}),
     })),
   }
 }

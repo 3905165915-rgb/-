@@ -14,9 +14,8 @@ export async function demoFamilyMembers(): Promise<FamilyMember[]> {
     {
       id: 'family-wang',
       elder_id: first?.id || 'elder-wang',
-      elder_name: first?.name || '王阿姨',
+      elder_name: first?.name || '王爷爷',
     },
-    { id: 'family-li', elder_id: 'elder-family-li', elder_name: '李爷爷' },
   ].map((row) => ({
     ...row,
     admission_id: `admission-${row.id}`,
@@ -30,15 +29,15 @@ export function demoFamilyFeed(member: FamilyMember): FamilyFeed {
     ? [
         [
           '午后的院子',
-          '午后的活动时段，王阿姨在工作人员陪同下到院子里坐了坐，和大家聊起家乡的小院。回房后听了一会儿喜欢的戏曲。',
+          '午后的活动时段，王爷爷在工作人员陪同下到院子里坐了坐，和大家聊起家乡的小院。回房后听了一会儿喜欢的戏曲。',
         ],
         [
           '一段熟悉的旋律',
-          '另一次活动时间，王阿姨选择听戏曲，跟着熟悉的段落轻轻哼唱。工作人员记下了她希望活动音量小一些的想法。',
+          '另一次活动时间，王爷爷选择听戏曲，跟着熟悉的段落轻轻哼唱。工作人员记下了他希望活动音量小一些的想法。',
         ],
         [
           '把心意带到身边',
-          '家属送来的相册已交到王阿姨手中。她翻看了几张旧照片，并请工作人员把相册放在床头方便拿取的位置。',
+          '家属送来的相册已交到王爷爷手中。他翻看了几张旧照片，并请工作人员把相册放在床头方便拿取的位置。',
         ],
       ]
     : [
@@ -91,12 +90,10 @@ export function demoFamilyInsight(feed: FamilyFeed): FamilyInsight {
   return {
     elder_id: feed.elder_id,
     model_status: 'demo',
-    points: feed.items
-      .slice(0, 2)
-      .map((item) => ({
-        text: item.text,
-        citations: [{ source_id: item.id, quote: item.text }],
-      })),
+    points: feed.items.slice(0, 2).map((item) => ({
+      text: item.text,
+      citations: [{ source_id: item.id, quote: item.text }],
+    })),
   }
 }
 export function demoFamilyMessages(member: FamilyMember) {

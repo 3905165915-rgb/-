@@ -16,7 +16,7 @@ export interface InlineRecordEnvelope {
     created_at: string
     happened_at?: string | null
   }
-  analysis_status: 'ready' | 'failed' | 'confirmed'
+  analysis_status: 'ready' | 'failed' | 'confirmed' | 'queued' | 'processing'
   analysis: Record<string, unknown> | null
 }
 

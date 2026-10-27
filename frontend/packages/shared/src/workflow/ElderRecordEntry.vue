@@ -4,6 +4,8 @@ import { request, type Row } from './model'
 import { rows } from './workspace-action'
 import { useWorkspaceScope } from './workspace-scope'
 import ElderQuickRecord from './ElderQuickRecord.vue'
+import WorkflowPanel from './WorkflowPanel.vue'
+const tab = ref('write')
 import './elder-workspace.css'
 const props = defineProps<{ elderId?: string }>()
 const scope = useWorkspaceScope(),
@@ -32,6 +34,8 @@ async function load() {
       selected.value = String(elders.value[0].id)
     if (props.elderId && !selected.value)
       error.value = '当前账号没有这位老人的有效照护资料。'
+    if (!props.elderId && elders.value.length === 1)
+      selected.value = String(elders.value[0].id)
   } catch (failure) {
     if (ticket === epoch && scope.valid())
       error.value = (failure as Error).message
@@ -58,14 +62,29 @@ watch(active, (value) => {
 </script>
 <template>
   <section v-if="active" class="elder-workspace">
-    <h2>快速记录</h2>
+    <h2>记录</h2>
+    <nav class="workspace-actions" aria-label="记录栏目">
+      <button
+        v-for="item in [
+          { key: 'write', label: '写记录' },
+          { key: 'drafts', label: '草稿' },
+          { key: 'history', label: '历史' },
+        ]"
+        :key="item.key"
+        type="button"
+        :aria-pressed="tab === item.key"
+        @click="tab = item.key"
+      >
+        {{ item.label }}
+      </button>
+    </nav>
     <p>选择一次老人，写下本次观察后直接保存。</p>
     <div class="workspace-panel">
       <label
         >老人<select v-model="selected" :disabled="loading || !!elderId">
           <option value="">请选择老人</option>
           <option v-for="row in elders" :key="String(row.id)" :value="row.id">
-            {{ row.name }}{{ row.bed_label ? ' · ' + row.bed_label : '' }}
+            {{ row.name }} · {{ row.bed_label || '床位待核对' }}
           </option>
         </select></label
       >
@@ -83,6 +102,18 @@ watch(active, (value) => {
         进入这位老人的照护记录
       </RouterLink>
     </div>
-    <ElderQuickRecord v-if="selected" :key="selected" :elder-id="selected" />
+    <ElderQuickRecord
+      v-if="selected && tab === 'write'"
+      :key="selected"
+      :elder-id="selected"
+    />
+    <WorkflowPanel
+      v-if="selected && tab !== 'write'"
+      :key="selected + tab"
+      group="records"
+      :context="{ elder_id: selected }"
+      :initial-action="tab === 'drafts' ? '/records/drafts' : '/records'"
+      auto-read
+    />
   </section>
 </template>

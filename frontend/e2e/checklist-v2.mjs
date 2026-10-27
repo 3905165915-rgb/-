@@ -641,6 +641,7 @@ try {
     calls,
   }) => {
     await page.goto(base + '/mobile/elders/ELDER-one?section=records')
+    await page.getByText('完整照护过程', { exact: true }).click()
     const activity = page.getByRole('region', { name: '老人动态', exact: true })
     await activity.getByText('虚构人工观察1', { exact: true }).waitFor()
     await activity

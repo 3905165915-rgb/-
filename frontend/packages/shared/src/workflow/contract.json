@@ -191,7 +191,7 @@
       "properties": {
         "expected_revision": {
           "type": "integer",
-          "minimum": 1.0,
+          "minimum": 1,
           "title": "Expected Revision"
         }
       },
@@ -204,12 +204,12 @@
       "properties": {
         "expected_revision": {
           "type": "integer",
-          "minimum": 1.0,
+          "minimum": 1,
           "title": "Expected Revision"
         },
         "expected_elder_revision": {
           "type": "integer",
-          "minimum": 1.0,
+          "minimum": 1,
           "title": "Expected Elder Revision"
         },
         "action": {
@@ -240,7 +240,7 @@
           "anyOf": [
             {
               "type": "integer",
-              "minimum": 1.0
+              "minimum": 1
             },
             {
               "type": "null"
@@ -263,7 +263,7 @@
       "properties": {
         "expected_elder_revision": {
           "type": "integer",
-          "minimum": 1.0,
+          "minimum": 1,
           "title": "Expected Elder Revision"
         },
         "bed_id": {
@@ -274,7 +274,7 @@
         },
         "expected_bed_revision": {
           "type": "integer",
-          "minimum": 1.0,
+          "minimum": 1,
           "title": "Expected Bed Revision"
         },
         "kind": {
@@ -376,7 +376,7 @@
       "properties": {
         "expected_revision": {
           "type": "integer",
-          "minimum": 1.0,
+          "minimum": 1,
           "title": "Expected Revision"
         },
         "action": {
@@ -446,7 +446,7 @@
       "properties": {
         "expected_revision": {
           "type": "integer",
-          "minimum": 1.0,
+          "minimum": 1,
           "title": "Expected Revision"
         },
         "reason": {
@@ -669,6 +669,45 @@
     },
     "CareTask": {
       "properties": {
+        "elder_name": {
+          "type": "string",
+          "title": "Elder Name",
+          "default": ""
+        },
+        "bed_label": {
+          "type": "string",
+          "title": "Bed Label",
+          "default": ""
+        },
+        "assignee_name": {
+          "type": "string",
+          "title": "Assignee Name",
+          "default": ""
+        },
+        "shift_name": {
+          "type": "string",
+          "title": "Shift Name",
+          "default": ""
+        },
+        "allowed_actions": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "title": "Allowed Actions"
+        },
+        "display_snapshot": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Display Snapshot"
+        },
         "id": {
           "type": "string",
           "title": "Id"
@@ -680,6 +719,17 @@
         "title": {
           "type": "string",
           "title": "Title"
+        },
+        "completion_criteria": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Completion Criteria"
         },
         "due_at": {
           "anyOf": [
@@ -727,6 +777,56 @@
             }
           ],
           "title": "Source Record Id"
+        },
+        "source_advice_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Source Advice Id"
+        },
+        "source_type": {
+          "type": "string",
+          "enum": ["manual", "record", "care_plan", "handover"],
+          "title": "Source Type",
+          "default": "manual"
+        },
+        "source_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Source Id"
+        },
+        "source_revision": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Source Revision"
+        },
+        "source_handover_item_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Source Handover Item Id"
         },
         "continuity_key": {
           "anyOf": [
@@ -955,6 +1055,18 @@
             }
           ],
           "title": "Replaces Task Id"
+        },
+        "time_confirmation": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Time Confirmation"
         }
       },
       "type": "object",
@@ -984,7 +1096,7 @@
       "properties": {
         "expected_revision": {
           "type": "integer",
-          "minimum": 1.0,
+          "minimum": 1,
           "title": "Expected Revision"
         },
         "expected_fingerprint": {
@@ -1031,7 +1143,7 @@
       "properties": {
         "expected_revision": {
           "type": "integer",
-          "minimum": 1.0,
+          "minimum": 1,
           "title": "Expected Revision"
         },
         "expected_fingerprint": {
@@ -1270,7 +1382,7 @@
       "properties": {
         "expected_revision": {
           "type": "integer",
-          "minimum": 1.0,
+          "minimum": 1,
           "title": "Expected Revision"
         },
         "expected_fingerprint": {
@@ -1343,7 +1455,7 @@
       "properties": {
         "expected_task_revision": {
           "type": "integer",
-          "minimum": 1.0,
+          "minimum": 1,
           "title": "Expected Task Revision"
         },
         "outcome": {
@@ -1388,7 +1500,7 @@
       "properties": {
         "expected_task_revision": {
           "type": "integer",
-          "minimum": 1.0,
+          "minimum": 1,
           "title": "Expected Task Revision"
         },
         "reason": {
@@ -1407,7 +1519,7 @@
       "properties": {
         "expected_task_revision": {
           "type": "integer",
-          "minimum": 1.0,
+          "minimum": 1,
           "title": "Expected Task Revision"
         },
         "criterion": {
@@ -1517,7 +1629,7 @@
         },
         "expected_revision": {
           "type": "integer",
-          "minimum": 1.0,
+          "minimum": 1,
           "title": "Expected Revision"
         }
       },
@@ -1594,6 +1706,11 @@
             }
           ],
           "title": "Bed Id"
+        },
+        "bed_label": {
+          "type": "string",
+          "title": "Bed Label",
+          "default": ""
         },
         "status": {
           "type": "string",
@@ -1738,7 +1855,7 @@
       "properties": {
         "expected_revision": {
           "type": "integer",
-          "minimum": 1.0,
+          "minimum": 1,
           "title": "Expected Revision"
         },
         "reason": {
@@ -1860,7 +1977,7 @@
       "properties": {
         "expected_revision": {
           "type": "integer",
-          "minimum": 1.0,
+          "minimum": 1,
           "title": "Expected Revision"
         },
         "active": {
@@ -1883,7 +2000,7 @@
       "properties": {
         "expected_revision": {
           "type": "integer",
-          "minimum": 1.0,
+          "minimum": 1,
           "title": "Expected Revision"
         },
         "reason": {
@@ -1922,7 +2039,7 @@
       "properties": {
         "expected_revision": {
           "type": "integer",
-          "minimum": 1.0,
+          "minimum": 1,
           "title": "Expected Revision"
         },
         "reason": {
@@ -2006,7 +2123,7 @@
       "properties": {
         "expected_revision": {
           "type": "integer",
-          "minimum": 1.0,
+          "minimum": 1,
           "title": "Expected Revision"
         },
         "summary": {
@@ -2101,12 +2218,12 @@
       "properties": {
         "expected_revision": {
           "type": "integer",
-          "minimum": 1.0,
+          "minimum": 1,
           "title": "Expected Revision"
         },
         "expected_rectification_revision": {
           "type": "integer",
-          "minimum": 1.0,
+          "minimum": 1,
           "title": "Expected Rectification Revision"
         },
         "assigned_to": {
@@ -2142,7 +2259,7 @@
       "properties": {
         "expected_revision": {
           "type": "integer",
-          "minimum": 1.0,
+          "minimum": 1,
           "title": "Expected Revision"
         },
         "category": {
@@ -2412,7 +2529,7 @@
         },
         "source_revision": {
           "type": "integer",
-          "minimum": 1.0,
+          "minimum": 1,
           "title": "Source Revision"
         },
         "source_field": {
@@ -2493,13 +2610,13 @@
         },
         "candidate_index": {
           "type": "integer",
-          "maximum": 9.0,
-          "minimum": 0.0,
+          "maximum": 9,
+          "minimum": 0,
           "title": "Candidate Index"
         },
         "expected_record_revision": {
           "type": "integer",
-          "minimum": 1.0,
+          "minimum": 1,
           "title": "Expected Record Revision"
         },
         "valid_from": {
@@ -2742,7 +2859,7 @@
         },
         "expected_revision": {
           "type": "integer",
-          "minimum": 1.0,
+          "minimum": 1,
           "title": "Expected Revision"
         },
         "reason": {
@@ -2806,7 +2923,7 @@
         },
         "source_revision": {
           "type": "integer",
-          "minimum": 1.0,
+          "minimum": 1,
           "title": "Source Revision"
         },
         "source_field": {
@@ -2859,7 +2976,7 @@
         },
         "expected_revision": {
           "type": "integer",
-          "minimum": 1.0,
+          "minimum": 1,
           "title": "Expected Revision"
         },
         "reason": {
@@ -2943,7 +3060,7 @@
         },
         "expected_assessment_revision": {
           "type": "integer",
-          "minimum": 1.0,
+          "minimum": 1,
           "title": "Expected Assessment Revision"
         },
         "title": {
@@ -3009,7 +3126,7 @@
       "properties": {
         "expected_revision": {
           "type": "integer",
-          "minimum": 1.0,
+          "minimum": 1,
           "title": "Expected Revision"
         },
         "service_date": {
@@ -3086,8 +3203,8 @@
         "weekdays": {
           "items": {
             "type": "integer",
-            "maximum": 7.0,
-            "minimum": 1.0
+            "maximum": 7,
+            "minimum": 1
           },
           "type": "array",
           "maxItems": 7,
@@ -3097,15 +3214,15 @@
         },
         "every_n_days": {
           "type": "integer",
-          "maximum": 30.0,
-          "minimum": 1.0,
+          "maximum": 30,
+          "minimum": 1,
           "title": "Every N Days",
           "default": 1
         },
         "window_minutes": {
           "type": "integer",
-          "maximum": 240.0,
-          "minimum": 1.0,
+          "maximum": 240,
+          "minimum": 1,
           "title": "Window Minutes",
           "default": 60
         },
@@ -3132,7 +3249,7 @@
       "properties": {
         "expected_revision": {
           "type": "integer",
-          "minimum": 1.0,
+          "minimum": 1,
           "title": "Expected Revision"
         },
         "previous_task_id": {
@@ -3143,7 +3260,7 @@
         },
         "expected_task_revision": {
           "type": "integer",
-          "minimum": 1.0,
+          "minimum": 1,
           "title": "Expected Task Revision"
         },
         "shift_id": {
@@ -3181,7 +3298,7 @@
       "properties": {
         "expected_revision": {
           "type": "integer",
-          "minimum": 1.0,
+          "minimum": 1,
           "title": "Expected Revision"
         },
         "action": {
@@ -3348,7 +3465,7 @@
       "properties": {
         "expected_revision": {
           "type": "integer",
-          "minimum": 1.0,
+          "minimum": 1,
           "title": "Expected Revision"
         },
         "assigned_to": {
@@ -3378,12 +3495,12 @@
       "properties": {
         "expected_revision": {
           "type": "integer",
-          "minimum": 1.0,
+          "minimum": 1,
           "title": "Expected Revision"
         },
         "expected_incident_revision": {
           "type": "integer",
-          "minimum": 1.0,
+          "minimum": 1,
           "title": "Expected Incident Revision"
         },
         "decision": {
@@ -3412,12 +3529,12 @@
       "properties": {
         "expected_revision": {
           "type": "integer",
-          "minimum": 1.0,
+          "minimum": 1,
           "title": "Expected Revision"
         },
         "expected_incident_revision": {
           "type": "integer",
-          "minimum": 1.0,
+          "minimum": 1,
           "title": "Expected Incident Revision"
         },
         "result": {
@@ -3530,7 +3647,7 @@
         },
         "revision": {
           "type": "integer",
-          "minimum": 1.0,
+          "minimum": 1,
           "title": "Revision"
         },
         "field": {
@@ -3621,7 +3738,7 @@
       "properties": {
         "expected_revision": {
           "type": "integer",
-          "minimum": 1.0,
+          "minimum": 1,
           "title": "Expected Revision"
         },
         "reason": {
@@ -3646,7 +3763,7 @@
       "properties": {
         "expected_revision": {
           "type": "integer",
-          "minimum": 1.0,
+          "minimum": 1,
           "title": "Expected Revision"
         },
         "reason": {
@@ -3753,7 +3870,7 @@
       "properties": {
         "expected_revision": {
           "type": "integer",
-          "minimum": 1.0,
+          "minimum": 1,
           "title": "Expected Revision"
         },
         "reason": {
@@ -3914,7 +4031,7 @@
       "properties": {
         "expected_task_revision": {
           "type": "integer",
-          "minimum": 1.0,
+          "minimum": 1,
           "title": "Expected Task Revision"
         },
         "memory_id": {
@@ -3925,7 +4042,7 @@
         },
         "expected_memory_revision": {
           "type": "integer",
-          "minimum": 1.0,
+          "minimum": 1,
           "title": "Expected Memory Revision"
         },
         "scene": {
@@ -4113,7 +4230,7 @@
       "properties": {
         "expected_task_revision": {
           "type": "integer",
-          "minimum": 1.0,
+          "minimum": 1,
           "title": "Expected Task Revision"
         },
         "reason": {
@@ -4137,7 +4254,7 @@
         },
         "expected_revision": {
           "type": "integer",
-          "minimum": 1.0,
+          "minimum": 1,
           "title": "Expected Revision"
         },
         "assigned_to": {
@@ -4187,7 +4304,7 @@
       "properties": {
         "expected_revision": {
           "type": "integer",
-          "minimum": 1.0,
+          "minimum": 1,
           "title": "Expected Revision"
         },
         "assigned_to": {

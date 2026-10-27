@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import WorkflowPanel from '@hulao/shared/workflow'
+import TaskExecution from '../../../../packages/shared/src/workflow/TaskExecution.vue'
 import TaskCareContext from '@hulao/shared/task-care-context'
 import DemoServiceHints from '../../../../packages/shared/src/workflow/DemoServiceHints.vue'
 import { computed, ref, watch } from 'vue'
@@ -14,6 +14,11 @@ import {
   taskPrimaryLabel,
   taskTime,
 } from '../composables/task-presentation'
+const contextRevision = ref(0)
+function refreshTaskContext() {
+  queryClient.invalidateQueries()
+  contextRevision.value++
+}
 const serverWorkflow = ['api'].includes(import.meta.env.VITE_APP_MODE || 'api')
 const props = defineProps<{
   task: Task | null
@@ -98,6 +103,30 @@ async function saveAsNew() {
 </script>
 <template>
   <el-drawer
+    v-if="serverWorkflow"
+    :model-value="!!task"
+    title="处理任务"
+    size="min(800px, 100vw)"
+    :close-on-click-modal="false"
+    :before-close="close"
+  >
+    <TaskCareContext
+      v-if="task"
+      :task-id="task.id"
+      :mode="mode"
+      :session="session"
+      :refresh-key="contextRevision"
+    />
+    <TaskExecution
+      v-if="task"
+      ref="workflowPanel"
+      :key="task.id"
+      :task-id="task.id"
+      @changed="refreshTaskContext"
+    />
+  </el-drawer>
+  <el-drawer
+    v-else
     :model-value="!!task"
     :title="task ? taskPrimaryLabel(task) : '任务详情'"
     :size="serverWorkflow ? 'min(800px, 100vw)' : 'min(560px, 100vw)'"

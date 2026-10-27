@@ -512,3 +512,10 @@ describe('bounded read-only task care context', () => {
     expect(sameCareSession(null, null)).toBe(false)
   })
 })
+
+
+it('uses only an explicit plan scene, never a scene guessed from the task title', async () => {
+  expect(parseTaskContext({...task, source_plan_snapshot:{item:{scene:'activity'}}},task.id).service_scene).toBe('activity')
+  expect(parseTaskContext({...task, title:'活动安排'},task.id).service_scene).toBeUndefined()
+  expect(parseTaskContext({...task, source_plan_snapshot:{item:{scene:'invalid'}}},task.id).service_scene).toBeUndefined()
+})

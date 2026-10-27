@@ -228,3 +228,56 @@ describe('inline elder record workflow', () => {
     })
   })
 })
+
+it('validates suggestions against corrected observations instead of superseded raw text', () => {
+  const corrected = {
+    ...record,
+    status: 'corrected',
+    raw_text: '老人过去说喜欢高音量音乐。',
+    observations: [record.raw_text],
+  }
+  expect(
+    validateInlineRecordResponse(
+      { record: corrected, analysis_status: 'ready', analysis },
+      record.elder_id,
+    ).analysis?.taskSuggestions,
+  ).toHaveLength(1)
+  const oldOnly = {
+    ...analysis,
+    preference_suggestions: [
+      {
+        ...analysis.preference_suggestions[0],
+        evidence_text: '喜欢高音量音乐',
+      },
+    ],
+  }
+  expect(() =>
+    validateInlineRecordResponse(
+      { record: corrected, analysis_status: 'ready', analysis: oldOnly },
+      record.elder_id,
+    ),
+  ).toThrow('偏好建议缺少有效原文依据')
+})
+
+it('rejects invalid server-proposed dates before they can enter datetime inputs', () => {
+  for (const time_proposal of [
+    { suggested_at: '2026-02-30T10:00:00+08:00' },
+    { suggested_at: '不是时间' },
+    { missing: [7] },
+  ])
+    expect(() =>
+      validateInlineRecordResponse(
+        {
+          record,
+          analysis_status: 'ready',
+          analysis: {
+            ...analysis,
+            task_suggestions: [
+              { ...analysis.task_suggestions[0], time_proposal },
+            ],
+          },
+        },
+        record.elder_id,
+      ),
+    ).toThrow('时间格式异常')
+})

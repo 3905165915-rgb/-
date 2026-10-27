@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, watch } from 'vue'
 import { readSession, type AppMode, type FrontendSession } from '../session'
-import { request, display } from './model'
+import { request } from './model'
+import { workspaceDate } from './workspace-action'
 import {
   careScenes,
   contextDisplayLimit,
@@ -11,6 +12,7 @@ import {
 
 const props = defineProps<{
   taskId: string
+  refreshKey?: number
   mode: AppMode
   session: FrontendSession | null
 }>()
@@ -83,6 +85,7 @@ function checkSession() {
 watch(
   () => [
     props.taskId,
+    props.refreshKey,
     props.mode,
     props.session?.mode,
     props.session?.accountKey,
@@ -143,51 +146,57 @@ onBeforeUnmount(() => {
       未找到任务，无法查询照护依据。
     </p>
     <template v-else-if="task">
-      <h3 class="tcc-task-title">
-        {{ task.title }}
-      </h3>
-      <dl class="tcc-meta">
-        <dt>状态</dt>
-        <dd>{{ statuses[task.status] || task.status }}</dd>
-        <dt>老人</dt>
-        <dd>
-          <template v-if="resident">
-            {{ resident.name }} ·
-            {{
-              resident.status === 'pending'
-                ? '待入住'
-                : statuses[resident.status] || resident.status
-            }}
+      <details class="tcc-band">
+        <summary>任务详情与执行要求</summary>
+        <h3 class="tcc-task-title">
+          {{ task.title }}
+        </h3>
+        <dl class="tcc-meta">
+          <dt>状态</dt>
+          <dd>{{ statuses[task.status] || task.status }}</dd>
+          <dt>老人</dt>
+          <dd>
+            <template v-if="task.elder_name"
+              >{{ task.elder_name }} ·
+              {{ task.bed_label || '历史床位待核对' }}</template
+            >
+            <template v-else-if="resident">
+              {{ resident.name }} ·
+              {{
+                resident.status === 'pending'
+                  ? '待入住'
+                  : statuses[resident.status] || resident.status
+              }}
+            </template>
+            <span v-else>
+              {{
+                state.resident.status === 'loading'
+                  ? '正在读取老人资料…'
+                  : '老人资料未载入'
+              }}</span
+            >
+          </dd>
+          <dt>负责人</dt>
+          <dd>{{ task.assignee_name || '未分配' }}</dd>
+          <dt>截止时间</dt>
+          <dd>{{ workspaceDate(task.due_at) }}</dd>
+          <template v-if="task.condition">
+            <dt>执行条件</dt>
+            <dd>{{ task.condition }}</dd>
           </template>
-          <span v-else>
-            {{
-              state.resident.status === 'loading'
-                ? '正在读取老人资料…'
-                : '老人资料未载入'
-            }}</span
-          >
-        </dd>
-        <dt>负责人</dt>
-        <dd>
-          {{ task.assigned_to ? '已分配，可在下方任务信息查看' : '未分配' }}
-        </dd>
-        <dt>截止时间</dt>
-        <dd>{{ display(task.due_at, 'due_at') }}</dd>
-        <template v-if="task.condition">
-          <dt>执行条件</dt>
-          <dd>{{ task.condition }}</dd>
-        </template>
-        <dt>完成标准</dt>
-        <dd>{{ task.completion_criteria || '未提供，请核对具体任务要求' }}</dd>
-      </dl>
-      <p
-        v-if="state.resident.status === 'error'"
-        class="tcc-error"
-        role="alert"
-      >
-        {{ state.resident.message }}
-      </p>
-
+          <dt>完成标准</dt>
+          <dd>
+            {{ task.completion_criteria || '未提供，请核对具体任务要求' }}
+          </dd>
+        </dl>
+        <p
+          v-if="state.resident.status === 'error'"
+          class="tcc-error"
+          role="alert"
+        >
+          {{ state.resident.message }}
+        </p>
+      </details>
       <details
         :key="task.id + '-source'"
         class="tcc-band"
@@ -267,9 +276,10 @@ onBeforeUnmount(() => {
         :key="task.id + '-memories'"
         class="tcc-band"
         aria-label="场景适用的确认记忆"
+        open
       >
         <summary>
-          个性化照护提示 <span class="tcc-muted">按服务场景展开查看</span>
+          个性化照护提示 <span class="tcc-muted">当前服务相关提示</span>
         </summary>
         <label class="tcc-scene"
           >服务场景

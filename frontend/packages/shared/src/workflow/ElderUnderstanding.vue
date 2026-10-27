@@ -194,119 +194,134 @@ defineExpose({ refresh: load })
         刷新
       </button>
     </header>
-    <p v-if="loading" role="status">正在读取已确认资料与近期观察…</p>
-    <p v-if="error || saveError" role="alert" class="workspace-error">
-      {{ error || saveError }}
-    </p>
-    <button v-if="pending" type="button" :disabled="busy" @click="retry">
-      核实并重试原决定
-    </button>
-    <div class="understanding-groups">
-      <section
-        v-for="item in grouped"
-        :key="item.key"
-        class="understanding-group"
-      >
-        <h4>{{ item.label }}</h4>
-        <h5>已确认</h5>
-        <p v-if="!item.confirmed.length" class="muted">尚无已确认资料</p>
-        <article
-          v-for="row in item.confirmed"
-          :key="String(row.id)"
-          class="understanding-card confirmed"
-        >
-          <strong>{{ row.content }}</strong
-          ><span class="workspace-badge">已人工确认</span>
-          <details>
-            <summary>查看原文依据</summary>
-            <blockquote v-for="(source, i) in citations(row)" :key="i">
-              {{ source.quote }}
-              <footer>
-                {{ source.source_id }} · {{ workspaceDate(source.happened_at) }}
-              </footer>
-            </blockquote>
-          </details>
-        </article>
-        <h5>近期观察 · 尚待核实</h5>
-        <p v-if="!item.observations.length" class="muted">暂无近期观察</p>
-        <article
-          v-for="row in item.observations"
-          :key="String(row.id)"
-          class="understanding-card"
-        >
-          <p>{{ row.text }}</p>
-          <p class="workspace-warning">
-            {{ row.label
-            }}{{
-              row.kind === 'conflict'
-                ? '；不同记录存在差异，请询问本人并补充观察'
-                : row.kind === 'temporary' || row.kind === 'temporary_wish'
-                  ? '；临时意愿，只适用于当次情况'
-                  : ''
-            }}
-          </p>
-          <details>
-            <summary>查看原文依据（{{ citations(row).length }} 条）</summary>
-            <blockquote v-for="(source, i) in citations(row)" :key="i">
-              {{ source.quote }}
-              <footer>
-                {{ source.source_id }} · {{ workspaceDate(source.happened_at) }}
-              </footer>
-            </blockquote>
-          </details>
-          <template v-if="management">
-            <label v-if="editing === row.id"
-              >核对后的内容<textarea
-                v-model="content[String(row.id)]"
-                rows="3"
-                maxlength="1000"
-                :disabled="busy || !!pending"
-              />
-            </label>
-            <div class="workspace-actions">
-              <button
-                v-if="row.can_adopt === true"
-                type="button"
-                :disabled="busy || !!pending"
-                @click="decide(row, 'adopt')"
-              >
-                {{
-                  editing === row.id ? '确认修改并采用' : '采用为已确认资料'
-                }}</button
-              ><button
-                v-if="row.can_adopt === true && editing !== row.id"
-                type="button"
-                :disabled="busy || !!pending"
-                @click="editObservation(row)"
-              >
-                修改后采用</button
-              ><button
-                type="button"
-                :disabled="busy || !!pending"
-                @click="decide(row, 'reject')"
-              >
-                不采用
-              </button>
-            </div>
-            <p v-if="row.can_adopt !== true" class="muted">
-              临时意愿、冲突、照护关注或已变化依据不能直接采用为长期偏好。
-            </p>
-          </template>
-        </article>
-      </section>
-    </div>
-    <div v-if="needsReview.length">
-      <p class="workspace-warning">
-        {{ needsReview.length }} 项既有资料需要复核，未计入当前已确认资料。
+    <section
+      v-if="confirmed.length"
+      class="workspace-panel"
+      aria-label="照护要点"
+    >
+      <h4>先了解这几件事</h4>
+      <ul>
+        <li v-for="row in confirmed.slice(0, 5)" :key="String(row.id)">
+          {{ row.content }}
+        </li>
+      </ul>
+    </section>
+    <details>
+      <summary>查看分类资料、原文与逐项核对</summary>
+      <p v-if="loading" role="status">正在读取已确认资料与近期观察…</p>
+      <p v-if="error || saveError" role="alert" class="workspace-error">
+        {{ error || saveError }}
       </p>
-      <button type="button" @click="reviewing = !reviewing">
-        {{ reviewing ? '收起资料复核' : '在本页办理既有资料复核' }}</button
-      ><ElderMemories
-        v-if="reviewing"
-        :key="elderId"
-        :elder-id="elderId"
-        :record-path="recordPath"
-      />
-    </div>
+      <button v-if="pending" type="button" :disabled="busy" @click="retry">
+        核实并重试原决定
+      </button>
+      <div class="understanding-groups">
+        <section
+          v-for="item in grouped"
+          :key="item.key"
+          class="understanding-group"
+        >
+          <h4>{{ item.label }}</h4>
+          <h5>已确认</h5>
+          <p v-if="!item.confirmed.length" class="muted">尚无已确认资料</p>
+          <article
+            v-for="row in item.confirmed"
+            :key="String(row.id)"
+            class="understanding-card confirmed"
+          >
+            <strong>{{ row.content }}</strong
+            ><span class="workspace-badge">已人工确认</span>
+            <details>
+              <summary>查看原文依据</summary>
+              <blockquote v-for="(source, i) in citations(row)" :key="i">
+                {{ source.quote }}
+                <footer>
+                  {{ workspaceDate(source.happened_at) }}
+                </footer>
+              </blockquote>
+            </details>
+          </article>
+          <h5>近期观察 · 尚待核实</h5>
+          <p v-if="!item.observations.length" class="muted">暂无近期观察</p>
+          <article
+            v-for="row in item.observations"
+            :key="String(row.id)"
+            class="understanding-card"
+          >
+            <p>{{ row.text }}</p>
+            <p class="workspace-warning">
+              {{ row.label
+              }}{{
+                row.kind === 'conflict'
+                  ? '；不同记录存在差异，请询问本人并补充观察'
+                  : row.kind === 'temporary' || row.kind === 'temporary_wish'
+                    ? '；临时意愿，只适用于当次情况'
+                    : ''
+              }}
+            </p>
+            <details>
+              <summary>查看原文依据（{{ citations(row).length }} 条）</summary>
+              <blockquote v-for="(source, i) in citations(row)" :key="i">
+                {{ source.quote }}
+                <footer>
+                  {{ workspaceDate(source.happened_at) }}
+                </footer>
+              </blockquote>
+            </details>
+            <template v-if="management">
+              <label v-if="editing === row.id"
+                >核对后的内容<textarea
+                  v-model="content[String(row.id)]"
+                  rows="3"
+                  maxlength="1000"
+                  :disabled="busy || !!pending"
+                />
+              </label>
+              <div class="workspace-actions">
+                <button
+                  v-if="row.can_adopt === true"
+                  type="button"
+                  :disabled="busy || !!pending"
+                  @click="decide(row, 'adopt')"
+                >
+                  {{
+                    editing === row.id ? '确认修改并采用' : '采用为已确认资料'
+                  }}</button
+                ><button
+                  v-if="row.can_adopt === true && editing !== row.id"
+                  type="button"
+                  :disabled="busy || !!pending"
+                  @click="editObservation(row)"
+                >
+                  修改后采用</button
+                ><button
+                  type="button"
+                  :disabled="busy || !!pending"
+                  @click="decide(row, 'reject')"
+                >
+                  不采用
+                </button>
+              </div>
+              <p v-if="row.can_adopt !== true" class="muted">
+                临时意愿、冲突、照护关注或已变化依据不能直接采用为长期偏好。
+              </p>
+            </template>
+          </article>
+        </section>
+      </div>
+      <div v-if="needsReview.length">
+        <p class="workspace-warning">
+          {{ needsReview.length }} 项既有资料需要复核，未计入当前已确认资料。
+        </p>
+        <button type="button" @click="reviewing = !reviewing">
+          {{ reviewing ? '收起资料复核' : '在本页办理既有资料复核' }}</button
+        ><ElderMemories
+          v-if="reviewing"
+          :key="elderId"
+          :elder-id="elderId"
+          :record-path="recordPath"
+        />
+      </div>
+    </details>
   </section>
 </template>

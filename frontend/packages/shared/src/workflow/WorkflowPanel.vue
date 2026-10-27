@@ -92,6 +92,7 @@ const props = withDefaults(
     initialAction?: string
     autoRead?: boolean
     taskCreation?: boolean
+    focused?: boolean
   }>(),
   {
     title: '',
@@ -99,6 +100,7 @@ const props = withDefaults(
     initialAction: '',
     autoRead: false,
     taskCreation: false,
+    focused: false,
   },
 )
 const emit = defineEmits<{ changed: []; select: [Row] }>()
@@ -126,7 +128,9 @@ const activeArea = computed(() => (active.value ? areaId(active.value) : ''))
 const activeAreaInfo = computed(() =>
   areas.value.find((area) => area.id === activeArea.value),
 )
-const hasMenu = computed(() => !props.taskCreation && allowed.value.length > 1)
+const hasMenu = computed(
+  () => !props.focused && !props.taskCreation && allowed.value.length > 1,
+)
 const menuDialog = ref<HTMLDialogElement>()
 const recordHistory = ref<unknown>(null)
 const historyError = ref('')
@@ -427,7 +431,22 @@ const reviewOwners = computed(() =>
 const recordTaskCount = computed(
   () => selectedRecordTasks(body.value.task_candidates).length,
 )
+const visibleParameters = computed(
+  () =>
+    active.value?.parameters.filter(
+      (p) =>
+        !(props.focused && p.in === 'path' && hasValue(props.context[p.name])),
+    ) || [],
+)
 const visibleBodySchema = computed(() => {
+  if (props.focused && bodySchema.value) {
+    const schema = structuredClone(bodySchema.value)
+    for (const key of Object.keys(schema.properties || {})) {
+      if (/^(expected_.*(?:revision|fingerprint)|source_revision)$/.test(key))
+        delete schema.properties?.[key]
+    }
+    return schema
+  }
   if (active.value && isAdmissionCreate(active.value) && bodySchema.value) {
     const schema = structuredClone(bodySchema.value)
     delete schema.properties?.kind
@@ -1639,7 +1658,17 @@ function initialOperationId() {
     allowed.value.find(
       (op) =>
         props.initialAction &&
-        op.path === props.initialAction &&
+        (op.path === props.initialAction ||
+          (props.autoRead &&
+            op.path.split('/').length ===
+              props.initialAction.split('/').length &&
+            op.path
+              .split('/')
+              .every(
+                (part, i) =>
+                  /^\{[^}]+\}$/.test(part) ||
+                  part === props.initialAction.split('/')[i],
+              ))) &&
         (props.autoRead ? op.method === 'get' : op.method !== 'get'),
     )?.id ||
     allowed.value[0]?.id ||
@@ -2003,7 +2032,7 @@ onMounted(async () => {
                 </select>
               </label>
               <WorkflowField
-                v-for="param in active.parameters"
+                v-for="param in visibleParameters"
                 :key="param.name"
                 :schema="param.schema"
                 :field="param.name"
@@ -2212,7 +2241,20 @@ onMounted(async () => {
           </form>
           <p v-if="error" class="wf-error" role="alert">{{ error }}</p>
           <p v-if="message" class="wf-success" role="status">{{ message }}</p>
-          <section v-if="result !== null" class="wf-results">
+          <section
+            v-if="focused && result !== null"
+            class="wf-results"
+            aria-label="本次办理结果"
+          >
+            <p>
+              {{
+                active.method === 'get'
+                  ? '已读取当前进展，请按上方事项提示继续办理。'
+                  : '本次办理已保存，后续事项仍按流程继续。'
+              }}
+            </p>
+          </section>
+          <section v-else-if="result !== null" class="wf-results">
             <h3>
               {{
                 group === 'records'

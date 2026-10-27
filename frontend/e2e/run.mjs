@@ -648,7 +648,7 @@ try {
       )
       await live.getByLabel('本次记录', { exact: true }).fill(record.raw_text)
       await live
-        .getByRole('button', { name: '保存并分析', exact: true })
+        .getByRole('button', { name: '保存记录', exact: true })
         .click()
       await text(live, '原提交已锁定')
       assert.equal(attempts.length, 1)

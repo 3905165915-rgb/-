@@ -1,3 +1,4 @@
+import { formatBusinessTime } from '../business-time'
 import {
   computed,
   onBeforeUnmount,
@@ -9,6 +10,7 @@ import {
 import { readSession, type FrontendSession } from '../session'
 import { request, WorkflowRequestError, type Row } from './model'
 import { sameCareSession } from './task-care-context'
+import { demoBatch } from '../demo-batch'
 export interface WorkspaceAttempt {
   path: string
   body: Row
@@ -38,6 +40,7 @@ export function workspaceStorageKey(
     'hulao:workspace:' +
     JSON.stringify([
       owner?.mode,
+      demoBatch(),
       owner?.accountKey,
       owner?.userId,
       owner?.role,
@@ -49,12 +52,13 @@ export function workspaceStorageKey(
 export function parseAttempt(
   value: string | null,
   elderId: string,
+  pathPrefix = '/elders/' + encodeURIComponent(elderId) + '/',
 ): WorkspaceAttempt | null {
   if (value === null) return null
   const row = object(JSON.parse(value))
   if (
     typeof row.path !== 'string' ||
-    !row.path.startsWith('/elders/' + encodeURIComponent(elderId) + '/') ||
+    !row.path.startsWith(pathPrefix) ||
     typeof row.key !== 'string' ||
     !row.key
   )
@@ -72,6 +76,7 @@ export function parseAttempt(
 export function useWorkspaceAction(
   elderId: MaybeRefOrGetter<string>,
   operation: string,
+  pathPrefix?: MaybeRefOrGetter<string>,
 ) {
   const owner = readSession()
   const pending = ref<WorkspaceAttempt | null>(null)
@@ -93,6 +98,7 @@ export function useWorkspaceAction(
         pending.value = parseAttempt(
           sessionStorage.getItem(storageKey.value),
           toValue(elderId),
+          pathPrefix ? toValue(pathPrefix) : undefined,
         )
       } catch {
         storageReadable = false
@@ -173,7 +179,11 @@ export function useWorkspaceAction(
           key: crypto.randomUUID(),
           method,
         }
-        parseAttempt(JSON.stringify(attempt), toValue(elderId))
+        parseAttempt(
+          JSON.stringify(attempt),
+          toValue(elderId),
+          pathPrefix ? toValue(pathPrefix) : undefined,
+        )
         sessionStorage.setItem(storageKey.value, JSON.stringify(attempt))
         pending.value = attempt
       } catch {
@@ -206,13 +216,11 @@ export function useWorkspaceAction(
   }
   return { pending, busy, error, submit, retry: send, verifyReceipt }
 }
-export const workspaceDate = (value: unknown) =>
-  typeof value === 'string' && Number.isFinite(Date.parse(value))
-    ? new Date(value).toLocaleString('zh-CN', {
-        timeZone: 'Asia/Shanghai',
-        hour12: false,
-      })
+export function workspaceDate(value: unknown, full = false) {
+  return typeof value === 'string'
+    ? formatBusinessTime(value, full)
     : '时间未提供'
+}
 export const assessmentStates: Record<string, string> = {
   pending_observation: '待补充观察',
   draft: '待主管确认',

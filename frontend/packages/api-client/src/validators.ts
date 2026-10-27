@@ -43,11 +43,16 @@ export function parseInlineRecordResponse(
     invalid(endpoint, '$.record', '正式记录编号、老人、状态、版本或时间无效')
   enumeration(
     envelope.analysis_status,
-    ['ready', 'failed', 'confirmed'],
+    ['ready', 'failed', 'confirmed', 'queued', 'processing'],
     endpoint,
     '$.analysis_status',
   )
-  if (envelope.analysis_status === 'failed' && envelope.analysis === null)
+  if (
+    ['failed', 'queued', 'processing'].includes(
+      String(envelope.analysis_status),
+    ) &&
+    envelope.analysis === null
+  )
     return envelope as unknown as InlineRecordEnvelope
   const analysis = object(envelope.analysis, endpoint, '$.analysis')
   strings(
@@ -320,8 +325,11 @@ export const parseTask: Parser<Task> = (value, endpoint, path = '$') => {
     value = {
       ...wire,
       elderId: wire.elder_id,
-      shift: wire.shift_id ?? '',
-      assignee: wire.assigned_to ?? '',
+      shift: wire.shift_name ?? '',
+      assignee: wire.assignee_name ?? '',
+      elderName: wire.elder_name ?? '',
+      bedLabel: wire.bed_label ?? '',
+      scheduledAt: wire.scheduled_at ?? '',
       dueAt: wire.due_at ?? '',
       result: wire.result ?? '',
       itemId: wire.id,

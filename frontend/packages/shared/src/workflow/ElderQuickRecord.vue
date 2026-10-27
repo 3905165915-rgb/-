@@ -78,6 +78,72 @@ let recorder: MediaRecorder | undefined
 let stream: MediaStream | undefined
 let deadline: ReturnType<typeof setTimeout> | undefined
 let transcription: AbortController | undefined
+let pollTimer: ReturnType<typeof setTimeout> | undefined
+const analysisKey = computed(() => key.value + ':analysis')
+function rememberAnalysis(value: InlineRecordResponse) {
+  try {
+    sessionStorage.setItem(analysisKey.value, String(value.record.id))
+  } catch {
+    /* server copy remains */
+  }
+}
+function schedulePoll() {
+  clearTimeout(pollTimer)
+  if (
+    result.value &&
+    ['queued', 'processing'].includes(result.value.analysisStatus)
+  )
+    pollTimer = setTimeout(() => void pollAnalysis(), 2000)
+}
+async function pollAnalysis(recordId = String(result.value?.record.id || '')) {
+  if (
+    !recordId ||
+    !scope.valid() ||
+    confirmBusy.value ||
+    confirmation.pending.value
+  )
+    return
+  const ticket = epoch
+  const expectedRevision = result.value?.record.revision
+  try {
+    const raw = await request(
+      '/elders/' +
+        encodeURIComponent(props.elderId) +
+        '/records/' +
+        encodeURIComponent(recordId) +
+        '/analysis',
+    )
+    if (
+      !alive(ticket) ||
+      result.value?.record.id !== recordId ||
+      confirmBusy.value ||
+      confirmation.pending.value
+    )
+      return
+    const checked = validateInlineRecordResponse(raw, props.elderId)
+    if (
+      checked.record.id !== recordId ||
+      checked.record.revision !== expectedRevision
+    )
+      throw new Error('整理回执与原记录版本不一致，请先核实服务器记录。')
+    const response = validate(raw)
+    initDecisions(response)
+    error.value = ''
+    notice.value =
+      response.analysisStatus === 'ready'
+        ? `记录已保存。整理出${response.analysis?.preferenceSuggestions.length || 0}条偏好建议、${response.analysis?.taskSuggestions.length || 0}项跟进建议。`
+        : response.analysisStatus === 'failed'
+          ? '记录已保存，整理暂未完成。可重试整理，或继续人工办理。'
+          : '记录已保存。正在后台整理。'
+    schedulePoll()
+  } catch (failure) {
+    if (alive(ticket)) {
+      error.value = (failure as Error).message
+      if (scope.valid())
+        pollTimer = setTimeout(() => void pollAnalysis(recordId), 5000)
+    }
+  }
+}
 function localDateTime() {
   return localTime(new Date()).slice(0, 16)
 }
@@ -95,8 +161,16 @@ function initDecisions(value: InlineRecordResponse) {
     title: row.title,
     shiftId: '',
     assignedTo: '',
-    dueAt: '',
+    dueAt:
+      row.suggestedAt && row.timeSemantics === 'deadline'
+        ? localTime(new Date(row.suggestedAt)).slice(0, 16)
+        : '',
+    scheduledAt:
+      row.suggestedAt && row.timeSemantics === 'service_time'
+        ? localTime(new Date(row.suggestedAt)).slice(0, 16)
+        : '',
     completionCriteria: '',
+    timeChangeReason: '',
   }))
 }
 async function loadContext() {
@@ -145,12 +219,16 @@ function validate(value: unknown) {
 function saved(value: InlineRecordResponse | null) {
   if (!value || !scope.valid()) return
   initDecisions(value)
+  rememberAnalysis(value)
+  schedulePoll()
   if (elder.value) elder.value.current_admission_id = value.record.admission_id
   text.value = ''
   notice.value =
     value.analysisStatus === 'failed'
       ? '正式记录已保存，分析失败。可重试同一记录，不要再次保存。'
-      : '正式记录已保存，请核对引用原文和待办后再作一次确认。'
+      : ['queued', 'processing'].includes(value.analysisStatus)
+        ? '记录已保存，正在后台整理。你可以继续工作。'
+        : '记录已整理，请核对后确认。'
   emit('saved', value.record)
 }
 async function save() {
@@ -164,6 +242,7 @@ async function save() {
   try {
     const occurred = date(happenedAt.value)
     const payload: Row = {
+      background: true,
       text: text.value.trim(),
       scene: scene.value,
       happened_at: occurred,
@@ -198,7 +277,7 @@ async function retryAnalysis() {
         encodeURIComponent(props.elderId) +
         '/records/' +
         encodeURIComponent(String(result.value.record.id)) +
-        '/analyze',
+        '/analyze?background=true',
       'post',
     )
     if (!alive(ticket)) return
@@ -210,6 +289,7 @@ async function retryAnalysis() {
       throw new Error('分析回执与原记录版本不一致，请先核实服务器记录。')
     const response = validate(raw)
     initDecisions(response)
+    schedulePoll()
     notice.value =
       response.analysisStatus === 'failed'
         ? '分析仍未完成；原正式记录保留。'
@@ -353,6 +433,7 @@ watch(
   () => props.elderId,
   () => {
     epoch++
+    clearTimeout(pollTimer)
     result.value = null
     receipt = null
     attachmentIds.value = []
@@ -366,7 +447,10 @@ watch(
       const previous = sessionStorage.getItem(receiptKey.value)
       if (previous) {
         receipt = object(JSON.parse(previous))
-        initDecisions(validateInlineRecordResponse(receipt, props.elderId))
+        const restored = validateInlineRecordResponse(receipt, props.elderId)
+        initDecisions(restored)
+        if (['queued', 'processing'].includes(restored.analysisStatus))
+          schedulePoll()
         notice.value =
           '已恢复上次服务器回执；当前页面未重新提交原文，最新状态以服务器为准。'
       }
@@ -400,6 +484,7 @@ watch(active, (value) => {
 })
 onBeforeUnmount(() => {
   epoch++
+  clearTimeout(pollTimer)
   transcription?.abort()
   clearTimeout(deadline)
   if (recorder?.state === 'recording') recorder.stop()
@@ -423,7 +508,7 @@ onBeforeUnmount(() => {
       <strong>{{ elder.name }}</strong>
       <span>{{
         elder.current_admission_id
-          ? '已关联当前入住'
+          ? String(elder.bed_label || '已入住')
           : '服务器未提供当前入住关联'
       }}</span>
       <label
@@ -445,7 +530,7 @@ onBeforeUnmount(() => {
           :disabled="busy"
       /></label>
     </div>
-    <p>记录保存后会即时整理为待核对建议；建议不会自动生效。</p>
+    <p>先保存本次观察，稍后核对整理出的偏好和跟进建议。</p>
     <p
       v-if="
         error || saveError || action.error.value || confirmation.error.value
@@ -488,7 +573,7 @@ onBeforeUnmount(() => {
           }}
         </button>
         <label class="audio-upload"
-          >导入 WAV<input
+          >导入语音文件<input
             type="file"
             accept="audio/wav,.wav"
             :disabled="busy || !!pending || transcribing"
@@ -501,7 +586,7 @@ onBeforeUnmount(() => {
           "
         >
           <Save :size="16" aria-hidden="true" />{{
-            busy ? '正在核实保存…' : pending ? '核实并重试原提交' : '保存并分析'
+            busy ? '正在保存…' : pending ? '核实并重试原提交' : '保存记录'
           }}
         </button>
       </div>
@@ -516,13 +601,15 @@ onBeforeUnmount(() => {
     />
     <section v-if="result" class="record-analysis" aria-label="记录分析核对">
       <header>
-        <h4>即时分析</h4>
+        <h4>照护记录整理</h4>
         <span class="workspace-badge">{{
           result.analysisStatus === 'failed'
             ? '分析失败'
-            : analysis?.status === 'confirmed'
-              ? '已核对'
-              : '待核对'
+            : ['queued', 'processing'].includes(result.analysisStatus)
+              ? '整理中'
+              : analysis?.status === 'confirmed'
+                ? '已核对'
+                : '待核对'
         }}</span>
       </header>
       <p>
@@ -643,6 +730,14 @@ onBeforeUnmount(() => {
           <p v-if="analysis.taskSuggestions[index]?.dueText">
             原文时间：{{ analysis.taskSuggestions[index]?.dueText }}
           </p>
+          <p
+            v-for="missing in analysis.taskSuggestions[index]?.timeMissing ||
+            []"
+            :key="missing"
+            class="workspace-warning"
+          >
+            {{ missing }}
+          </p>
           <div v-if="item.accepted" class="workspace-form-grid">
             <label
               >任务标题<input
@@ -685,10 +780,22 @@ onBeforeUnmount(() => {
               </select></label
             >
             <label
+              >服务时间（如已确定）<input
+                v-model="item.scheduledAt"
+                type="datetime-local"
+                :disabled="confirmBusy"
+            /></label>
+            <label
               >截止时间<input
                 v-model="item.dueAt"
                 type="datetime-local"
                 :disabled="confirmLocked"
+            /></label>
+            <label v-if="analysis.taskSuggestions[index]?.suggestedAt"
+              >调整时间的说明（如有调整请填写）<input
+                v-model="item.timeChangeReason"
+                maxlength="1000"
+                :disabled="confirmBusy"
             /></label>
             <label
               >完成标准<input
