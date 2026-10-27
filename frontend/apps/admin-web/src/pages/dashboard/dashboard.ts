@@ -1,6 +1,6 @@
 export interface DateWindow { start: string; end: string }
 export interface DashboardFilters { elder_id: string; shift_id: string; status: string }
-export interface DashboardSelection { kind: 'card' | 'comparison' | 'distribution' | 'trend' | 'pending'; section?: string; key?: string }
+export interface DashboardSelection { kind: 'card' | 'comparison' | 'distribution' | 'trend' | 'activity' | 'pending'; section?: string; key?: string }
 export type Row = Record<string, unknown>
 export interface DashboardCard { count: number; previous_count: number; change: number; change_ratio: number | null; items: Row[] }
 export interface DashboardGroup { key: string; count: number; ids: string[] }
@@ -29,9 +29,36 @@ export function validateWindow(window: DateWindow): string | null {
   const days = (end - start) / day
   return days >= 1 && days <= 366 ? null : '结束日期不计入区间，统计范围须为 1–366 天。'
 }
-export function defaultWindow(now = Date.now()): DateWindow {
-  const start = new Date(now + 8 * 3600000).toISOString().slice(0, 10)
-  return { start, end: new Date(dateNumber(start)! + day).toISOString().slice(0, 10) }
+export function defaultWindow(now = Date.now(), days = 1): DateWindow {
+  const today = new Date(now + 8 * 3600000).toISOString().slice(0, 10)
+  return { start: new Date(dateNumber(today)! - (days - 1) * day).toISOString().slice(0, 10),
+    end: new Date(dateNumber(today)! + day).toISOString().slice(0, 10) }
+}
+
+/** All loaded task types, grouped by the dashboard's service/deadline date. */
+export function taskArrangementSeries(snapshot: DashboardSnapshot) {
+  return snapshot.task_trend.map(point => {
+    const date = String(point.date)
+    const tasks = (snapshot.details.tasks?.items || []).filter(task => {
+      const at = stamp(task.metric_at)
+      return at !== null && new Date(at + 8 * 3600000).toISOString().slice(0, 10) === date
+    })
+    return { date, count: tasks.length, ids: tasks.map(task => String(task.id)),
+      completed: tasks.filter(task => task.status === 'completed').length,
+      overdue: tasks.filter(task => task.status === 'overdue').length }
+  })
+}
+
+export function taskStatusSegments(snapshot: DashboardSnapshot) {
+  const groups = snapshot.distributions.tasks || []
+  const total = groups.reduce((sum, group) => sum + group.count, 0)
+  let offset = 0
+  return { total, groups: groups.map(group => {
+    const fraction = total ? group.count / total : 0
+    const segment = { ...group, fraction, offset }
+    offset += fraction
+    return segment
+  }) }
 }
 export function stamp(value: unknown): number | null {
   if (typeof value !== 'string') return null
@@ -296,6 +323,10 @@ export function selectedDashboardRows(snapshot: DashboardSnapshot, selection: Da
   if (selection.kind === 'card') return snapshot.cards[selection.key || '']?.items || []
   if (selection.kind === 'comparison') return snapshot.comparison.cards[selection.key || '']?.items || []
   if (selection.kind === 'pending') return snapshot.pending_work.items
+  if (selection.kind === 'activity') {
+    const ids = new Set(taskArrangementSeries(snapshot).find(point => point.date === selection.key)?.ids || [])
+    return snapshot.details.tasks.items.filter(task => ids.has(String(task.id)))
+  }
   if (selection.kind === 'distribution') {
     const group = snapshot.distributions[selection.section || '']?.find(row => row.key === selection.key)
     if (!group) return []

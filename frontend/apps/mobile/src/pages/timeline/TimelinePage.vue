@@ -19,10 +19,9 @@ const items = computed(() => [
 ])
 const timeline = useTimeline(() => itemId.value)
 const timelineGroups = computed(() => {
-  const events = (timeline.data.value ?? []).flatMap(event => {
-  const recordedAt = (event as typeof event & { recordedAt?: string }).recordedAt || event.enteredAt
-  return recordedAt ? [{ ...event, recordedAt }] : []
-  })
+  const events = (timeline.data.value ?? []).map(event => ({ ...event,
+    recordedAt: event.recordedAt || event.enteredAt || '',
+  }))
   const groups = groupTimelineEvents(events)
   const groupedIds = new Set(groups.flatMap(group => group.events.map(event => event.id)))
   const uncertain = events.filter(event => !groupedIds.has(event.id))
@@ -88,7 +87,7 @@ function select(value: string) {
             <li v-for="event in group.events" :key="event.id">
               <h3>{{ event.label }}</h3>
               <p class="timeline-detail">{{ event.detail }}</p>
-              <p class="muted">登记：{{ event.recordedAt }} · {{ event.actor || '操作者未提供' }}</p>
+              <p class="muted">登记：{{ event.recordedAt || '时间待核实' }} · {{ event.actor || '操作者未提供' }}</p>
               <p v-if="event.happenedAt" class="muted">实际发生：{{ event.happenedAt }}</p>
               <van-tag v-if="mode === 'demo' && event.source === 'demo'" type="warning">演示</van-tag>
             </li>

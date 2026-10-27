@@ -54,6 +54,13 @@ const analysis = {
 }
 
 describe('inline elder record workflow', () => {
+  it('shows safe analysis failure details while accepting the older saved-record envelope', () => {
+    const failed = { record, analysis_status: 'failed', analysis: null }
+    expect(validateInlineRecordResponse(failed, 'ELDER-test').analysisError).toBeUndefined()
+    const analysis_error = { code: 'analysis_timeout', message: '分析等待超时，原记录已保存，可重试此记录。' }
+    expect(validateInlineRecordResponse({ ...failed, analysis_error }, 'ELDER-test').analysisError).toEqual(analysis_error)
+    expect(() => validateInlineRecordResponse({ ...failed, analysis_error: { code: 3 } }, 'ELDER-test')).toThrow()
+  })
   it('accepts the actual datetime-local input as Beijing time and rejects invalid deadlines', () => {
     const input = {
       expectedRevision: 1, preferenceSuggestionIds: [], preferences: [],

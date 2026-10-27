@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   captureDashboardRequest, createRequestGuard, dashboardGroupLabel, dashboardLocation, defaultWindow, formatRatio, loadDashboardDirectory, selectedDashboardRows,
-  stamp, validateDashboard, validateWindow,
+  stamp, validateDashboard, validateWindow, taskArrangementSeries, taskStatusSegments,
 } from './dashboard'
 
 const window = { start: '2026-10-25', end: '2026-10-26' }
@@ -36,6 +36,20 @@ function snapshot() {
 }
 
 describe('single-response management dashboard', () => {
+  it('charts manual tasks even with no planned-service denominator and drills down to their real IDs', () => {
+    const value = snapshot()
+    for (const task of value.details.tasks.items) task.is_plan_occurrence = false
+    Object.assign(value.task_trend[0], { count: 0, ids: [], completion: { numerator: 0, denominator: 0, ratio: null }, on_time: 0 })
+    const summary = taskStatusSegments(value as never)
+    expect(summary.total).toBe(2)
+    expect(summary.groups.map(group => [group.fraction, group.offset])).toEqual([[0.5, 0], [0.5, 0.5]])
+    expect(taskArrangementSeries(value as never)[0]).toMatchObject({ count: 2, completed: 1, ids: ['TASK-1', 'TASK-2'] })
+    expect(selectedDashboardRows(value as never, { kind: 'activity', key: '2026-10-25' })).toEqual(value.details.tasks.items)
+    value.details.tasks.items[0].metric_at = '2026-10-24T16:00:00Z'
+    expect(taskArrangementSeries(value as never)[0].count).toBe(2)
+    expect(defaultWindow(Date.parse('2026-10-24T17:00:00Z'), 7)).toEqual({ start: '2026-10-19', end: '2026-10-26' })
+    expect(taskStatusSegments({ ...value, distributions: { tasks: [] } } as never)).toEqual({ total: 0, groups: [] })
+  })
   it('uses Beijing day boundaries and rejects invalid or excessive windows', () => {
     expect(defaultWindow(Date.parse('2026-10-24T17:00:00Z'))).toEqual(window)
     expect(validateWindow(window)).toBeNull()

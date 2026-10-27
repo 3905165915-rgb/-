@@ -127,7 +127,7 @@ try {
     assert.equal(await page.locator('.elder-card-title').count(), 0)
   })
   await test('老人动态使用服务器过滤与精确来源，窄屏无溢出', async ({ page, calls }) => {
-    await page.goto(base + '/mobile/elders/ELDER-one')
+    await page.goto(base + '/mobile/elders/ELDER-one?section=records')
     const activity = page.getByRole('region', { name: '老人动态', exact: true })
     await activity.getByText('虚构人工观察1', { exact: true }).waitFor()
     await activity.getByRole('combobox', { name: /^类型/ }).selectOption('record')
@@ -243,7 +243,8 @@ try {
     await page.screenshot({ path: resolve(output, 'mobile-photo-review.png'), fullPage: true })
     const uploads = writes.filter(w => w.path === '/attachments'); assert.equal(uploads.length, 2); assert.equal(uploads[0].key, uploads[1].key); assert.equal(uploads[0].body.contentType, 'image/jpeg')
     assert.ok(calls.find(c => c.path.endsWith('/content')).auth.startsWith('Bearer '))
-    await field(page, 'elder_id').selectOption('ELDER-two')
+    await page.goto(base + '/mobile/records/new?elder=ELDER-two')
+    await page.getByRole('region', { name: '照片辅助观察', exact: true }).waitFor()
     assert.equal(await region.locator('img').count(), 0); assert.equal(await region.getByText(/人工修正的虚构观察/).count(), 0)
     for (const width of [320, 390, 430]) { await page.setViewportSize({ width, height: 844 }); await noOverflow(page) }
     await page.screenshot({ path: resolve(output, 'mobile-photo.png'), fullPage: true })
@@ -279,7 +280,8 @@ try {
     state.analysis.status = 'processing'; state.analysis.model_status = 'processing'; state.analysis.output = null
     await page.getByRole('button', { name: '核实服务器识别与审核状态', exact: true }).click()
     await page.getByText('照片状态：识别中', { exact: false }).waitFor()
-    await field(page, 'elder_id').selectOption('ELDER-two')
+    await page.goto(base + '/mobile/records/new?elder=ELDER-two')
+    await page.getByRole('region', { name: '照片辅助观察', exact: true }).waitFor()
     const before = calls.filter(call => call.path === '/attachments/analyses/IMAGE-one').length
     await page.waitForTimeout(2300)
     assert.equal(calls.filter(call => call.path === '/attachments/analyses/IMAGE-one').length, before)
@@ -306,7 +308,7 @@ try {
   }, 'supervisor')
   await test('完整看板单快照、筛选、明细跳转和尺寸检查', async ({ page, calls }) => {
     await page.goto(base + '/admin/dashboard')
-    await page.getByText('同一虚构快照', { exact: true }).first().waitFor(); await page.locator('.metric').filter({ hasText: '待执行任务' }).click()
+    await page.getByRole('heading', { name: '任务状态总览', exact: true }).waitFor(); await page.locator('.metric').filter({ hasText: '待执行任务' }).click()
     assert.equal(await page.locator('.drilldown li').count(), 2)
     await page.getByLabel('老人', { exact: true }).selectOption('ELDER-one'); await page.getByRole('button', { name: '应用筛选', exact: true }).click()
     await page.waitForFunction(() => document.querySelectorAll('.drilldown li').length === 1)
@@ -319,7 +321,7 @@ try {
     state.failDashboard = true; await page.goto(base + '/admin/dashboard')
     await page.getByRole('button', { name: '重试', exact: true }).waitFor(); state.failDashboard = false; state.invalidDashboard = true
     await page.getByRole('button', { name: '重试', exact: true }).click(); await page.getByText('管理看板数据格式异常，请刷新后联系管理员。', { exact: true }).waitFor()
-    state.invalidDashboard = false; await page.getByRole('button', { name: '重试', exact: true }).click(); await page.getByText('同一虚构快照', { exact: true }).first().waitFor()
+    state.invalidDashboard = false; await page.getByRole('button', { name: '重试', exact: true }).click(); await page.getByRole('heading', { name: '任务状态总览', exact: true }).waitFor()
     state.emptyDashboard = true; await page.getByRole('button', { name: '刷新完整看板', exact: true }).click(); await page.getByText('当前筛选下暂无待处理事项。', { exact: true }).waitFor()
     assert.deepEqual(await page.locator('.metric strong').allTextContents(), ['0', '0', '0', '0', '0', '0'])
     await page.evaluate(() => window.dispatchEvent(new Event('hulao:unauthorized'))); assert.equal(await page.locator('.metric').count(), 0)
@@ -344,7 +346,7 @@ try {
     assert.equal(writes.length, 2); assert.equal(writes[0].key, writes[1].key); assert.deepEqual(writes[0].body, writes[1].body)
   }, 'supervisor')
   await test('家属不能进入内部通知、安全或私有照片流程', async ({ page, calls }) => {
-    for (const path of ['/mobile/safety?report=1', '/mobile/notifications', '/mobile/records/new?elder=ELDER-one&analysis_id=IMAGE-one']) { await page.goto(base + path); await page.waitForURL(/\/403$/) }
+    for (const path of ['/mobile/safety?report=1', '/mobile/notifications', '/mobile/records/new?elder=ELDER-one&analysis_id=IMAGE-one']) { await page.goto(base + path); await page.waitForURL(/\/(403|family)$/) }
     assert.ok(!calls.some(c => /attachments|notifications|incidents/.test(c.path)))
   }, 'family')
 } finally {

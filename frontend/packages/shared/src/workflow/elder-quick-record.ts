@@ -34,6 +34,7 @@ export interface InlineRecordResponse {
   record: Row
   analysisStatus: 'ready' | 'failed' | 'confirmed'
   analysis: RecordAnalysis | null
+  analysisError?: { code: string; message: string }
 }
 
 function object(value: unknown): Row {
@@ -86,8 +87,14 @@ export function validateInlineRecordResponse(value: unknown, elderId: string): I
   const status = envelope.analysis_status
   if (!['ready', 'failed', 'confirmed'].includes(String(status)))
     throw new Error('即时分析状态异常，正式记录已保留，请刷新核实。')
-  if (status === 'failed' && envelope.analysis === null)
-    return { record, analysisStatus: 'failed', analysis: null }
+  if (status === 'failed' && envelope.analysis === null) {
+    const failure = envelope.analysis_error == null ? null : object(envelope.analysis_error)
+    if (failure && (!text(failure.code) || !text(failure.message)))
+      throw new Error('分析状态说明格式异常，原记录仍已保存。')
+    return { record, analysisStatus: 'failed', analysis: null,
+      ...(failure ? { analysisError: { code: String(failure.code), message: String(failure.message) } } : {}),
+    }
+  }
 
   const row = object(envelope.analysis)
   if (

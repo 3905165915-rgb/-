@@ -277,7 +277,7 @@ onBeforeUnmount(() => { reset(); window.removeEventListener('focus', changed); w
       />照片辅助观察
     </h4>
     <p class="warning">
-      AI识别可能有误，不构成诊断或处置建议，请人工核对。专业处理请由有权限人员审核决定。
+      AI辅助结果可能有误，请人工核对。涉及诊断和处置，请由有权限的专业人员决定。
     </p>
     <p
       v-if="configured === false"
@@ -480,11 +480,8 @@ onBeforeUnmount(() => { reset(); window.removeEventListener('focus', changed); w
             照片分享结果待核实，重试将使用原请求，不会重复提交。
           </p>
         </section>
-        <p
-          v-if="analysis?.warning || analysis?.notice"
-          class="warning"
-        >
-          {{ analysis.warning }} {{ analysis.notice }}
+        <p v-if="analysis?.model_status === 'unable_to_determine'" class="muted">
+          这张照片无法可靠识别，请补充清晰照片或人工记录。
         </p>
         <button
           v-if="!readOnly && !analysis && selected.status !== 'rejected'"

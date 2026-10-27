@@ -314,17 +314,21 @@ export const parseTimelineEvent: Parser<TimelineEvent> = (
   path = '$',
 ) => {
   const wire = object(value, endpoint, path)
-  if ('happened_at' in wire)
+  const serverEvent = 'happened_at' in wire || 'recorded_at' in wire
+  if (serverEvent)
     value = {
       ...wire,
       happenedAt: wire.happened_at,
-      enteredAt: wire.entered_at,
+      enteredAt: 'recorded_at' in wire ? wire.recorded_at : wire.entered_at,
+      recordedAt: 'recorded_at' in wire ? wire.recorded_at : wire.entered_at,
     }
   const row = object(value, endpoint, path)
   strings(row, ['id', 'label'], endpoint, path, true)
   strings(row, ['detail', 'actor'], endpoint, path)
-  date(row.happenedAt, endpoint, `${path}.happenedAt`, 'timestamp')
-  date(row.enteredAt, endpoint, `${path}.enteredAt`, 'timestamp')
+  if (!serverEvent || row.happenedAt !== null)
+    date(row.happenedAt, endpoint, `${path}.happenedAt`, 'timestamp')
+  if (!(serverEvent && row.enteredAt === null && wire.recorded_at_status === 'unverified'))
+    date(row.enteredAt, endpoint, `${path}.enteredAt`, 'timestamp')
   optionalStrings(row, ['itemId'], endpoint, path, true)
   if (row.source !== undefined)
     enumeration(row.source, ['demo'], endpoint, `${path}.source`)

@@ -467,7 +467,7 @@ onBeforeUnmount(() => {
         实际发生 {{ workspaceDate(result.record.happened_at) }}
       </p>
       <div v-if="result.analysisStatus === 'failed'" class="workspace-warning">
-        <p>分析失败，已保存的原始记录仍在服务器。</p>
+        <p>{{ result.analysisError?.message || '分析暂未完成，原记录已保存，可重试此记录。' }}</p>
         <button type="button" :disabled="busy" @click="retryAnalysis">
           <RefreshCw :size="16" aria-hidden="true" />重试此记录分析
         </button>

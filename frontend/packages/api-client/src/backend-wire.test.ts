@@ -145,4 +145,14 @@ describe('backend 0.4.0 wire contract', () => {
       enteredAt: '2026-10-20T10:20:00+08:00',
     })
   })
+  it('accepts schema-9 audit events with no actual occurrence time', () => {
+    expect(parseTimelineEvent({ id: 'EV-audit', label: '任务登记', detail: '', actor: '护理员',
+      happened_at: null, recorded_at: '2026-10-27T08:00:00Z', recorded_at_status: 'verified' }, '/timeline'))
+      .toMatchObject({ happenedAt: null, enteredAt: '2026-10-27T08:00:00Z', recordedAt: '2026-10-27T08:00:00Z' })
+  })
+  it('keeps an explicitly unverified registration time unknown instead of using occurrence time', () => {
+    expect(parseTimelineEvent({ id: 'EV-unknown', label: '历史事件', detail: '', actor: '护理员',
+      happened_at: '2026-10-27T07:00:00Z', recorded_at: null, recorded_at_status: 'unverified' }, '/timeline'))
+      .toMatchObject({ happenedAt: '2026-10-27T07:00:00Z', recordedAt: null, enteredAt: null })
+  })
 })

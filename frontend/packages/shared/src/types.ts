@@ -69,8 +69,9 @@ export interface TimelineEvent {
   label: string
   detail: string
   actor: string
-  happenedAt: string
-  enteredAt: string
+  happenedAt: string | null
+  enteredAt: string | null
+  recordedAt?: string | null
   itemId?: string
   source?: 'demo'
 }
