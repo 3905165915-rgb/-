@@ -50,11 +50,16 @@ describe('local task filtering', () => {
       ),
     ).toEqual(['c', 'a', 'b', 'z'])
   })
-  it('parses relative deadlines locally and leaves placeholders unsorted', () => {
-    const today = new Date(2026, 9, 20)
+  it('parses relative deadlines in Beijing time and leaves placeholders unsorted', () => {
+    const today = new Date('2026-10-19T16:01:00Z')
     expect(taskDeadline('今天 10:30', today)).toBe(
-      new Date(2026, 9, 20, 10, 30).getTime(),
+      Date.parse('2026-10-20T10:30:00+08:00'),
     )
+    expect(taskDeadline('昨天 23:30', today)).toBe(
+      Date.parse('2026-10-19T23:30:00+08:00'),
+    )
+    expect(taskDeadline('今天 24:00', today)).toBeUndefined()
+    expect(taskDeadline('2026-02-30T12:00:00+08:00')).toBeUndefined()
     expect(taskDeadline('待确认期限')).toBeUndefined()
   })
 })

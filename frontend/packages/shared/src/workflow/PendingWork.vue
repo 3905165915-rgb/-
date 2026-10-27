@@ -13,6 +13,7 @@ import { loadDemoState, subscribeDemo } from '../demo-store'
 import WorkflowPanel from './WorkflowPanel.vue'
 import { listAll, request, type Row } from './model'
 import { sameCareSession } from './task-care-context'
+import WorkspaceDecisions from './WorkspaceDecisions.vue'
 import {
   clearNotificationAction,
   notificationActionKey,
@@ -318,10 +319,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section
-    class="server-notifications"
-    aria-label="照护跟进"
-  >
+  <section class="server-notifications" aria-label="照护跟进">
     <header>
       <div>
         <h1>照护跟进</h1>
@@ -335,35 +333,19 @@ onBeforeUnmount(() => {
         :disabled="loading || !!busyId"
         @click="load"
       >
-        <RefreshCw
-          :size="19"
-          aria-hidden="true"
-        />
+        <RefreshCw :size="19" aria-hidden="true" />
       </button>
     </header>
-    <p
-      v-if="!permitted"
-      role="alert"
-    >
-      当前账号不能查看内部通知。
-    </p>
+    <p v-if="!permitted" role="alert">当前账号不能查看内部通知。</p>
     <template v-else>
-      <p
-        v-if="demoMode"
-        class="meta"
-      >
+      <p v-if="demoMode" class="meta">
         虚构演示：从本机任务、交班与照护理解复查生成跟进入口；不提供服务器通知或跨设备已读状态。
       </p>
-      <p
-        v-else
-        class="meta"
-      >
+      <p v-else class="meta">
         分类数量和业务筛选仅限当前服务器通知页；不代表全量业务。已读、接单不等于业务完成；已处理表示通知已关闭，业务结果请进入事项核对。
       </p>
-      <nav
-        class="category-tabs"
-        aria-label="跟进分类"
-      >
+      <WorkspaceDecisions v-if="!demoMode" />
+      <nav class="category-tabs" aria-label="跟进分类">
         <button
           v-for="tab in followupCategories"
           :key="tab.value"
@@ -375,10 +357,7 @@ onBeforeUnmount(() => {
           {{ tab.label }}（{{ counts[tab.value] }}）
         </button>
       </nav>
-      <details
-        v-if="tools.length"
-        class="followup-tools"
-      >
+      <details v-if="tools.length" class="followup-tools">
         <summary>更多照护跟进工具</summary>
         <nav aria-label="照护跟进内部工具">
           <RouterLink
@@ -387,65 +366,49 @@ onBeforeUnmount(() => {
             class="open-link"
             :to="tool.path"
           >
-            {{ tool.label }}<ChevronRight
-              :size="16"
-              aria-hidden="true"
-            />
+            {{ tool.label }}<ChevronRight :size="16" aria-hidden="true" />
           </RouterLink>
         </nav>
       </details>
       <div class="filters">
-        <label>业务筛选<select v-model="business">
-          <option value="">
-            全部业务（{{ demoMode ? '本机演示' : '当前页' }}）
-          </option>
-          <option
-            v-for="type in businessOptions"
-            :key="type"
-            :value="type"
-          >
-            {{ notificationObjects[type] || '其他业务：' + type }}
-          </option>
-        </select></label>
-        <label v-if="!demoMode"><input
-          type="checkbox"
-          :checked="unread"
-          :disabled="loading || !!busyId"
-          @change="setUnread(($event.target as HTMLInputElement).checked)"
-        >仅未读（服务器筛选）</label>
+        <label
+          >业务筛选<select v-model="business">
+            <option value="">
+              全部业务（{{ demoMode ? '本机演示' : '当前页' }}）
+            </option>
+            <option v-for="type in businessOptions" :key="type" :value="type">
+              {{ notificationObjects[type] || '其他业务：' + type }}
+            </option>
+          </select></label
+        >
+        <label v-if="!demoMode"
+          ><input
+            type="checkbox"
+            :checked="unread"
+            :disabled="loading || !!busyId"
+            @change="setUnread(($event.target as HTMLInputElement).checked)"
+          />仅未读（服务器筛选）</label
+        >
       </div>
-      <p
-        v-if="!demoMode"
-        class="meta"
-      >
+      <p v-if="!demoMode" class="meta">
         {{ definition || '状态以服务器通知为准。'
         }}<span v-if="asOf">最近刷新：{{ when(asOf) }}</span>
       </p>
-      <p
-        v-if="!demoMode && loaded && !error"
-        class="meta"
-      >
+      <p v-if="!demoMode && loaded && !error" class="meta">
         服务器通知第 {{ pageNumber }} / {{ pages }} 页 · 当前载入
         {{ notifications.length }} 条 · 服务器筛选范围共 {{ total }} 条
       </p>
-      <p
-        v-if="loading"
-        role="status"
-      >
+      <p v-if="loading" role="status">
         {{ demoMode ? '正在读取本机演示事项…' : '正在读取服务器通知…' }}
       </p>
-      <p
-        v-if="error"
-        class="error"
-        role="alert"
-      >
+      <p v-if="error" class="error" role="alert">
         {{ error }}
       </p>
       <p
         v-if="
           !loading &&
-            loaded &&
-            !(demoMode ? visibleDemoItems.length : visibleNotifications.length)
+          loaded &&
+          !(demoMode ? visibleDemoItems.length : visibleNotifications.length)
         "
         role="status"
       >
@@ -458,17 +421,15 @@ onBeforeUnmount(() => {
         }}
       </p>
       <ul>
-        <li
-          v-for="item in visibleNotifications"
-          :key="item.id"
-        >
+        <li v-for="item in visibleNotifications" :key="item.id">
           <div class="notice-main">
             <div class="notice-title">
               <strong>{{
                 item.title ||
-                  notificationObjects[item.object_type] ||
-                  '待办理事项'
-              }}</strong><span>{{ status(item) }}</span>
+                notificationObjects[item.object_type] ||
+                '待办理事项'
+              }}</strong
+              ><span>{{ status(item) }}</span>
             </div>
             <p>
               {{ elderName(item.elder_id) }} ·
@@ -478,8 +439,10 @@ onBeforeUnmount(() => {
             <p>
               通知时间：{{ when(item.created_at)
               }}<span v-if="item.accepted_at">
-                · 接单：{{ when(item.accepted_at) }}</span><span v-if="isRead(item)">
-                · 已读：{{ when(item.read_at) }}</span>
+                · 接单：{{ when(item.accepted_at) }}</span
+              ><span v-if="isRead(item)">
+                · 已读：{{ when(item.read_at) }}</span
+              >
             </p>
             <p v-if="notificationCategory(item) === 'review'">
               需按原业务规则审核；涉及独立复查时由独立人员办理，提交不等于复查通过。
@@ -489,14 +452,9 @@ onBeforeUnmount(() => {
               class="open-link"
               :to="notificationLocation(item, props.mobile)"
             >
-              进入关联业务<ChevronRight
-                :size="16"
-                aria-hidden="true"
-              />
+              进入关联业务<ChevronRight :size="16" aria-hidden="true" />
             </RouterLink>
-            <p v-else>
-              当前通知的业务入口待核实，请联系主管核对。
-            </p>
+            <p v-else>当前通知的业务入口待核实，请联系主管核对。</p>
             <button
               v-if="notificationWork(item, session?.role || null)"
               type="button"
@@ -520,10 +478,7 @@ onBeforeUnmount(() => {
               :disabled="loading || !!busyId"
               @click="act(item, 'read')"
             >
-              <CheckCheck
-                :size="16"
-                aria-hidden="true"
-              />标记已读
+              <CheckCheck :size="16" aria-hidden="true" />标记已读
             </button>
             <button
               v-if="item.status === 'pending'"
@@ -531,18 +486,12 @@ onBeforeUnmount(() => {
               :disabled="loading || !!busyId"
               @click="act(item, 'accept')"
             >
-              <UserRoundCheck
-                :size="16"
-                aria-hidden="true"
-              />{{
+              <UserRoundCheck :size="16" aria-hidden="true" />{{
                 busyId === item.id ? '提交中…' : '接单办理'
               }}
             </button>
           </div>
-          <div
-            v-if="selectedId === item.id && activeWork"
-            class="notice-form"
-          >
+          <div v-if="selectedId === item.id && activeWork" class="notice-form">
             <WorkflowPanel
               :key="`${session?.accountKey}:${selectedId}:${activeWork.action}`"
               :group="activeWork.group"
@@ -554,19 +503,14 @@ onBeforeUnmount(() => {
             />
           </div>
         </li>
-        <li
-          v-for="item in visibleDemoItems"
-          :key="item.id"
-        >
+        <li v-for="item in visibleDemoItems" :key="item.id">
           <div class="notice-main">
             <div class="notice-title">
-              <strong>{{ item.title }}</strong><span>{{ notificationObjects[item.business] }}</span>
+              <strong>{{ item.title }}</strong
+              ><span>{{ notificationObjects[item.business] }}</span>
             </div>
             <p>{{ item.detail }}</p>
-            <RouterLink
-              class="open-link"
-              :to="item.location"
-            >
+            <RouterLink class="open-link" :to="item.location">
               {{
                 item.business === 'care_memories'
                   ? item.category === 'review'
@@ -575,10 +519,7 @@ onBeforeUnmount(() => {
                       ? '查看处理结果'
                       : '进入核验办理'
                   : '进入关联业务'
-              }}<ChevronRight
-                :size="16"
-                aria-hidden="true"
-              />
+              }}<ChevronRight :size="16" aria-hidden="true" />
             </RouterLink>
           </div>
         </li>
@@ -596,8 +537,10 @@ onBeforeUnmount(() => {
         >
           <ChevronLeft :size="16" />上一页
         </button>
-        <span>第 {{ pageNumber }} / {{ pages }} 页 · 服务器筛选范围共
-          {{ total }} 条</span>
+        <span
+          >第 {{ pageNumber }} / {{ pages }} 页 · 服务器筛选范围共
+          {{ total }} 条</span
+        >
         <button
           type="button"
           class="secondary"

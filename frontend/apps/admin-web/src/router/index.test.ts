@@ -33,7 +33,12 @@ function memoryStorage() {
 }
 async function open(path: string, role?: Role) {
   if (role) {
-    const session: FrontendSession = { mode: 'api', accountKey: role, role, accessToken: 'test-token' }
+    const session: FrontendSession = {
+      mode: 'api',
+      accountKey: role,
+      role,
+      accessToken: 'test-token',
+    }
     sessionStorage.setItem(key, JSON.stringify(session))
   }
   const { default: router } = await import('./index')
@@ -44,24 +49,25 @@ beforeEach(() => {
   vi.resetModules()
   vi.stubGlobal('sessionStorage', memoryStorage())
   vi.stubGlobal('localStorage', memoryStorage())
-  const browser = Object.assign(new EventTarget(), { location: { replace: vi.fn() } })
+  const browser = Object.assign(new EventTarget(), {
+    location: { replace: vi.fn() },
+  })
   vi.stubGlobal('window', browser)
 })
 describe('management and mobile entry recovery', () => {
-  it.each(['admin', 'supervisor'] as Role[])('recovers a %s bookmark at the old forbidden page', async (role) => {
-    const router = await open('/403', role)
-    expect(router.currentRoute.value.path).toBe('/dashboard')
-  })
+  it.each(['admin', 'supervisor'] as Role[])(
+    'recovers a %s bookmark at the old forbidden page',
+    async (role) => {
+      const router = await open('/403', role)
+      expect(router.currentRoute.value.path).toBe('/dashboard')
+    },
+  )
   it('returns an unauthenticated forbidden bookmark to login', async () => {
     expect((await open('/403')).currentRoute.value.path).toBe('/login')
   })
   it('keeps family out of management views and recovers to their authorized homepage', async () => {
-    const router = await open('/403', 'family')
-    expect(router.currentRoute.value.path).toBe('/family')
-    await router.push('/workflows/staff')
-    expect(router.currentRoute.value.path).toBe('/family')
-    await router.push('/recovery')
-    expect(router.currentRoute.value.path).toBe('/family')
+    await open('/403', 'family')
+    expect(window.location.replace).toHaveBeenCalledWith('/mobile/family')
   })
   it.each(['admin', 'supervisor'] as Role[])(
     'allows %s to open account-scoped local recovery journals',
@@ -70,8 +76,11 @@ describe('management and mobile entry recovery', () => {
       expect(router.currentRoute.value.path).toBe('/recovery')
     },
   )
-  it.each(['/login', '/403', '/dashboard', '/'])('takes a caregiver from %s to the mobile app without a redirect loop', async (path) => {
-    await open(path, 'caregiver')
-    expect(window.location.replace).toHaveBeenCalledWith('/mobile/')
-  })
+  it.each(['/login', '/403', '/dashboard', '/'])(
+    'takes a caregiver from %s to the mobile app without a redirect loop',
+    async (path) => {
+      await open(path, 'caregiver')
+      expect(window.location.replace).toHaveBeenCalledWith('/mobile/')
+    },
+  )
 })

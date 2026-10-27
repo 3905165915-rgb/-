@@ -1,6 +1,7 @@
 <script setup lang="ts">
 const serverWorkflow = ['api'].includes(import.meta.env.VITE_APP_MODE || 'api')
 import WorkflowPanel from '@hulao/shared/workflow'
+import ElderRecordEntry from '../../../../../packages/shared/src/workflow/ElderRecordEntry.vue'
 import { computed, onMounted, ref, watch } from 'vue'
 import { Save, Send } from 'lucide-vue-next'
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute } from 'vue-router'
@@ -17,6 +18,17 @@ import { useRecordEditor } from '../../composables/useRecordEditor'
 import RecordReviewForm from '../../components/RecordReviewForm.vue'
 import FeedbackState from '../../components/FeedbackState.vue'
 const route = useRoute()
+const quickRecord = computed(
+  () =>
+    ![
+      'record_id',
+      'draft_id',
+      'draft',
+      'attachment_id',
+      'analysis_id',
+      'action',
+    ].some((key) => typeof route.query[key] === 'string'),
+)
 const elders = useElders()
 const tasks = useTasks()
 const {
@@ -127,16 +139,26 @@ watch(
       await initialize(value)
   },
 )
-watch(() => route.query.elder, async value => {
-  if (ready.value && typeof value === 'string' && value !== editor.value.elderId)
-    await initialize(undefined, value)
-})
-watch(() => elders.data.value, rows => {
-  if (ready.value && !editor.value.elderId && rows?.length === 1) {
-    editor.value.elderId = rows[0].id
-    changed(true)
-  }
-})
+watch(
+  () => route.query.elder,
+  async (value) => {
+    if (
+      ready.value &&
+      typeof value === 'string' &&
+      value !== editor.value.elderId
+    )
+      await initialize(undefined, value)
+  },
+)
+watch(
+  () => elders.data.value,
+  (rows) => {
+    if (ready.value && !editor.value.elderId && rows?.length === 1) {
+      editor.value.elderId = rows[0].id
+      changed(true)
+    }
+  },
+)
 async function switchElder(event: Event) {
   const value = (event.target as HTMLSelectElement).value
   if (busy.value || frozen.value || value === editor.value.elderId) return
@@ -195,14 +217,51 @@ async function restoreDraft() {
 </script>
 <template>
   <section v-if="serverWorkflow">
-    <RouterLink :to="{ path: '/safety', query: { report: '1', elder: typeof route.query.elder === 'string' ? route.query.elder : '' } }" class="secondary-link">照护安全与事件上报</RouterLink>
-  <WorkflowPanel
-    group="records"
-    title="记一条"
-    :context="{ ...route.query, ...(typeof route.query.elder === 'string' ? { elder_id: route.query.elder } : {}) }"
-    :initial-action="typeof route.query.record_id === 'string' ? '/records/{record_id}' : typeof route.query.draft_id === 'string' ? '/records/drafts/{draft_id}' : '/records/context-extract'"
-    :auto-read="typeof route.query.record_id === 'string' || typeof route.query.draft_id === 'string'"
-  />
+    <RouterLink
+      :to="{
+        path: '/safety',
+        query: {
+          report: '1',
+          elder: typeof route.query.elder === 'string' ? route.query.elder : '',
+        },
+      }"
+      class="secondary-link"
+      >照护安全与事件上报</RouterLink
+    >
+    <ElderRecordEntry
+      v-if="serverWorkflow && quickRecord"
+      :key="String(route.query.elder || route.query.elder_id || 'choose')"
+      :elder-id="
+        typeof route.query.elder === 'string'
+          ? route.query.elder
+          : typeof route.query.elder_id === 'string'
+            ? route.query.elder_id
+            : undefined
+      "
+      mobile
+    />
+    <WorkflowPanel
+      v-else
+      group="records"
+      title="记一条"
+      :context="{
+        ...route.query,
+        ...(typeof route.query.elder === 'string'
+          ? { elder_id: route.query.elder }
+          : {}),
+      }"
+      :initial-action="
+        typeof route.query.record_id === 'string'
+          ? '/records/{record_id}'
+          : typeof route.query.draft_id === 'string'
+            ? '/records/drafts/{draft_id}'
+            : '/records/context-extract'
+      "
+      :auto-read="
+        typeof route.query.record_id === 'string' ||
+        typeof route.query.draft_id === 'string'
+      "
+    />
   </section>
   <section v-else class="record-page editor-page">
     <div class="page-title-row">
@@ -255,7 +314,8 @@ async function restoreDraft() {
           >
             {{ draft.recoveredFrom ? '其他窗口恢复 · ' : ''
             }}{{ draft.text.slice(0, 20) || '空白草稿' }} ·
-            {{ phaseLabels[draft.phase] }} · {{ formatBusinessTime(draft.updatedAt) }}
+            {{ phaseLabels[draft.phase] }} ·
+            {{ formatBusinessTime(draft.updatedAt) }}
           </option>
         </select></label
       ><van-button
@@ -267,7 +327,18 @@ async function restoreDraft() {
       </van-button>
     </details>
     <template v-if="ready">
-      <RouterLink v-if="editor.phase === 'submitted' && mode === 'demo'" :to="{ path: '/tasks/new', query: { elder: editor.elderId, source_record: editor.confirmedRecordId } }" class="record-link">核对并新建后续任务</RouterLink>
+      <RouterLink
+        v-if="editor.phase === 'submitted' && mode === 'demo'"
+        :to="{
+          path: '/tasks/new',
+          query: {
+            elder: editor.elderId,
+            source_record: editor.confirmedRecordId,
+          },
+        }"
+        class="record-link"
+        >核对并新建后续任务</RouterLink
+      >
       <div class="form-band">
         <h2>护理记录</h2>
         <label class="select-field"
@@ -309,7 +380,9 @@ async function restoreDraft() {
         <p v-if="saveError" class="error-text" role="alert">
           {{ saveError }}
         </p>
-        <p v-else-if="saved" class="success-text" role="status">记录已保存到本机</p>
+        <p v-else-if="saved" class="success-text" role="status">
+          记录已保存到本机
+        </p>
         <p v-if="error" class="error-text" role="alert">
           {{ error }}
         </p>
@@ -340,16 +413,20 @@ async function restoreDraft() {
         </div>
         <template v-if="editor.ai">
           <h2>整理结果（待核对）</h2>
-          <p>
-            已保存原文，当前整理结果仍需人工核对。
-          </p>
+          <p>已保存原文，当前整理结果仍需人工核对。</p>
           <p v-if="stale" class="error-text">
             原文或老人已变更，旧结果不可确认。
           </p>
           <details class="evidence">
             <summary>提取时的原文证据</summary>
             <p>{{ editor.ai.sourceText }}</p>
-            <p>老人：{{ elders.data.value?.find((item) => item.id === editor.ai?.elderId)?.name || '当前老人' }}</p>
+            <p>
+              老人：{{
+                elders.data.value?.find(
+                  (item) => item.id === editor.ai?.elderId,
+                )?.name || '当前老人'
+              }}
+            </p>
             <p>观察：{{ editor.ai.draft.fields.observation }}</p>
             <p>后续：{{ editor.ai.draft.fields.followUp }}</p>
             <p>联系对象：{{ editor.ai.draft.fields.contactTarget }}</p>

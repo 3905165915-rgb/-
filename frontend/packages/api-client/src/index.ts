@@ -8,10 +8,12 @@ import {
   parseHandoverItem,
   parseList,
   parseLoginResponse,
+  parseInlineRecordResponse,
   parseRecordDraft,
   parseTask,
   parseTimelineEvent,
 } from './validators'
+import type { InlineRecordEnvelope, RecordAnalysisConfirmation } from './types'
 export { toUiError, ContractError } from './errors'
 
 export interface LoginPayload {
@@ -24,6 +26,7 @@ export interface LoginResponse {
   user_id?: string
   token_type?: string
   role?: string
+  display_name?: string
 }
 
 export function createApi(baseURL?: string) {
@@ -74,12 +77,24 @@ export function createApi(baseURL?: string) {
           parseLoginResponse(response.data, 'POST /auth/login'),
         )
     },
+    demoLogin(role: 'admin' | 'supervisor' | 'caregiver' | 'family') {
+      return client
+        .post<unknown>('/auth/demo-login', { role })
+        .then((response) =>
+          parseLoginResponse(response.data, 'POST /auth/demo-login'),
+        )
+    },
     elders(params?: Record<string, string | number>) {
       return client
         .get<unknown>('/elders', { params })
         .then((response) => parseList(response.data, 'GET /elders', parseElder))
     },
-    extractRecord(payload: { text: string; elder_id?: string; expectedEpoch?: string; sourceKey?: string }) {
+    extractRecord(payload: {
+      text: string
+      elder_id?: string
+      expectedEpoch?: string
+      sourceKey?: string
+    }) {
       return client
         .post<unknown>('/records/extract', payload, { timeout: 60000 })
         .then((response) =>
@@ -91,6 +106,64 @@ export function createApi(baseURL?: string) {
         .post(
           `/records/${encodeURIComponent(id)}/confirm`,
           confirmBody(payload),
+        )
+        .then((response) => confirmedResponse(response.data))
+    },
+    saveElderRecord(
+      elderId: string,
+      payload: {
+        text: string
+        shift_id?: string | null
+        happened_at?: string | null
+        scene?: string | null
+        attachment_ids?: string[]
+      },
+      idempotencyKey: string,
+    ): Promise<InlineRecordEnvelope> {
+      return client
+        .post<unknown>(
+          `/elders/${encodeURIComponent(elderId)}/record`,
+          payload,
+          {
+            headers: { 'Idempotency-Key': idempotencyKey },
+          },
+        )
+        .then((response) =>
+          parseInlineRecordResponse(
+            response.data,
+            elderId,
+            'POST /elders/:id/record',
+          ),
+        )
+    },
+    retryElderRecordAnalysis(
+      elderId: string,
+      recordId: string,
+    ): Promise<InlineRecordEnvelope> {
+      return client
+        .post<unknown>(
+          `/elders/${encodeURIComponent(elderId)}/records/${encodeURIComponent(recordId)}/analyze`,
+        )
+        .then((response) =>
+          parseInlineRecordResponse(
+            response.data,
+            elderId,
+            'POST /elders/:id/records/:record_id/analyze',
+          ),
+        )
+    },
+    confirmElderRecordAnalysis(
+      elderId: string,
+      recordId: string,
+      analysisId: string,
+      payload: RecordAnalysisConfirmation,
+      idempotencyKey: string,
+    ) {
+      return client
+        .post<unknown>(
+          `/elders/${encodeURIComponent(elderId)}/records/${encodeURIComponent(recordId)}/analysis/${encodeURIComponent(analysisId)}/confirm`,
+          payload,
+          { headers: { 'Idempotency-Key': idempotencyKey } },
         )
         .then((response) => confirmedResponse(response.data))
     },
@@ -174,7 +247,11 @@ export function createApi(baseURL?: string) {
     },
     receiveHandover(
       id: string,
-      payload: { status: 'received' | 'clarifying'; note?: string; expectedEpoch?: string },
+      payload: {
+        status: 'received' | 'clarifying'
+        note?: string
+        expectedEpoch?: string
+      },
     ) {
       const handoverId = handoverParents.get(id)
       if (!handoverId)

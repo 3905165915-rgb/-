@@ -113,7 +113,7 @@ describe('mobile entry and session recovery', () => {
       '/notifications',
     ]) {
       await router.push(path)
-      expect(router.currentRoute.value.path).toBe('/403')
+      expect(router.currentRoute.value.path).toBe('/family')
     }
     await router.push('/login')
     expect(router.currentRoute.value.path).toBe('/family')
@@ -143,15 +143,19 @@ describe('mobile entry and session recovery', () => {
     }
   })
   it('resolves task creation before task detail and preserves elder context', async () => {
-    const router = await open('/tasks/new?elder=elder-a', loginSession('caregiver'))
+    const router = await open(
+      '/tasks/new?elder=elder-a',
+      loginSession('caregiver'),
+    )
     const route = router.currentRoute.value
     expect(route.matched.at(-1)?.path).toBe('/tasks/new')
     expect(route.params.id).toBeUndefined()
     expect(route.query.elder).toBe('elder-a')
     expect(route.meta.focused).toBe(true)
-    const paths = router.options.routes
-      .find((record) => record.path === '/')
-      ?.children?.map((record) => record.path) ?? []
+    const paths =
+      router.options.routes
+        .find((record) => record.path === '/')
+        ?.children?.map((record) => record.path) ?? []
     expect(paths.indexOf('tasks/new')).toBeGreaterThan(-1)
     expect(paths.indexOf('tasks/new')).toBeLessThan(paths.indexOf('tasks/:id'))
   })
@@ -163,14 +167,15 @@ describe('mobile entry and session recovery', () => {
     },
   )
   it('opens internal notification business forms with exact object context and denies family access', async () => {
-    const path = '/notifications/business/family?summary_id=S1&action=%2Ffamily%2Fsummaries%2F%7Bsummary_id%7D%2Freview'
+    const path =
+      '/notifications/business/family?summary_id=S1&action=%2Ffamily%2Fsummaries%2F%7Bsummary_id%7D%2Freview'
     const router = await open(path, loginSession('supervisor'))
     expect(router.currentRoute.value.params.group).toBe('family')
     expect(router.currentRoute.value.query.summary_id).toBe('S1')
     expect(router.currentRoute.value.meta.focused).toBe(true)
     sessionStorage.setItem(key, JSON.stringify(loginSession('family')))
     await router.push('/notifications/business/memories')
-    expect(router.currentRoute.value.path).toBe('/403')
+    expect(router.currentRoute.value.path).toBe('/family')
   })
   it.each([
     { mode: 'api', accountKey: 'old', role: null, accessToken: 'old' },

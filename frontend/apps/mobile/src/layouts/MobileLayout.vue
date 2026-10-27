@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import {
   Activity,
   ArrowLeft,
+  ArrowLeftRight,
   Bell,
   LogOut,
   UserRound,
@@ -70,7 +71,11 @@ function logout() {
 <template>
   <main
     class="mobile-layout"
-    :class="{ 'focus-layout': focused, 'keyboard-open': keyboardOpen }"
+    :class="{
+      'focus-layout': focused,
+      'keyboard-open': keyboardOpen,
+      'family-layout': auth.role === 'family',
+    }"
     :style="{ '--mobile-keyboard-offset': `${keyboardOffset}px` }"
   >
     <header class="mobile-header hl-glass">
@@ -82,22 +87,25 @@ function logout() {
         aria-label="返回工作台"
         @click="back"
       >
-        <ArrowLeft
-          :size="20"
-          aria-hidden="true"
-        />
+        <ArrowLeft :size="20" aria-hidden="true" />
       </button>
       <RouterLink
         :to="homeForRole(auth.role)"
         class="mobile-brand"
         aria-label="护老智交 首页"
       >
-        <Activity
-          :size="24"
-          aria-hidden="true"
-        /><span>护老智交</span>
+        <Activity :size="24" aria-hidden="true" /><span>护老智交</span>
       </RouterLink>
       <div class="header-tools">
+        <button
+          type="button"
+          class="icon-button"
+          title="切换身份"
+          aria-label="切换身份"
+          @click="logout"
+        >
+          <ArrowLeftRight :size="19" aria-hidden="true" />
+        </button>
         <RouterLink
           v-if="auth.role && auth.role !== 'family'"
           to="/notifications"
@@ -105,16 +113,10 @@ function logout() {
           title="照护跟进"
           aria-label="照护跟进"
         >
-          <Bell
-            :size="20"
-            aria-hidden="true"
-          />
+          <Bell :size="20" aria-hidden="true" />
         </RouterLink>
-        <span
-          v-if="mode === 'demo'"
-          class="demo-marker"
-        >虚构演示</span>
-        <ClearLocalDraftsButton />
+        <span v-if="mode === 'demo'" class="demo-marker">虚构演示</span>
+        <ClearLocalDraftsButton v-if="auth.role !== 'family'" />
         <button
           type="button"
           class="icon-button account-trigger"
@@ -124,10 +126,7 @@ function logout() {
           :aria-expanded="auth.role === 'family' ? accountOpen : undefined"
           @click="openAccount"
         >
-          <UserRound
-            :size="20"
-            aria-hidden="true"
-          />
+          <UserRound :size="20" aria-hidden="true" />
         </button>
       </div>
     </header>
@@ -135,7 +134,7 @@ function logout() {
       <RouterView />
     </section>
     <van-tabbar
-      v-if="!focused && !keyboardOpen"
+      v-if="!focused && !keyboardOpen && auth.role !== 'family'"
       :model-value="activeTab"
       class="hl-glass"
       aria-label="主导航"
@@ -175,16 +174,10 @@ function logout() {
           aria-label="关闭更多菜单"
           @click="navigationOpen = false"
         >
-          <X
-            :size="20"
-            aria-hidden="true"
-          />
+          <X :size="20" aria-hidden="true" />
         </button>
       </header>
-      <nav
-        class="sheet-body"
-        aria-label="老人和账户菜单"
-      >
+      <nav class="sheet-body" aria-label="老人和账户菜单">
         <van-cell
           v-for="item in otherMenu"
           :key="item.path"
@@ -212,18 +205,12 @@ function logout() {
           aria-label="关闭账号菜单"
           @click="accountOpen = false"
         >
-          <X
-            :size="20"
-            aria-hidden="true"
-          />
+          <X :size="20" aria-hidden="true" />
         </button>
       </header>
       <div class="sheet-body">
         <div class="account-person">
-          <UserRound
-            :size="28"
-            aria-hidden="true"
-          />
+          <UserRound :size="28" aria-hidden="true" />
           <div>
             <strong>{{ auth.session?.accountKey }}</strong>
             <p class="muted">
@@ -233,7 +220,8 @@ function logout() {
           </div>
         </div>
         <div class="preference-row">
-          <label for="mobile-transparency">降低透明度</label><van-switch
+          <label for="mobile-transparency">降低透明度</label
+          ><van-switch
             id="mobile-transparency"
             :model-value="reducedTransparency"
             size="24"
@@ -241,18 +229,30 @@ function logout() {
             @update:model-value="updateTransparency"
           />
         </div>
-        <van-button
-          block
-          plain
-          class="logout-button"
-          @click="logout"
-        >
-          <LogOut
-            :size="18"
-            aria-hidden="true"
-          />退出登录
+        <van-button block plain class="logout-button" @click="logout">
+          <LogOut :size="18" aria-hidden="true" />退出登录
         </van-button>
       </div>
     </van-popup>
   </main>
 </template>
+
+<style scoped>
+.family-layout {
+  background:
+    radial-gradient(ellipse at 0 10%, #e6eddb80, transparent 50%),
+    radial-gradient(ellipse at 100% 45%, #f1e6ce60, transparent 45%), #f4f6ef;
+  min-height: 100dvh;
+}
+.family-layout .mobile-header {
+  background: #ffffffb8;
+  border-bottom: 1px solid #e1e6d8;
+  box-shadow: 0 3px 20px #6f7f5610;
+}
+.family-layout .mobile-brand {
+  color: #426d54;
+}
+.family-layout .mobile-content {
+  padding-bottom: calc(20px + env(safe-area-inset-bottom));
+}
+</style>

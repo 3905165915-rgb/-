@@ -1,27 +1,27 @@
 :root {
   color-scheme: light;
-  --hl-canvas: #f5f7f8;
+  --hl-canvas: #f4f3fa;
   --hl-surface: #ffffff;
   --hl-ink: #20282e;
   --hl-muted: #5f6b73;
-  --hl-primary: #1767cf;
+  --hl-primary: #6959b6;
   --hl-brand: #14765e;
   --hl-success: #14765e;
   --hl-warning: #946000;
   --hl-danger: #be3545;
-  --hl-border: #dce3e7;
-  --hl-primary-soft: #edf4ff;
+  --hl-border: #e2dfec;
+  --hl-primary-soft: #eeebfa;
   --hl-success-soft: #edf7f2;
   --hl-warning-soft: #fff6e5;
   --hl-danger-soft: #fff0f1;
-  --hl-radius: 8px;
+  --hl-radius: 14px;
   --hl-space-1: 4px;
   --hl-space-2: 8px;
   --hl-space-3: 12px;
   --hl-space-4: 16px;
   --hl-space-6: 24px;
-  --hl-glass-bg: rgb(255 255 255 / 92%);
-  --hl-glass-blur: 18px;
+  --hl-glass-bg: rgb(255 255 255 / 78%);
+  --hl-glass-blur: 22px;
   --hl-duration: 150ms;
   --van-primary-color: var(--hl-primary);
   --van-success-color: var(--hl-success);
@@ -38,12 +38,12 @@
   --van-cell-font-size: 16px;
   --van-field-label-color: var(--hl-ink);
   --el-color-primary: var(--hl-primary);
-  --el-color-primary-light-3: #5d95dd;
-  --el-color-primary-light-5: #8bb3e7;
-  --el-color-primary-light-7: #b9d1f1;
-  --el-color-primary-light-8: #d1e1f8;
-  --el-color-primary-light-9: #edf4ff;
-  --el-color-primary-dark-2: #1252a6;
+  --el-color-primary-light-3: #968bcf;
+  --el-color-primary-light-5: #b4acdb;
+  --el-color-primary-light-7: #d2cde9;
+  --el-color-primary-light-8: #e1ddef;
+  --el-color-primary-light-9: #eeebfa;
+  --el-color-primary-dark-2: #544792;
   --el-color-success: var(--hl-success);
   --el-color-warning: var(--hl-warning);
   --el-color-danger: var(--hl-danger);
@@ -53,7 +53,7 @@
   --el-bg-color: var(--hl-surface);
   --el-bg-color-page: var(--hl-canvas);
   --el-border-color: var(--hl-border);
-  --el-border-radius-base: 6px;
+  --el-border-radius-base: 10px;
 }
 
 .hl-glass {
@@ -115,7 +115,9 @@
 @media (hover: hover) and (prefers-reduced-motion: no-preference) {
   .metric-card,
   .elder-work-card {
-    transition: transform var(--hl-duration), box-shadow var(--hl-duration);
+    transition:
+      transform var(--hl-duration),
+      box-shadow var(--hl-duration);
   }
   .metric-card:hover,
   .elder-work-card:hover {

@@ -77,9 +77,12 @@ export function useElders() {
 }
 export function useCareWorklist() {
   return useQuery({
-    queryKey: computed(() => queryKey('care-worklist', session.value?.role ?? '')),
+    queryKey: computed(() =>
+      queryKey('care-worklist', session.value?.role ?? ''),
+    ),
     enabled: computed(() => enabled.value && mode === 'api'),
-    queryFn: async () => validateCareWorklist(await request('/elders/worklist/me')),
+    queryFn: async () =>
+      validateCareWorklist(await request('/elders/worklist/me')),
   })
 }
 export async function fetchTasks() {
@@ -120,8 +123,6 @@ export function useTimeline(itemId: () => string) {
         'label',
         'detail',
         'actor',
-        'happenedAt',
-        'enteredAt',
       ]),
   })
 }

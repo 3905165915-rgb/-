@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatBusinessTime } from '@hulao/shared'
 import WorkflowPanel from '@hulao/shared/workflow'
 import CareAssignments from './CareAssignments.vue'
 import { computed, ref } from 'vue'
@@ -119,11 +120,11 @@ const rows = computed(() =>
               >{{ row.risk }}</span
             ><span v-else class="muted">未提供</span>
           </template> </el-table-column
-        ><el-table-column
-          prop="lastUpdate"
-          label="最近更新"
-          min-width="140"
-        /><el-table-column label="操作" fixed="right" width="100">
+        ><el-table-column label="最近更新" min-width="140"
+          ><template #default="{ row }">{{
+            row.lastUpdate ? formatBusinessTime(row.lastUpdate) : '未提供'
+          }}</template></el-table-column
+        ><el-table-column label="操作" fixed="right" width="100">
           <template #default="{ row }">
             <el-button
               link

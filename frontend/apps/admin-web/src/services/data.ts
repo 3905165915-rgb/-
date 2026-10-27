@@ -111,8 +111,6 @@ export function useTimeline(itemId: () => string) {
         'label',
         'detail',
         'actor',
-        'happenedAt',
-        'enteredAt',
       ]),
   })
 }

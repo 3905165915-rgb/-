@@ -59,12 +59,18 @@ const router = createRouter({
         },
         {
           path: 'records/drafts',
-          redirect: to => ({ path: '/records', query: { ...to.query, tab: 'drafts' } }),
+          redirect: (to) => ({
+            path: '/records',
+            query: { ...to.query, tab: 'drafts' },
+          }),
           meta: { roles: internalRoles },
         },
         {
           path: 'records/history',
-          redirect: to => ({ path: '/records', query: { ...to.query, tab: 'history' } }),
+          redirect: (to) => ({
+            path: '/records',
+            query: { ...to.query, tab: 'history' },
+          }),
           meta: { roles: internalRoles },
         },
         {
@@ -94,12 +100,14 @@ const router = createRouter({
         },
         {
           path: 'notifications',
-          component: () => import('../pages/notifications/NotificationsPage.vue'),
+          component: () =>
+            import('../pages/notifications/NotificationsPage.vue'),
           meta: { roles: internalRoles, focused: true },
         },
         {
           path: 'notifications/business/:group(family|memories|changes)',
-          component: () => import('../pages/notifications/NotificationBusinessPage.vue'),
+          component: () =>
+            import('../pages/notifications/NotificationBusinessPage.vue'),
           meta: { roles: internalRoles, focused: true },
         },
         {
@@ -133,11 +141,7 @@ router.beforeEach((to) => {
   if (to.meta.requiresAuth && !current) return '/login'
   if (to.path === '/login' && current) return homeForRole(current.role)
   // Recover bookmarks and open tabs left on the old mobile forbidden page.
-  if (
-    to.path === '/403' &&
-    (!current || canAccess(current.role, internalRoles))
-  )
-    return homeForRole(current?.role ?? null)
+  if (to.path === '/403') return homeForRole(current?.role ?? null)
   const roles = to.meta.roles as readonly Role[] | undefined
   if (roles && !canAccess(current?.role ?? null, roles)) return '/403'
 })

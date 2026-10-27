@@ -68,8 +68,13 @@ async function noOverflow(page) {
 }
 async function loginMobile(page, role = 'caregiver') {
   await page.goto(`${base}/mobile/login`)
-  await page.locator('select').selectOption(role)
-  await page.getByRole('button', { name: '进入演示' }).click()
+  const label = {
+    caregiver: '护理员',
+    supervisor: '护士 / 主管',
+    admin: '管理员',
+    family: '家属',
+  }[role]
+  await page.getByRole('button', { name: new RegExp(label) }).click()
 }
 const mobile = await context.newPage()
 await mobile.setViewportSize({ width: 390, height: 844 })
@@ -205,7 +210,7 @@ try {
   await test('同源双端独立身份与移动端草稿刷新恢复', async () => {
     await loginMobile(mobile)
     await admin.goto(`${base}/admin/login`)
-    await admin.getByRole('button', { name: '进入演示' }).click()
+    await admin.getByRole('button', { name: /护士 \/ 主管/ }).click()
     await text(admin, '主管')
     await mobile.goto(`${base}/mobile/records/new`)
     await mobile.getByRole('button', { name: '使用演示原文' }).click()
@@ -319,29 +324,64 @@ try {
     await mobile.getByRole('button', { name: '保存并查看整理结果' }).click()
     await text(mobile, '整理结果（待核对）')
     await mobile.locator('textarea').first().fill('修改后的原文')
-    assert.equal(await mobile.getByRole('button', { name: '确认并提交', exact: true }).isDisabled(), true)
+    assert.equal(
+      await mobile
+        .getByRole('button', { name: '确认并提交', exact: true })
+        .isDisabled(),
+      true,
+    )
     await mobile.getByRole('button', { name: '使用演示原文' }).click()
     await mobile.getByRole('button', { name: '保存并查看整理结果' }).click()
-    await mobile.getByRole('button', { name: '确认并提交', exact: true }).click()
+    await mobile
+      .getByRole('button', { name: '确认并提交', exact: true })
+      .click()
     await mobile.locator('.van-dialog__confirm').click()
     await text(mobile, '记录已确认并保存到本机')
     const result = await mobile.evaluate(async () => {
       const core = await import('/packages/shared/src/index.ts')
-      const { createDemoTask } = await import('/packages/shared/src/demo-task-create.ts')
+      const { createDemoTask } =
+        await import('/packages/shared/src/demo-task-create.ts')
       const state = await core.loadDemoState()
-      const draft = state.drafts.find(item => item.status === 'confirmed')
+      const draft = state.drafts.find((item) => item.status === 'confirmed')
       const record = state.confirmedDrafts[draft.id]
-      await core.createDemoApi().confirmRecord(draft.id, { fields: draft.fields, demoEpoch: state.epoch })
+      await core
+        .createDemoApi()
+        .confirmRecord(draft.id, {
+          fields: draft.fields,
+          demoEpoch: state.epoch,
+        })
       const next = await core.loadDemoState()
       const day = next.demoDay
-      const input = { epoch: state.epoch, operationKey: 'regression-followup', elderId: draft.elderId, sourceRecordId: record.record_id, title: '活动前询问本人意愿', executionAt: `${day}T19:00:00+08:00`, deadlineAt: `${day}T19:30:00+08:00`, assignee: '小王', shiftName: '晚班', scene: 'activity', confirmed: true }
+      const input = {
+        epoch: state.epoch,
+        operationKey: 'regression-followup',
+        elderId: draft.elderId,
+        sourceRecordId: record.record_id,
+        title: '活动前询问本人意愿',
+        executionAt: `${day}T19:00:00+08:00`,
+        deadlineAt: `${day}T19:30:00+08:00`,
+        assignee: '小王',
+        shiftName: '晚班',
+        scene: 'activity',
+        confirmed: true,
+      }
       const task = await createDemoTask(input)
       await createDemoTask(input)
       const after = await core.loadDemoState()
-      return { id: task.id, item: task.itemId, records: next.records.filter(item => item.id === record.record_id).length, unchanged: next.tasks.length === state.tasks.length, count: after.tasks.filter(item => item.id === task.id).length }
+      return {
+        id: task.id,
+        item: task.itemId,
+        records: next.records.filter((item) => item.id === record.record_id)
+          .length,
+        unchanged: next.tasks.length === state.tasks.length,
+        count: after.tasks.filter((item) => item.id === task.id).length,
+      }
     })
-    assert.equal(result.records, 1); assert.equal(result.unchanged, true); assert.equal(result.count, 1)
-    newItem = result.item; newTask = result.id
+    assert.equal(result.records, 1)
+    assert.equal(result.unchanged, true)
+    assert.equal(result.count, 1)
+    newItem = result.item
+    newTask = result.id
     await text(admin, '活动前询问本人意愿')
   })
   await test('交班编辑版本、另一窗口接班与澄清', async () => {
@@ -359,12 +399,28 @@ try {
     )
     await receiving.getByRole('tab', { name: '接班', exact: true }).click()
     await text(receiving, '活动前询问本人意愿')
-    await receiving.locator('.receive-item').filter({ hasText: '活动前询问本人意愿' }).getByRole('button', { name: '提交澄清' }).click()
+    await receiving
+      .locator('.receive-item')
+      .filter({ hasText: '活动前询问本人意愿' })
+      .getByRole('button', { name: '提交澄清' })
+      .click()
     await text(receiving, '请填写需要澄清的内容')
-    await receiving.locator('.receive-item').filter({ hasText: '活动前询问本人意愿' }).locator('textarea').fill('请确认当次意愿')
-    await receiving.locator('.receive-item').filter({ hasText: '活动前询问本人意愿' }).getByRole('button', { name: '提交澄清' }).click()
+    await receiving
+      .locator('.receive-item')
+      .filter({ hasText: '活动前询问本人意愿' })
+      .locator('textarea')
+      .fill('请确认当次意愿')
+    await receiving
+      .locator('.receive-item')
+      .filter({ hasText: '活动前询问本人意愿' })
+      .getByRole('button', { name: '提交澄清' })
+      .click()
     await text(receiving, '需澄清')
-    await receiving.locator('.receive-item').filter({ hasText: '活动前询问本人意愿' }).getByRole('button', { name: '接收', exact: true }).click()
+    await receiving
+      .locator('.receive-item')
+      .filter({ hasText: '活动前询问本人意愿' })
+      .getByRole('button', { name: '接收', exact: true })
+      .click()
     await text(receiving, '已接收')
     await noOverflow(receiving)
     await receiving.screenshot({
@@ -378,13 +434,21 @@ try {
     await text(admin, '接班接收')
     await mobile.goto(`${base}/mobile/tasks/${newTask}`)
     await mobile.getByRole('button', { name: '开始服务', exact: true }).click()
-    await mobile.getByRole('button', { name: '填写下一操作', exact: true }).click()
+    await mobile
+      .getByRole('button', { name: '填写下一操作', exact: true })
+      .click()
     await mobile
       .getByRole('textbox', { name: '服务结果' })
       .fill('已与女儿联系，说明午餐情况。')
     await mobile.getByRole('button', { name: '登记结果', exact: true }).click()
     await text(mobile, '演示操作已保存')
-    for (const label of ['来源记录', '人工新建任务', '交班', '接班接收', '执行完成'])
+    for (const label of [
+      '来源记录',
+      '人工新建任务',
+      '交班',
+      '接班接收',
+      '执行完成',
+    ])
       await text(admin, label)
     await noOverflow(admin)
     await admin.screenshot({
@@ -402,7 +466,8 @@ try {
     const family = await context.newPage()
     await loginMobile(family, 'family')
     await family.goto(`${base}/mobile/records/new`)
-    await family.waitForURL('**/403')
+    await family.waitForURL('**/mobile/family')
+    await family.getByText('王爷爷', { exact: false }).first().waitFor()
     assert.equal(
       await family.getByRole('button', { name: '保存并查看整理结果' }).count(),
       0,
@@ -457,7 +522,7 @@ try {
       await live.route('**/api/**', (route) =>
         route.fulfill({ status, contentType: 'application/json', body: '{}' }),
       )
-      await live.goto(new URL('/elders', process.env.API_ADMIN_URL).href)
+      await live.goto(new URL('elders', process.env.API_ADMIN_URL).href)
       await text(live, '服务暂时不可用')
       assert.equal(await live.getByText('王阿姨').count(), 0)
       status = 403
@@ -473,9 +538,11 @@ try {
       await live.close()
     })
   if (process.env.API_MOBILE_URL)
-    await test('正式写请求失败保留原文，刷新后禁止重复提交', async () => {
+    await test('正式原文失败恢复、同编号重试和分析回执刷新恢复', async () => {
       const live = await context.newPage()
       await live.setViewportSize({ width: 390, height: 844 })
+      const errors = []
+      live.on('pageerror', (error) => errors.push(error.message))
       await live.goto(process.env.API_MOBILE_URL)
       await live.evaluate(() =>
         sessionStorage.setItem(
@@ -483,76 +550,165 @@ try {
           JSON.stringify({
             mode: 'api',
             accountKey: 'test-caregiver',
+            userId: 'staff-live',
             role: 'caregiver',
             accessToken: 'test-token',
           }),
         ),
       )
-      let confirms = 0
+      const attempts = []
+      let analyses = 0
+      const confirmations = []
+      const record = {
+        id: 'record-live',
+        elder_id: 'e-live',
+        status: 'confirmed',
+        revision: 1,
+        raw_text: '正式模式测试原文',
+        admission_id: 'adm-live',
+        created_at: '2026-10-27T10:00:00+08:00',
+        happened_at: null,
+      }
       await live.route('**/api/**', async (route) => {
-        const path = new URL(route.request().url()).pathname
-        const body = route.request().postDataJSON()
+        const req = route.request(),
+          path = new URL(req.url()).pathname
         let data = []
         if (path.endsWith('/elders'))
           data = [
             {
               id: 'e-live',
-              name: '测试老人',
-              bedLabel: '101床',
-              status: '入住',
+              name: '虚构测试老人',
+              status: 'active',
+              current_admission_id: 'adm-live',
+              bed_id: 'bed-live',
+              bed_label: '101床',
+              revision: 1,
             },
           ]
-        if (path.endsWith('/extract'))
-          data = {
-            id: 'draft-live',
-            elderId: 'e-live',
-            originalText: body.text,
-            fields: {
-              observation: '测试观察',
-              followUp: '',
-              contactTarget: '',
-            },
-            evidence: [body.text],
-            warnings: [],
-            status: 'pending_review',
-          }
-        if (path.endsWith('/confirm')) {
-          confirms++
-          await route.fulfill({
-            status: 500,
-            contentType: 'application/json',
-            body: '{}',
+        if (path.endsWith('/e-live/record') && req.method() === 'POST') {
+          attempts.push({
+            key: req.headers()['idempotency-key'],
+            body: req.postDataJSON(),
           })
-          return
+          if (attempts.length === 1) {
+            await route.fulfill({
+              status: 500,
+              contentType: 'application/json',
+              body: '{}',
+            })
+            return
+          }
+          data = {
+            record,
+            analysis_status: 'failed',
+            analysis: null,
+            analysis_error: { code: 'timeout', message: '分析暂未完成' },
+          }
+        }
+        if (path.endsWith('/analysis/analysis-live/confirm')) {
+          confirmations.push({
+            key: req.headers()['idempotency-key'],
+            body: req.postDataJSON(),
+          })
+          if (confirmations.length === 1) {
+            await route.fulfill({
+              status: 500,
+              contentType: 'application/json',
+              body: '{}',
+            })
+            return
+          }
+          data = { record, tasks: [], memories: [] }
+        }
+        if (path.endsWith('/records/record-live/analyze')) {
+          analyses++
+          data = {
+            record,
+            analysis_status: 'ready',
+            analysis: {
+              id: 'analysis-live',
+              record_id: record.id,
+              record_revision: 1,
+              status: 'ready',
+              scene: { value: null, citation: null },
+              observations: [],
+              task_suggestions: [],
+              preference_suggestions: [],
+              created_at: record.created_at,
+            },
+          }
         }
         await route.fulfill({
           contentType: 'application/json',
           body: JSON.stringify(data),
         })
       })
-      await live.goto(new URL('/records/new', process.env.API_MOBILE_URL).href)
-      await live.getByLabel(/^老人/).selectOption('e-live')
-      await live.locator('textarea').first().fill('正式模式测试原文')
-      await live.getByRole('button', { name: '保存并查看整理结果' }).click()
+      await live.goto(
+        new URL('records/new?elder=e-live', process.env.API_MOBILE_URL).href,
+      )
+      await live.getByLabel('本次记录', { exact: true }).fill(record.raw_text)
       await live
-        .getByRole('button', { name: '确认并提交', exact: true })
+        .getByRole('button', { name: '保存并分析', exact: true })
         .click()
-      await live.getByRole('button', { name: '确认', exact: true }).click()
-      await text(live, '提交结果待核实')
-      assert.equal(confirms, 1)
+      await text(live, '原提交已锁定')
+      assert.equal(attempts.length, 1)
       await live.reload()
-      await text(live, '结果待核实')
+      await text(live, '原提交已锁定')
       assert.equal(
-        await live.locator('textarea').first().inputValue(),
-        '正式模式测试原文',
+        await live.getByLabel('本次记录', { exact: true }).inputValue(),
+        record.raw_text,
       )
       assert.equal(
-        await live
-          .getByRole('button', { name: '确认并提交', exact: true })
-          .isDisabled(),
+        await live.getByLabel('本次记录', { exact: true }).isDisabled(),
         true,
       )
-      assert.equal(confirms, 1)
+      assert.equal(attempts.length, 1)
+      await live
+        .getByRole('button', { name: '核实并重试原提交', exact: true })
+        .click()
+      await text(live, '正式记录已保存，分析失败')
+      assert.equal(attempts.length, 2)
+      assert.ok(attempts[0].key)
+      assert.deepEqual(attempts[0], attempts[1])
+      await live.reload()
+      await text(live, '已恢复上次服务器回执')
+      await live
+        .getByRole('button', { name: '重试此记录分析', exact: true })
+        .click()
+      await text(live, '同一记录的分析已恢复')
+      assert.equal(analyses, 1)
+      assert.equal(attempts.length, 2)
+      await live.reload()
+      await text(live, '已恢复上次服务器回执')
+      await live
+        .getByRole('button', { name: '保存本次核对', exact: true })
+        .click()
+      await live
+        .getByRole('button', { name: '核实并重试原核对', exact: true })
+        .waitFor()
+      assert.equal(confirmations.length, 1)
+      await live.reload()
+      await live
+        .getByRole('button', { name: '核实并重试原核对', exact: true })
+        .click()
+      await text(live, '本次核对已保存')
+      assert.deepEqual(confirmations[0], confirmations[1])
+      assert.equal(confirmations.length, 2)
+      await live.reload()
+      await live
+        .locator('.workspace-badge')
+        .filter({ hasText: '已核对' })
+        .waitFor()
+      assert.equal(
+        await live
+          .getByRole('button', { name: '保存本次核对', exact: true })
+          .count(),
+        0,
+      )
+      assert.equal(confirmations.length, 2)
+      assert.equal(analyses, 1)
+      assert.equal(attempts.length, 2)
+      assert.deepEqual(errors, [])
       await live.close()
     })
   if (process.env.PREVIEW_URL)
@@ -560,14 +716,13 @@ try {
       const preview = await context.newPage()
       const root = process.env.PREVIEW_URL
       await preview.goto(`${root}/admin/elders`)
-      await preview.getByRole('button', { name: '进入演示' }).click()
+      await preview.getByRole('button', { name: /护士 \/ 主管/ }).click()
       await text(preview, '主管')
       await preview.goto(`${root}/admin/elders`)
       await text(preview, '王爷爷')
       const previewMobile = await context.newPage()
       await previewMobile.goto(`${root}/mobile/records/new`)
-      await previewMobile.locator('select').selectOption('caregiver')
-      await previewMobile.getByRole('button', { name: '进入演示' }).click()
+      await previewMobile.getByRole('button', { name: /护理员/ }).click()
       await previewMobile.goto(`${root}/mobile/records/new`)
       await previewMobile.getByRole('button', { name: '使用演示原文' }).click()
       await previewMobile.waitForFunction(

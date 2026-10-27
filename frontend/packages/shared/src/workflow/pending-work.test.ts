@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { createInitialDemoState } from '../demo'
 import type { FrontendSession } from '../session'
 import {
   clearNotificationAction,
@@ -33,6 +34,23 @@ const item: ServerNotification = {
   created_at: '2026-10-25T10:00:00Z',
 }
 describe('server notifications', () => {
+  it('keeps transferred work pending and distinguishes not executed from completion', () => {
+    const seed = createInitialDemoState()
+    const task = seed.tasks[0]
+    const rows = demoFollowups(
+      {
+        tasks: [
+          { ...task, id: 'transfer', status: 'transferred' },
+          { ...task, id: 'notdone', status: 'not_done' },
+        ],
+        handover: [],
+      },
+      true,
+    )
+    expect(rows.map((row) => row.category)).toEqual(['pending', 'processed'])
+    expect(rows[0].detail).toContain('待接续')
+    expect(rows[1].detail).toContain('未执行')
+  })
   it('categorizes business stages without treating read or accepted receipts as completion', () => {
     expect(notificationCategory(item)).toBe('pending')
     expect(

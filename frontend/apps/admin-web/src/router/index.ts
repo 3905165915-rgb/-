@@ -39,7 +39,8 @@ const router = createRouter({
         },
         {
           path: 'notifications',
-          component: () => import('../pages/notifications/NotificationsPage.vue'),
+          component: () =>
+            import('../pages/notifications/NotificationsPage.vue'),
           meta: { roles: internalRoles },
         },
         {
@@ -126,10 +127,12 @@ router.beforeEach((to) => {
   }
   session.value = current
   if (
-    current?.role === 'caregiver' &&
+    (current?.role === 'caregiver' || current?.role === 'family') &&
     (to.meta.requiresAuth || ['/login', '/403'].includes(to.path))
   ) {
-    window.location.replace('/mobile/')
+    window.location.replace(
+      current.role === 'family' ? '/mobile/family' : '/mobile/',
+    )
     return false
   }
   if (to.meta.requiresAuth && !current) return '/login'

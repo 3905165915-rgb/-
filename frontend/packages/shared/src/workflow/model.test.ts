@@ -28,20 +28,53 @@ beforeEach(() => {
   vi.stubGlobal('window', new EventTarget())
 })
 describe('business form contracts', () => {
+  it('explains occupied beds even when an older server only returns the error code', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response(JSON.stringify({ detail: 'bed_occupied' }), {
+            status: 409,
+          }),
+        ),
+    )
+    await expect(request('/elders/E1/admissions', 'post', {})).rejects.toThrow(
+      '所选床位已被占用，请选择空闲床位',
+    )
+  })
   it('allows raw-only manual entry without reviving AI task candidates removed by a reviewer', () => {
-    const value = initial(schemas.ManualRecordRequest) as Record<string, unknown>
-    Object.assign(value, { elder_id: 'E1', raw_text: '虚构：家属已回复，下午愿意参加活动' })
-    const manual = requestBody('/records/manual', schemas.ManualRecordRequest, value)
+    const value = initial(schemas.ManualRecordRequest) as Record<
+      string,
+      unknown
+    >
+    Object.assign(value, {
+      elder_id: 'E1',
+      raw_text: '虚构：家属已回复，下午愿意参加活动',
+    })
+    const manual = requestBody(
+      '/records/manual',
+      schemas.ManualRecordRequest,
+      value,
+    )
     expect(manual).not.toHaveProperty('observations')
     expect(manual).toHaveProperty('raw_text', value.raw_text)
     expect(manual).toHaveProperty('task_candidates', [])
-    const reviewed = requestBody('/records/{draft_id}/confirm', schemas.RecordConfirmRequest, {
-      observations: ['虚构：午餐吃了一半'], task_candidates: [],
-    })
+    const reviewed = requestBody(
+      '/records/{draft_id}/confirm',
+      schemas.RecordConfirmRequest,
+      {
+        observations: ['虚构：午餐吃了一半'],
+        task_candidates: [],
+      },
+    )
     expect(reviewed).toHaveProperty('task_candidates', [])
-    expect(() => requestBody('/records/{draft_id}/confirm', schemas.RecordConfirmRequest, {
-      observations: [], task_candidates: [],
-    })).toThrow()
+    expect(() =>
+      requestBody('/records/{draft_id}/confirm', schemas.RecordConfirmRequest, {
+        observations: [],
+        task_candidates: [],
+      }),
+    ).toThrow()
   })
   it('does not silently disable accounts or beds when only renaming them', () => {
     const value = initial(schemas.BedUpdate) as Record<string, unknown>
@@ -132,31 +165,52 @@ describe('business form contracts', () => {
   it('does not report an unavailable AI service as a saved record', async () => {
     vi.stubGlobal(
       'fetch',
-      vi
-        .fn()
-        .mockResolvedValue(
-          new Response(JSON.stringify({ detail: 'AI unavailable' }), {
-            status: 503,
-          }),
-        ),
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ detail: 'AI unavailable' }), {
+          status: 503,
+        }),
+      ),
     )
     await expect(
       request('/records/extract', 'post', { text: '虚构原文' }),
     ).rejects.toThrow('AI暂不可用')
   })
   it('explains mismatched quality scopes in Chinese if the server rejects them', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(
-      JSON.stringify({ detail: 'quality_scope_mismatch' }), { status: 422 },
-    )))
-    await expect(request('/quality/checks', 'post', {})).rejects.toThrow('所选班次必须是该交班单的交出班次')
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response(JSON.stringify({ detail: 'quality_scope_mismatch' }), {
+            status: 422,
+          }),
+        ),
+    )
+    await expect(request('/quality/checks', 'post', {})).rejects.toThrow(
+      '所选班次必须是该交班单的交出班次',
+    )
   })
   it('uploads bounded image bytes with the authenticated binary contract and fetches private content as a blob', async () => {
-    const uploadResponse = new Response(JSON.stringify({ id: 'PHOTO-1', status: 'pending_review' }), { status: 201 })
-    const contentResponse = new Response(new Blob(['synthetic-image'], { type: 'image/jpeg' }), { status: 200 })
-    const fetcher = vi.fn().mockResolvedValueOnce(uploadResponse).mockResolvedValueOnce(contentResponse)
+    const uploadResponse = new Response(
+      JSON.stringify({ id: 'PHOTO-1', status: 'pending_review' }),
+      { status: 201 },
+    )
+    const contentResponse = new Response(
+      new Blob(['synthetic-image'], { type: 'image/jpeg' }),
+      { status: 200 },
+    )
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(uploadResponse)
+      .mockResolvedValueOnce(contentResponse)
     vi.stubGlobal('fetch', fetcher)
     const file = new Blob(['synthetic-image'], { type: 'image/jpeg' })
-    await requestBinary('/attachments?elder_id=E1', file, 'image/jpeg', 'upload-1')
+    await requestBinary(
+      '/attachments?elder_id=E1',
+      file,
+      'image/jpeg',
+      'upload-1',
+    )
     const [url, init] = fetcher.mock.calls[0]
     expect(url).toContain('/api/v1/attachments?elder_id=E1')
     expect(init.headers).toMatchObject({
@@ -167,29 +221,74 @@ describe('business form contracts', () => {
     expect(init.body).toBe(file)
     const blob = await requestBlob('/attachments/PHOTO-1/content')
     expect(blob.size).toBeGreaterThan(0)
-    expect(fetcher.mock.calls[1][1].headers.Authorization).toBe('Bearer synthetic-token')
+    expect(fetcher.mock.calls[1][1].headers.Authorization).toBe(
+      'Bearer synthetic-token',
+    )
   })
   it('rejects oversized images before sending and keeps the server idempotency error actionable', async () => {
     const fetcher = vi.fn()
     vi.stubGlobal('fetch', fetcher)
-    await expect(requestBinary('/attachments', new Blob([new Uint8Array(4 * 1024 * 1024 + 1)]), 'image/jpeg', 'large'))
-      .rejects.toThrow('不能超过4MiB')
+    await expect(
+      requestBinary(
+        '/attachments',
+        new Blob([new Uint8Array(4 * 1024 * 1024 + 1)]),
+        'image/jpeg',
+        'large',
+      ),
+    ).rejects.toThrow('不能超过4MiB')
     expect(fetcher).not.toHaveBeenCalled()
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ safe_message: '照片已发生变化' }), { status: 409 })))
-    await expect(requestBlob('/attachments/PHOTO-1/content')).rejects.toThrow('照片已发生变化')
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response(JSON.stringify({ safe_message: '照片已发生变化' }), {
+            status: 409,
+          }),
+        ),
+    )
+    await expect(requestBlob('/attachments/PHOTO-1/content')).rejects.toThrow(
+      '照片已发生变化',
+    )
   })
-  it.each(['json', 'blob'])('does not clear a newer login when an old %s request returns 401', async kind => {
-    let active = { mode: 'api', accountKey: 'old', role: 'caregiver', accessToken: 'synthetic-old' }
-    const removeItem = vi.fn()
-    vi.stubGlobal('sessionStorage', { getItem: () => JSON.stringify(active), removeItem })
-    let finish!: (response: Response) => void
-    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(resolve => { finish = resolve })))
-    const pending = kind === 'json' ? request('/notifications') : requestBlob('/attachments/P1/content')
-    active = { ...active, accountKey: 'new', accessToken: 'synthetic-new' }
-    finish(new Response(JSON.stringify({ detail: 'expired synthetic session' }), { status: 401 }))
-    await expect(pending).rejects.toThrow()
-    expect(removeItem).not.toHaveBeenCalled()
-  })
+  it.each(['json', 'blob'])(
+    'does not clear a newer login when an old %s request returns 401',
+    async (kind) => {
+      let active = {
+        mode: 'api',
+        accountKey: 'old',
+        role: 'caregiver',
+        accessToken: 'synthetic-old',
+      }
+      const removeItem = vi.fn()
+      vi.stubGlobal('sessionStorage', {
+        getItem: () => JSON.stringify(active),
+        removeItem,
+      })
+      let finish!: (response: Response) => void
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(
+          () =>
+            new Promise<Response>((resolve) => {
+              finish = resolve
+            }),
+        ),
+      )
+      const pending =
+        kind === 'json'
+          ? request('/notifications')
+          : requestBlob('/attachments/P1/content')
+      active = { ...active, accountKey: 'new', accessToken: 'synthetic-new' }
+      finish(
+        new Response(JSON.stringify({ detail: 'expired synthetic session' }), {
+          status: 401,
+        }),
+      )
+      await expect(pending).rejects.toThrow()
+      expect(removeItem).not.toHaveBeenCalled()
+    },
+  )
 })
 describe('cloud audio format', () => {
   it('encodes mono PCM16 WAV with the cloud endpoint sample rate', async () => {

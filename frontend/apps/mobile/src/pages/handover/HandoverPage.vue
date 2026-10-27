@@ -14,10 +14,16 @@ import { useTasks, useHandover, mode, session } from '../../services/data'
 import HandoverEditor from '../../components/HandoverEditor.vue'
 import HandoverReceiveList from '../../components/HandoverReceiveList.vue'
 import FeedbackState from '../../components/FeedbackState.vue'
+import HandoverQuick from '../../components/HandoverQuick.vue'
+import { readSession } from '@hulao/shared'
 const route = useRoute()
 const router = useRouter()
 const shift = ref(
-  typeof route.query.shift === 'string' ? route.query.shift : mode === 'demo' ? '晚班' : '',
+  typeof route.query.shift === 'string'
+    ? route.query.shift
+    : mode === 'demo'
+      ? '晚班'
+      : '',
 )
 const inputShift = ref(shift.value)
 const tab = ref('send')
@@ -42,7 +48,8 @@ function chooseShift(name: string) {
 watch(
   () => route.query.shift,
   (value) => {
-    shift.value = typeof value === 'string' ? value : mode === 'demo' ? '晚班' : ''
+    shift.value =
+      typeof value === 'string' ? value : mode === 'demo' ? '晚班' : ''
     inputShift.value = shift.value
   },
 )
@@ -64,12 +71,17 @@ onBeforeRouteLeave(() => (mode === 'api' ? true : leave()))
 onBeforeRouteUpdate(() => (mode === 'api' ? true : leave()))
 </script>
 <template>
+  <HandoverQuick v-if="serverWorkflow && readSession()?.role === 'caregiver'" />
   <WorkflowPanel
-    v-if="serverWorkflow"
+    v-else-if="serverWorkflow"
     group="handovers"
     title="交接班"
     :context="route.query"
-    :initial-action="typeof route.query.handover_id === 'string' ? '/handovers/{handover_id}' : '/handovers'"
+    :initial-action="
+      typeof route.query.handover_id === 'string'
+        ? '/handovers/{handover_id}'
+        : '/handovers'
+    "
     :auto-read="typeof route.query.handover_id === 'string'"
   />
   <section v-else class="handover-page editor-page">
@@ -109,7 +121,9 @@ onBeforeRouteUpdate(() => (mode === 'api' ? true : leave()))
       @retry="tasks.refetch()"
     /><van-empty v-if="!shift" description="请选择或输入交接班次" />
     <template v-else>
-      <p class="muted">交接班次：{{ mode === 'demo' ? shift : compactReference(shift) }}</p>
+      <p class="muted">
+        交接班次：{{ mode === 'demo' ? shift : compactReference(shift) }}
+      </p>
       <van-tabs v-model:active="tab" :lazy-render="false">
         <van-tab title="交班" name="send">
           <HandoverEditor

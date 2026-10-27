@@ -18,9 +18,14 @@ import {
   taskCreationPayload,
   taskCreationSchema,
   checkTaskCreationReceipt,
-  taskSourceOptions, taskSourceIssue, updateTaskSource,
+  taskSourceOptions,
+  taskSourceIssue,
+  updateTaskSource,
 } from './task-create'
-import { legacyTaskCreationSchema, legacyTaskCreationPayload } from './task-create-legacy'
+import {
+  legacyTaskCreationSchema,
+  legacyTaskCreationPayload,
+} from './task-create-legacy'
 import {
   isQualityScan,
   qualityScopeOptions,
@@ -30,17 +35,31 @@ import {
   writableShifts,
 } from './shift-access'
 import WorkflowField from './WorkflowField.vue'
+import {
+  admissionOptions,
+  admissionIssue,
+  isAdmissionCreate,
+} from './admission'
 import WorkflowResult from './WorkflowResult.vue'
 import WorkflowMenu from './WorkflowMenu.vue'
 import RecordResults from './RecordResults.vue'
 import RecordTaskReview from './RecordTaskReview.vue'
-import { recordTaskOwners, reviewedRecordTasks, selectedRecordTasks, recordSavedMessage } from './record-tasks'
+import {
+  recordTaskOwners,
+  reviewedRecordTasks,
+  selectedRecordTasks,
+  recordSavedMessage,
+} from './record-tasks'
 import ServiceCareHints from './ServiceCareHints.vue'
 import TaskCreationContext from './TaskCreationContext.vue'
 import TaskFeedbackComposer from './TaskFeedbackComposer.vue'
 import { withTaskFeedback } from './task-feedback'
 import PhotoObservation from './PhotoObservation.vue'
-import { careContextOptions, incidentEvidenceIssue, updateCareContext } from './care-context'
+import {
+  careContextOptions,
+  incidentEvidenceIssue,
+  updateCareContext,
+} from './care-context'
 import { submissionFeedback } from './submission-feedback'
 import {
   areaId,
@@ -87,12 +106,14 @@ const role = readSession()?.role
 const allowed = computed(() =>
   operations.filter(
     (op) =>
-      (op.group === props.group || (props.taskCreation && op.path === '/records/manual')) &&
+      (op.group === props.group ||
+        (props.taskCreation && op.path === '/records/manual')) &&
       role &&
       op.roles.includes(role) &&
       (props.taskCreation || op.path !== '/tasks' || op.method !== 'post') &&
       (!props.taskCreation ||
-        (['/tasks', '/records/manual'].includes(op.path) && op.method === 'post')),
+        (['/tasks', '/records/manual'].includes(op.path) &&
+          op.method === 'post')),
   ),
 )
 const activeId = ref('')
@@ -128,14 +149,24 @@ const draftDetail = computed(
 const params = ref<Row>({})
 const body = ref<Row>({})
 const catalogs = ref<Record<string, Row[]>>({})
-const taskSourcePreview = computed(() => props.taskCreation && body.value.source_type === 'record'
-  ? taskSourceOptions(body.value.elder_id, catalogs.value).find(row => row.id === body.value.source_id)
-  : undefined)
+const taskSourcePreview = computed(() =>
+  props.taskCreation && body.value.source_type === 'record'
+    ? taskSourceOptions(body.value.elder_id, catalogs.value).find(
+        (row) => row.id === body.value.source_id,
+      )
+    : undefined,
+)
 const taskSelectionEnabled = computed(
-  () => props.group === 'tasks' && !!active.value?.parameters.some((parameter) => parameter.name === 'task_id'),
+  () =>
+    props.group === 'tasks' &&
+    !!active.value?.parameters.some(
+      (parameter) => parameter.name === 'task_id',
+    ),
 )
 const selectedTaskElder = computed(() => {
-  const selectedTask = (catalogs.value.tasks || []).find((row) => row.id === params.value.task_id)
+  const selectedTask = (catalogs.value.tasks || []).find(
+    (row) => row.id === params.value.task_id,
+  )
   return String(selected.value.elder_id || selectedTask?.elder_id || '')
 })
 const fieldOptions = computed(() => {
@@ -143,35 +174,81 @@ const fieldOptions = computed(() => {
   const options = isQualityScan(active.value)
     ? qualityScopeOptions(body.value, catalogs.value)
     : shiftFieldOptions(active.value, catalogs.value, readSession())
+  Object.assign(
+    options,
+    admissionOptions(active.value, params.value, body.value, catalogs.value),
+  )
   if (taskSelectionEnabled.value) {
-    const permitted = new Set((options.task_id || (catalogs.value.tasks || [])).map((row) => row.id))
+    const permitted = new Set(
+      (options.task_id || catalogs.value.tasks || []).map((row) => row.id),
+    )
     options.task_id = (catalogs.value.tasks || []).filter(
-      (row) => permitted.has(row.id) && !!selectedTaskElder.value && row.elder_id === selectedTaskElder.value,
+      (row) =>
+        permitted.has(row.id) &&
+        !!selectedTaskElder.value &&
+        row.elder_id === selectedTaskElder.value,
     )
   }
-  if (active.value.path === '/tasks/{task_id}' && active.value.method === 'patch') {
-    const task = catalogs.value.tasks?.find((row) => row.id === params.value.task_id)
-    const shift = catalogs.value.shifts?.find((row) => row.id === task?.shift_id)
+  if (
+    active.value.path === '/tasks/{task_id}' &&
+    active.value.method === 'patch'
+  ) {
+    const task = catalogs.value.tasks?.find(
+      (row) => row.id === params.value.task_id,
+    )
+    const shift = catalogs.value.shifts?.find(
+      (row) => row.id === task?.shift_id,
+    )
     if (Array.isArray(shift?.caregiver_ids)) {
       const members = new Set(shift.caregiver_ids)
-      options.assigned_to = (options.assigned_to || catalogs.value.staff || []).filter((staff) => members.has(staff.id))
+      options.assigned_to = (
+        options.assigned_to ||
+        catalogs.value.staff ||
+        []
+      ).filter((staff) => members.has(staff.id))
     }
   }
-  if (props.taskCreation && active.value?.path === '/tasks') options.source_id = taskSourceOptions(body.value.elder_id, catalogs.value)
+  if (props.taskCreation && active.value?.path === '/tasks')
+    options.source_id = taskSourceOptions(body.value.elder_id, catalogs.value)
   if (props.taskCreation && body.value.shift_id) {
-    const shift = catalogs.value.shifts?.find((row) => row.id === body.value.shift_id)
+    const shift = catalogs.value.shifts?.find(
+      (row) => row.id === body.value.shift_id,
+    )
     if (Array.isArray(shift?.caregiver_ids)) {
       const members = new Set(shift.caregiver_ids)
-      options.assigned_to = (options.assigned_to || catalogs.value.staff || []).filter((staff) => members.has(staff.id))
+      options.assigned_to = (
+        options.assigned_to ||
+        catalogs.value.staff ||
+        []
+      ).filter((staff) => members.has(staff.id))
     }
   }
   if (props.group === 'memories') {
-    const memory = catalogs.value.memories?.find(row => row.id === params.value.memory_id)
-    Object.assign(options, careContextOptions(body.value.elder_id || memory?.elder_id || selected.value.elder_id, catalogs.value))
+    const memory = catalogs.value.memories?.find(
+      (row) => row.id === params.value.memory_id,
+    )
+    Object.assign(
+      options,
+      careContextOptions(
+        body.value.elder_id || memory?.elder_id || selected.value.elder_id,
+        catalogs.value,
+      ),
+    )
   }
   if (props.group === 'incidents') {
-    const incident = (catalogs.value.incidents || []).find(row => row.id === params.value.incident_id || (row.rectification as Row | undefined)?.id === params.value.rectification_id)
-    Object.assign(options, careContextOptions(body.value.elder_id || incident?.elder_id || selected.value.elder_id, catalogs.value))
+    const incident = (catalogs.value.incidents || []).find(
+      (row) =>
+        row.id === params.value.incident_id ||
+        (row.rectification as Row | undefined)?.id ===
+          params.value.rectification_id,
+    )
+    Object.assign(
+      options,
+      careContextOptions(
+        body.value.elder_id || incident?.elder_id || selected.value.elder_id,
+        catalogs.value,
+      ),
+    )
   }
   return options
 })
@@ -199,7 +276,9 @@ let restoring = false
 let recovery: WorkflowRecovery | undefined
 const frozen = computed(() => phase.value !== 'editing')
 const readOnly = computed(() => active.value?.method === 'get')
-const feedback = computed(() => submissionFeedback(active.value?.path || '', active.value?.method || 'get'))
+const feedback = computed(() =>
+  submissionFeedback(active.value?.path || '', active.value?.method || 'get'),
+)
 const uncertainExtraction = computed(
   () =>
     phase.value === 'pending' &&
@@ -229,7 +308,9 @@ function restoreForm(preferredArea?: string) {
       saved &&
       savedOperation &&
       savedOperation.method !== 'get' &&
-      (!preferredArea || areaId(savedOperation) === preferredArea || saved.phase === 'pending') &&
+      (!preferredArea ||
+        areaId(savedOperation) === preferredArea ||
+        saved.phase === 'pending') &&
       (!readOnly.value || saved.phase === 'pending')
     ) {
       activeId.value = saved.operation
@@ -302,27 +383,73 @@ onBeforeRouteLeave(canLeave)
 onBeforeRouteUpdate(canLeave)
 defineExpose({ canClose: canLeave })
 const bodySchema = computed(() => {
-  if (props.taskCreation) return active.value?.path === '/records/manual' ? legacyTaskCreationSchema() : taskCreationSchema()
+  if (props.taskCreation)
+    return active.value?.path === '/records/manual'
+      ? legacyTaskCreationSchema()
+      : taskCreationSchema()
   if (!active.value?.schema) return null
   const refName = active.value.schema.$ref?.split('/').pop()
   return refName ? schemas[refName] : active.value.schema
 })
-const recordTaskReview = computed(() => !props.taskCreation && ['/records/{draft_id}/confirm', '/records/manual'].includes(active.value?.path || ''))
-const reviewDraft = computed(() => reviewSource.value || (catalogs.value.drafts || []).find(row => row.id === params.value.draft_id))
-const reviewElderId = computed(() => active.value?.path === '/records/manual' ? body.value.elder_id : reviewDraft.value?.elder_id)
-const reviewShiftId = computed(() => active.value?.path === '/records/manual' ? body.value.shift_id : reviewDraft.value?.shift_id)
-const reviewElderName = computed(() => String((catalogs.value.elders || []).find(row => row.id === reviewElderId.value)?.name || ''))
-const reviewOwners = computed(() => recordTaskOwners(catalogs.value, readSession(), reviewShiftId.value))
-const recordTaskCount = computed(() => selectedRecordTasks(body.value.task_candidates).length)
+const recordTaskReview = computed(
+  () =>
+    !props.taskCreation &&
+    ['/records/{draft_id}/confirm', '/records/manual'].includes(
+      active.value?.path || '',
+    ),
+)
+const reviewDraft = computed(
+  () =>
+    reviewSource.value ||
+    (catalogs.value.drafts || []).find(
+      (row) => row.id === params.value.draft_id,
+    ),
+)
+const reviewElderId = computed(() =>
+  active.value?.path === '/records/manual'
+    ? body.value.elder_id
+    : reviewDraft.value?.elder_id,
+)
+const reviewShiftId = computed(() =>
+  active.value?.path === '/records/manual'
+    ? body.value.shift_id
+    : reviewDraft.value?.shift_id,
+)
+const reviewElderName = computed(() =>
+  String(
+    (catalogs.value.elders || []).find((row) => row.id === reviewElderId.value)
+      ?.name || '',
+  ),
+)
+const reviewOwners = computed(() =>
+  recordTaskOwners(catalogs.value, readSession(), reviewShiftId.value),
+)
+const recordTaskCount = computed(
+  () => selectedRecordTasks(body.value.task_candidates).length,
+)
 const visibleBodySchema = computed(() => {
+  if (active.value && isAdmissionCreate(active.value) && bodySchema.value) {
+    const schema = structuredClone(bodySchema.value)
+    delete schema.properties?.kind
+    return schema
+  }
   if (props.taskCreation && bodySchema.value) {
     const schema = structuredClone(bodySchema.value)
     delete schema.properties?.elder_id
-    if (body.value.source_type !== 'record') { delete schema.properties?.source_id; delete schema.properties?.source_revision }
+    if (body.value.source_type !== 'record') {
+      delete schema.properties?.source_id
+      delete schema.properties?.source_revision
+    }
     return schema
   }
-  if (active.value?.path === '/tasks/{task_id}/complete' && (body.value._care_feedback as Row | undefined)?.enabled === true && bodySchema.value) {
-    const schema = structuredClone(bodySchema.value); delete schema.properties?.result; return schema
+  if (
+    active.value?.path === '/tasks/{task_id}/complete' &&
+    (body.value._care_feedback as Row | undefined)?.enabled === true &&
+    bodySchema.value
+  ) {
+    const schema = structuredClone(bodySchema.value)
+    delete schema.properties?.result
+    return schema
   }
   if (!recordTaskReview.value || !bodySchema.value) return bodySchema.value
   const schema = structuredClone(bodySchema.value)
@@ -452,6 +579,8 @@ const versionIssue = computed(() => {
   )
     return '服务器资料已变化，当前表单仍保留原版本。请刷新并核对差异，再采用当前版本。'
   for (const [id, version] of [
+    ['elder_id', 'expected_elder_revision'],
+    ['bed_id', 'expected_bed_revision'],
     ['task_id', 'expected_task_revision'],
     ['memory_id', 'expected_memory_revision'],
     ['source_record_id', 'source_revision'],
@@ -471,9 +600,14 @@ const versionIssue = computed(() => {
 })
 function syncVersions() {
   const form = body.value
-  if (props.group === 'incidents' && 'admission_id' in form && !form.admission_id) {
-    const elder = catalogs.value.elders?.find(row => row.id === form.elder_id)
-    if (elder?.current_admission_id) form.admission_id = elder.current_admission_id
+  if (
+    props.group === 'incidents' &&
+    'admission_id' in form &&
+    !form.admission_id
+  ) {
+    const elder = catalogs.value.elders?.find((row) => row.id === form.elder_id)
+    if (elder?.current_admission_id)
+      form.admission_id = elder.current_admission_id
   }
   const assign = (field: string, value: unknown) => {
     if (field in form && !hasValue(form[field]) && hasValue(value))
@@ -517,10 +651,14 @@ function syncVersions() {
     if (hasValue(row?.revision))
       assign('expected_record_revision', row?.revision)
   }
-  const source = pick('record_id', form.source_record_id || (props.taskCreation ? form.source_id : ''))
+  const source = pick(
+    'record_id',
+    form.source_record_id || (props.taskCreation ? form.source_id : ''),
+  )
   if (source && 'source_revision' in form) {
     assign('source_revision', source.revision)
-    if ('source_field' in form && !form.source_field) form.source_field = 'observations'
+    if ('source_field' in form && !form.source_field)
+      form.source_field = 'observations'
   }
   const occurrence = catalogs.value.occurrences?.find(
     (row) => row.occurrence_key === form.occurrence_key,
@@ -624,7 +762,10 @@ async function loadCatalogs() {
       incidents: 'incidents',
     }
     if (groupResource[props.group]) resources.add(groupResource[props.group])
-    if (props.taskCreation) { resources.add('tasks'); resources.add('records') }
+    if (props.taskCreation) {
+      resources.add('tasks')
+      resources.add('records')
+    }
     if (resources.has('admissions')) resources.add('elders')
     if (resources.has('memories')) resources.add('elders')
     if (resources.has('handover_items')) resources.add('handovers')
@@ -698,7 +839,19 @@ async function loadCatalogs() {
       catalogs.value.admissions = admissions.flat()
     }
     if (resources.has('admissions') && role === 'caregiver')
-      catalogs.value.admissions = (catalogs.value.elders || []).flatMap(row => row.current_admission_id ? [{ id: row.current_admission_id, elder_id: row.id, name: '当前入住关系', status: 'active' }] : [])
+      catalogs.value.admissions = (catalogs.value.elders || []).flatMap(
+        (row) =>
+          row.current_admission_id
+            ? [
+                {
+                  id: row.current_admission_id,
+                  elder_id: row.id,
+                  name: '当前入住关系',
+                  status: 'active',
+                },
+              ]
+            : [],
+      )
     if (props.group === 'assessments') {
       const templates = (await request('/assessments/templates')) as Row[]
       const template = templates[0]
@@ -735,15 +888,28 @@ async function loadCatalogs() {
 }
 function setParam(field: string, value: unknown) {
   if (frozen.value || busy.value) return
-  if (props.group === 'incidents' && ['incident_id', 'rectification_id'].includes(field) && params.value[field] !== value && 'evidence' in body.value)
+  if (
+    props.group === 'incidents' &&
+    ['incident_id', 'rectification_id'].includes(field) &&
+    params.value[field] !== value &&
+    'evidence' in body.value
+  )
     body.value.evidence = []
   params.value[field] = value
   selected.value[field] = value
+  if (field === 'elder_id' && active.value && isAdmissionCreate(active.value))
+    body.value.bed_id = ''
   if (field === 'task_id') {
     const task = catalogs.value.tasks?.find((row) => row.id === value)
     if (task) selected.value.elder_id = task.elder_id
   }
-  if (field === 'task_id' && active.value?.path === '/tasks/{task_id}/complete') { body.value.result = ''; body.value._care_feedback = {} }
+  if (
+    field === 'task_id' &&
+    active.value?.path === '/tasks/{task_id}/complete'
+  ) {
+    body.value.result = ''
+    body.value._care_feedback = {}
+  }
   if (field === 'record_id') {
     recordHistory.value = null
     historyError.value = ''
@@ -752,8 +918,12 @@ function setParam(field: string, value: unknown) {
     reviewSource.value = null
     if (active.value?.path === '/records/{draft_id}/confirm') {
       const draft = pick('draft_id', value)
-      body.value.observations = JSON.parse(JSON.stringify(draft?.observations || []))
-      body.value.task_candidates = JSON.parse(JSON.stringify(draft?.task_candidates || []))
+      body.value.observations = JSON.parse(
+        JSON.stringify(draft?.observations || []),
+      )
+      body.value.task_candidates = JSON.parse(
+        JSON.stringify(draft?.task_candidates || []),
+      )
     }
   }
   confirm.value = false
@@ -766,7 +936,10 @@ function chooseTaskElder(elderId: string) {
   if (busy.value || frozen.value) return
   selected.value = { ...selected.value, elder_id: elderId, task_id: '' }
   params.value.task_id = ''
-  if (active.value?.path === '/tasks/{task_id}/complete') { body.value.result = ''; body.value._care_feedback = {} }
+  if (active.value?.path === '/tasks/{task_id}/complete') {
+    body.value.result = ''
+    body.value._care_feedback = {}
+  }
   message.value = ''
 }
 function setBody(value: unknown) {
@@ -778,17 +951,48 @@ function setBody(value: unknown) {
     active.value && isQualityScan(active.value)
       ? updateQualityScope(body.value, value as Row, catalogs.value)
       : (value as Row)
+  if (active.value && isAdmissionCreate(active.value)) {
+    if (previousTaskBody.kind !== body.value.kind) {
+      params.value.elder_id = ''
+      selected.value.elder_id = ''
+      body.value.bed_id = ''
+      body.value.expected_elder_revision = ''
+      body.value.expected_bed_revision = ''
+    }
+    if (previousTaskBody.bed_id !== body.value.bed_id)
+      body.value.expected_bed_revision = ''
+  }
+  if (
+    active.value?.path === '/admissions/{admission_id}/actions' &&
+    previousTaskBody.action !== body.value.action &&
+    body.value.action !== 'transfer'
+  ) {
+    body.value.bed_id = ''
+    body.value.expected_bed_revision = ''
+  }
   // Generic form edits must not drop the separately reviewed task cards.
   if (recordTaskReview.value && !Object.hasOwn(body.value, 'task_candidates'))
     body.value.task_candidates = previousTasks || []
-  if (active.value?.path === '/records/manual' && previousElder && previousElder !== body.value.elder_id)
+  if (
+    active.value?.path === '/records/manual' &&
+    previousElder &&
+    previousElder !== body.value.elder_id
+  )
     body.value.task_candidates = []
   if (props.taskCreation || props.group === 'incidents') {
-    body.value = updateCareContext({ elder_id: previousElder }, body.value, catalogs.value, props.taskCreation)
+    body.value = updateCareContext(
+      { elder_id: previousElder },
+      body.value,
+      catalogs.value,
+      props.taskCreation,
+    )
     if (previousElder && previousElder !== body.value.elder_id)
-      message.value = props.taskCreation ? '已切换老人，原任务内容已清空，请为当前老人重新填写。' : '已切换老人，请重新选择当前老人的事实证据。'
+      message.value = props.taskCreation
+        ? '已切换老人，原任务内容已清空，请为当前老人重新填写。'
+        : '已切换老人，请重新选择当前老人的事实证据。'
   }
-  if (props.taskCreation && active.value?.path === '/tasks') body.value = updateTaskSource(previousTaskBody, body.value, catalogs.value)
+  if (props.taskCreation && active.value?.path === '/tasks')
+    body.value = updateTaskSource(previousTaskBody, body.value, catalogs.value)
   confirm.value = false
   syncVersions()
 }
@@ -816,14 +1020,28 @@ async function run() {
     } else {
       path = materialize(op, params.value)
       const recordBody = recordTaskReview.value
-        ? { ...body.value, task_candidates: reviewedRecordTasks(body.value.task_candidates || [], reviewOwners.value) }
+        ? {
+            ...body.value,
+            task_candidates: reviewedRecordTasks(
+              body.value.task_candidates || [],
+              reviewOwners.value,
+            ),
+          }
         : body.value
       if (recordTaskReview.value && !reviewElderName.value)
         throw new Error('请先选择或成功载入本条记录对应的老人，再核对任务。')
       payload = bodySchema.value
         ? props.taskCreation
-          ? (op.path === '/records/manual' ? legacyTaskCreationPayload(bodySchema.value, body.value) : taskCreationPayload(bodySchema.value, body.value))
-          : requestBody(op.path, bodySchema.value, op.path === '/tasks/{task_id}/complete' ? withTaskFeedback(recordBody) : recordBody)
+          ? op.path === '/records/manual'
+            ? legacyTaskCreationPayload(bodySchema.value, body.value)
+            : taskCreationPayload(bodySchema.value, body.value)
+          : requestBody(
+              op.path,
+              bodySchema.value,
+              op.path === '/tasks/{task_id}/complete'
+                ? withTaskFeedback(recordBody)
+                : recordBody,
+            )
         : undefined
       if (props.taskCreation && op.path === '/tasks') {
         const issue = taskSourceIssue(payload as Row, catalogs.value)
@@ -840,6 +1058,13 @@ async function run() {
         withoutSecrets(payload),
       ])
       if (versionIssue.value) throw new Error(versionIssue.value)
+      const admissionProblem = admissionIssue(
+        op,
+        params.value,
+        body.value,
+        catalogs.value,
+      )
+      if (admissionProblem) throw new Error(admissionProblem)
       if (op.method !== 'get' && catalogErrors.value.length)
         throw new Error(
           '所需目录未完整读取，请刷新可选数据并处理异常后再提交。',
@@ -914,7 +1139,8 @@ async function run() {
               payload,
               op.method === 'get' ? undefined : pending.value?.key,
             )
-    if (props.taskCreation && op.path === '/tasks' && op.method === 'post') checkTaskCreationReceipt(data, payload as Row)
+    if (props.taskCreation && op.path === '/tasks' && op.method === 'post')
+      checkTaskCreationReceipt(data, payload as Row)
     result.value = data
     if (op.method !== 'get') {
       phase.value = 'succeeded'
@@ -941,7 +1167,8 @@ async function run() {
       }
     }
     confirm.value = false
-    message.value = recordSavedMessage(data) || submissionFeedback(op.path, op.method).success
+    message.value =
+      recordSavedMessage(data) || submissionFeedback(op.path, op.method).success
     if (op.method !== 'get') {
       // The write has already been acknowledged and persisted locally. Directory
       // refresh must never keep the save button stuck in its submitting state.
@@ -1074,12 +1301,12 @@ function switchRecordMode(mode: 'manual' | 'assisted') {
 }
 async function selectResult(row: Row) {
   remember(row)
-  if (phase.value === 'pending' || busy.value)
-    return
+  if (phase.value === 'pending' || busy.value) return
   if (props.group === 'handovers' && row.status === 'draft') {
-    const nextPath = Number(row.revision || 0) < 1
-      ? '/handovers/{handover_id}/refresh'
-      : '/handovers/{handover_id}/submit'
+    const nextPath =
+      Number(row.revision || 0) < 1
+        ? '/handovers/{handover_id}/refresh'
+        : '/handovers/{handover_id}/submit'
     const op = allowed.value.find((item) => item.path === nextPath)
     if (!op) return
     choose(op, false)
@@ -1087,7 +1314,8 @@ async function selectResult(row: Row) {
     params.value.handover_id = row.id
     selected.value.handover_id = row.id
     if (nextPath.endsWith('/submit')) {
-      if (Number.isInteger(row.revision)) body.value.expected_revision = row.revision
+      if (Number.isInteger(row.revision))
+        body.value.expected_revision = row.revision
       body.value.summary = ''
     }
     syncVersions()
@@ -1136,7 +1364,10 @@ function freshForm() {
   reviewSource.value = null
   recordHistory.value = null
   historyError.value = ''
-  if (props.taskCreation) { activeId.value = initialOperationId(); selected.value = { ...props.context } }
+  if (props.taskCreation) {
+    activeId.value = initialOperationId()
+    selected.value = { ...props.context }
+  }
   reset()
   if (props.taskCreation) {
     selected.value = { ...props.context }
@@ -1380,7 +1611,12 @@ async function initializeRecovery() {
   await loadCatalogs()
 }
 watch(
-  () => [props.group, JSON.stringify(props.context), props.initialAction, props.autoRead],
+  () => [
+    props.group,
+    JSON.stringify(props.context),
+    props.initialAction,
+    props.autoRead,
+  ],
   async () => {
     activeId.value = initialOperationId()
     result.value = null
@@ -1407,7 +1643,8 @@ function initialOperationId() {
         (props.autoRead ? op.method === 'get' : op.method !== 'get'),
     )?.id ||
     allowed.value[0]?.id ||
-    '')
+    ''
+  )
 }
 onMounted(async () => {
   if (!serverMode) return
@@ -1627,6 +1864,14 @@ onMounted(async () => {
           </p>
           <form class="wf-form" @submit.prevent="run">
             <h3>{{ taskCreation ? '任务内容' : operationTitle(active) }}</h3>
+            <p v-if="isAdmissionCreate(active)" class="wf-muted">
+              新入住：先为老人建档，再选择待入住老人和空闲床位。已在院老人无需重复入住；没有历史入住单时才使用补登记。
+              {{
+                fieldOptions.bed_id?.length === 0 && params.elder_id
+                  ? '当前没有符合条件的床位，可在功能菜单中新建床位。'
+                  : ''
+              }}
+            </p>
             <p v-if="group === 'incidents'" class="wf-notice">
               可先提交已知事实和立即措施，无需等待AI或先创建正式记录。证据为可选项；有引用时请确认属于当前老人和入住关系。主管后续负责分类、分级与整改。
             </p>
@@ -1683,12 +1928,21 @@ onMounted(async () => {
             <p v-if="isQualityScan(active)" class="wf-muted">
               选择交班单后自动采用其交出班次；更换班次会清除不匹配的交班单。历史已关闭班次也可检查。
             </p>
-            <p v-if="taskCreation && active.path === '/records/manual'" class="wf-notice">这是旧版任务表单的恢复内容，仍按原记录接口处理。完成核实后，开始新操作可使用独立任务创建入口。</p>
+            <p
+              v-if="taskCreation && active.path === '/records/manual'"
+              class="wf-notice"
+            >
+              这是旧版任务表单的恢复内容，仍按原记录接口处理。完成核实后，开始新操作可使用独立任务创建入口。
+            </p>
             <p v-if="taskCreation" class="wf-notice">
               先选择老人，再核对已有任务，避免重复安排。护理员只能安排给本人；分配他人或调整既有任务由主管办理。截止时间按设备时区输入，请明确核对日期与时刻。执行前提不会因填写此表自动满足。
             </p>
             <p
-              v-if="group === 'handovers' && active.path === '/handovers' && active.method === 'post'"
+              v-if="
+                group === 'handovers' &&
+                active.path === '/handovers' &&
+                active.method === 'post'
+              "
               class="wf-notice"
             >
               创建后，系统会带入交出班次的记录和未完成任务。需要补充交班注意事项时，打开“人工审核并提交交班”，在补充说明中填写并核对后提交。
@@ -1721,15 +1975,30 @@ onMounted(async () => {
               :disabled="busy || frozen || recording || transcribing"
               class="wf-inputs"
             >
+              <WorkflowField
+                v-if="isAdmissionCreate(active) && bodySchema?.properties?.kind"
+                :schema="bodySchema.properties.kind"
+                field="kind"
+                :model-value="body.kind"
+                :catalogs="catalogs"
+                @update:model-value="setBody({ ...body, kind: $event })"
+              />
               <label v-if="taskSelectionEnabled" class="wf-field">
                 <span>先选择老人<b> *</b></span>
                 <select
                   :value="selectedTaskElder"
-                  @change="chooseTaskElder(($event.target as HTMLSelectElement).value)"
+                  @change="
+                    chooseTaskElder(($event.target as HTMLSelectElement).value)
+                  "
                 >
                   <option value="">请选择老人</option>
-                  <option v-for="elder in catalogs.elders || []" :key="String(elder.id)" :value="String(elder.id)">
-                    {{ elder.name || elder.display_name || '老人' }}{{ elder.bed_label ? ' · ' + elder.bed_label : '' }}
+                  <option
+                    v-for="elder in catalogs.elders || []"
+                    :key="String(elder.id)"
+                    :value="String(elder.id)"
+                  >
+                    {{ elder.name || elder.display_name || '老人'
+                    }}{{ elder.bed_label ? ' · ' + elder.bed_label : '' }}
                   </option>
                 </select>
               </label>
@@ -1771,13 +2040,40 @@ onMounted(async () => {
               />
               <section v-if="taskSourcePreview" aria-label="所选来源记录">
                 <h4>来源记录当前内容 · 第{{ taskSourcePreview.revision }}版</h4>
-                <p class="wf-notice">来源事实不等于本次安排已经执行；请据此人工核对任务内容、期限与执行前提。</p>
+                <p class="wf-notice">
+                  来源事实不等于本次安排已经执行；请据此人工核对任务内容、期限与执行前提。
+                </p>
                 <p>当前已核对观察</p>
-                <ul v-if="Array.isArray(taskSourcePreview.observations)"><li v-for="(observation, index) in taskSourcePreview.observations" :key="index">{{ observation }}</li></ul>
-                <details><summary>原始录入（保留原文）</summary><blockquote class="wf-source-text">{{ taskSourcePreview.raw_text }}</blockquote></details>
-                <p v-if="taskSourcePreview.revision !== Number(body.source_revision)" role="alert">来源已更正，当前表单仍保留原版本，不能直接提交。请重新选择来源并核对差异。</p>
+                <ul v-if="Array.isArray(taskSourcePreview.observations)">
+                  <li
+                    v-for="(
+                      observation, index
+                    ) in taskSourcePreview.observations"
+                    :key="index"
+                  >
+                    {{ observation }}
+                  </li>
+                </ul>
+                <details>
+                  <summary>原始录入（保留原文）</summary>
+                  <blockquote class="wf-source-text">
+                    {{ taskSourcePreview.raw_text }}
+                  </blockquote>
+                </details>
+                <p
+                  v-if="
+                    taskSourcePreview.revision !== Number(body.source_revision)
+                  "
+                  role="alert"
+                >
+                  来源已更正，当前表单仍保留原版本，不能直接提交。请重新选择来源并核对差异。
+                </p>
               </section>
-              <TaskFeedbackComposer v-if="active.path === '/tasks/{task_id}/complete'" :model-value="body" @update:model-value="setBody" />
+              <TaskFeedbackComposer
+                v-if="active.path === '/tasks/{task_id}/complete'"
+                :model-value="body"
+                @update:model-value="setBody"
+              />
               <RecordTaskReview
                 v-if="recordTaskReview"
                 :model-value="body.task_candidates || []"
@@ -1786,8 +2082,27 @@ onMounted(async () => {
                 @update:model-value="setRecordTasks"
               />
             </fieldset>
-            <ServiceCareHints v-if="recordComposer && active.path === '/records/context-extract'" :elder-id="String(body.elder_id || '')" :scene="String(body.scene || '')" />
-            <PhotoObservation v-if="recordComposer" :elder-id="String(body.elder_id || '')" :attachment-id="typeof props.context?.attachment_id === 'string' ? props.context.attachment_id : undefined" :analysis-id="typeof props.context?.analysis_id === 'string' ? props.context.analysis_id : undefined" />
+            <ServiceCareHints
+              v-if="
+                recordComposer && active.path === '/records/context-extract'
+              "
+              :elder-id="String(body.elder_id || '')"
+              :scene="String(body.scene || '')"
+            />
+            <PhotoObservation
+              v-if="recordComposer"
+              :elder-id="String(body.elder_id || '')"
+              :attachment-id="
+                typeof props.context?.attachment_id === 'string'
+                  ? props.context.attachment_id
+                  : undefined
+              "
+              :analysis-id="
+                typeof props.context?.analysis_id === 'string'
+                  ? props.context.analysis_id
+                  : undefined
+              "
+            />
             <div
               v-if="
                 active.method !== 'get' &&
@@ -1820,14 +2135,26 @@ onMounted(async () => {
               >
             </div>
             <p v-if="confirm" class="wf-notice">
-              {{ feedback.assisted ? '确认后整理为待核对草稿，不会直接保存正式记录。' : '请核对以上内容，确认后保存到服务器。' }}{{
+              {{
+                feedback.assisted
+                  ? '确认后整理为待核对草稿，不会直接保存正式记录。'
+                  : '请核对以上内容，确认后保存到服务器。'
+              }}{{
                 active.path.includes('/confirm')
                   ? '待办候选将随正式记录生成任务。'
                   : ''
               }}
             </p>
-            <p v-if="busy" class="wf-notice" role="status">{{ feedback.waiting }}</p>
-            <p v-else-if="loading && phase === 'succeeded'" class="wf-muted" role="status">本次操作已完成，正在后台更新列表。</p>
+            <p v-if="busy" class="wf-notice" role="status">
+              {{ feedback.waiting }}
+            </p>
+            <p
+              v-else-if="loading && phase === 'succeeded'"
+              class="wf-muted"
+              role="status"
+            >
+              本次操作已完成，正在后台更新列表。
+            </p>
             <div class="wf-toolbar">
               <button
                 type="submit"
@@ -1851,7 +2178,9 @@ onMounted(async () => {
                         ? '本次操作已完成'
                         : confirm
                           ? recordTaskReview
-                            ? recordTaskCount ? `保存记录并创建${recordTaskCount}项任务` : '仅保存记录'
+                            ? recordTaskCount
+                              ? `保存记录并创建${recordTaskCount}项任务`
+                              : '仅保存记录'
                             : '确认提交'
                           : active.method === 'get'
                             ? '读取当前数据'
@@ -1928,7 +2257,12 @@ onMounted(async () => {
               :catalogs="catalogs"
               @select="selectResult"
             />
-            <WorkflowResult v-else :value="result" @select="selectResult" />
+            <WorkflowResult
+              v-else
+              :value="result"
+              :catalogs="catalogs"
+              @select="selectResult"
+            />
           </section>
           <section
             v-if="recordDetail && (recordHistory !== null || historyError)"

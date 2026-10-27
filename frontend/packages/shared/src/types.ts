@@ -40,7 +40,7 @@ export interface Task {
   bedSnapshot?: string
   shiftName?: string
   source?: 'demo' | 'record' | 'plan' | 'manual'
-  scene?: 'activity' | 'rest' | 'dining' | 'communication' | 'other'
+  scene?: 'bathing' | 'activity' | 'rest' | 'dining' | 'communication' | 'other'
   sourceRecordId?: string
   nameSnapshot?: string
   assigneeName?: string
@@ -99,8 +99,9 @@ export interface TimelineEvent {
   label: string
   detail: string
   actor: string
-  happenedAt: string
-  enteredAt: string
+  happenedAt: string | null
+  enteredAt: string | null
+  recordedAt?: string | null
   itemId?: string
   source?: 'demo'
 }

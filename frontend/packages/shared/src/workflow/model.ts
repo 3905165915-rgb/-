@@ -96,6 +96,10 @@ export const labels: Record<string, string> = {
   completed_by: '完成人',
   completed_at: '完成时间',
   source_record_id: '来源正式记录',
+  task_reference: '任务编号',
+  source_advice_id: '来源照护建议',
+  source_handover_item_id: '来源交班事项',
+  continuity_key: '跨班接续关联',
   source_draft_id: '来源AI草稿',
   draft_id: 'AI草稿',
   record_id: '正式记录',
@@ -301,6 +305,9 @@ export const labels: Record<string, string> = {
   created: '新增数量',
 }
 export const valueLabels: Record<string, string> = {
+  available: '空闲可入住',
+  occupied: '已占用',
+  inactive: '已停用',
   admin: '管理员',
   supervisor: '主管',
   caregiver: '护理员',
@@ -336,7 +343,7 @@ export const valueLabels: Record<string, string> = {
   cancel: '取消',
   reopen: '重新开启',
   admit: '新入住',
-  legacy_registration: '补登记既有入住',
+  legacy_registration: '原有在院老人补登记',
   return: '返院／退回',
   discharge: '离院',
   confirm: '确认',
@@ -631,6 +638,26 @@ export async function request(
       }
       const detail = data?.detail
       const errors: Record<string, string> = {
+        bed_occupied: '所选床位已被占用，请选择空闲床位，不能重复入住。',
+        bed_inactive: '所选床位已停用，请选择启用的空闲床位。',
+        bed_relation_inconsistent:
+          '该床位的占用资料存在冲突，请联系管理员核对，暂不能分配。',
+        elder_already_admitted:
+          '这位老人已办理入住，请查看入住历史；换床或返院请使用“转床／外出／返院／离院”。',
+        existing_in_care_elder_requires_legacy_registration:
+          '这位老人已有在院状态但缺少入住单，请核实后选择“原有在院老人补登记”。',
+        legacy_registration_requires_in_care_elder:
+          '补登记仅用于原有在院或外出老人，待入住老人请选择“新入住”。',
+        legacy_registration_must_keep_existing_bed:
+          '补登记必须沿用老人的现有床位，不能同时换床。',
+        elder_bed_relation_inconsistent:
+          '老人档案与床位关系不一致，请联系管理员核对后再入住。',
+        duplicate_room_bed_label:
+          '该房间已有同名床位，请修改床位名称或使用现有空床。',
+        admission_is_closed: '该入住单已关闭，请使用当前有效入住单。',
+        admission_relation_inconsistent:
+          '入住单、老人和床位资料不一致，请刷新并联系管理员核对。',
+        different_bed_required: '转床请选择另一张空闲床位。',
         'Insufficient permissions':
           '此操作仅限主管或管理员办理。护理员可查看并处理本人负责的任务。',
         insufficient_permissions:
@@ -655,10 +682,12 @@ export async function request(
         shift_closed:
           '该班次已完成交班，请选择开放班次；跨班任务需先完成接班。',
         assignee_not_in_shift: '所选负责人不在该班次中，请核对班次成员。',
-        task_source_revision_changed: '来源记录版本已变化，请刷新并核对来源后重新安排。',
+        task_source_revision_changed:
+          '来源记录版本已变化，请刷新并核对来源后重新安排。',
         task_source_elder_mismatch: '来源记录与任务老人不匹配，请重新选择。',
         task_source_not_confirmed: '来源记录未确认或已撤销，不能用于安排任务。',
-        task_source_admission_changed: '来源记录属于其他入住阶段，请核对当前入住关系。',
+        task_source_admission_changed:
+          '来源记录属于其他入住阶段，请核对当前入住关系。',
         due_at_must_be_future: '截止时间必须晚于当前时间，请重新填写。',
         task_assigned_to_another_caregiver:
           '该任务由其他护理员负责，请由主管核对或转交。',
@@ -673,11 +702,14 @@ export async function request(
             )
             .join('；')
         : typeof detail === 'string'
-          ? errors[detail] || (typeof data?.safe_message === 'string' ? data.safe_message : detail)
+          ? errors[detail] ||
+            (typeof data?.safe_message === 'string'
+              ? data.safe_message
+              : detail)
           : JSON.stringify(detail || data)
       throw new WorkflowRequestError(
         res.status,
-        `${res.status === 409 ? '资料或状态已变化，请刷新后核对。' : res.status === 503 ? 'AI暂不可用，可重试或转人工记录。' : ''}${message}`,
+        `${res.status === 409 && !errors[String(detail)] ? '资料或状态已变化，请刷新后核对。' : res.status === 503 ? 'AI暂不可用，可重试或转人工记录。' : ''}${message}`,
       )
     }
     if (data === null && res.status !== 204)
@@ -691,7 +723,12 @@ export async function request(
   }
 }
 
-async function authorizedRequest<T>(path: string, init: NonNullable<Parameters<typeof fetch>[1]>, consume: (response: Response) => Promise<T>, timeoutMs = 90000): Promise<T> {
+async function authorizedRequest<T>(
+  path: string,
+  init: NonNullable<Parameters<typeof fetch>[1]>,
+  consume: (response: Response) => Promise<T>,
+  timeoutMs = 90000,
+): Promise<T> {
   const current = readSession()
   if (!current?.accessToken || current.mode !== 'api')
     throw new Error('请使用服务器测试账号登录')
@@ -699,7 +736,8 @@ async function authorizedRequest<T>(path: string, init: NonNullable<Parameters<t
   const timeout = setTimeout(() => controller.abort(), timeoutMs)
   try {
     const response = await fetch(
-      (import.meta.env.VITE_API_BASE_URL || '/api/v1').replace(/\/$/, '') + path,
+      (import.meta.env.VITE_API_BASE_URL || '/api/v1').replace(/\/$/, '') +
+        path,
       {
         ...init,
         signal: controller.signal,
@@ -715,16 +753,29 @@ async function authorizedRequest<T>(path: string, init: NonNullable<Parameters<t
       window.dispatchEvent(new Event('hulao:unauthorized'))
     }
     if (!response.ok) {
-      const data = await response.clone().json().catch(() => null)
-      const message = typeof data?.safe_message === 'string'
-        ? data.safe_message
-        : typeof data?.detail === 'string' ? data.detail : '请求未完成，请核对后重试。'
-      throw new WorkflowRequestError(response.status, `${response.status === 409 ? '资料或状态已变化，请刷新后核对。' : ''}${message}`)
+      const data = await response
+        .clone()
+        .json()
+        .catch(() => null)
+      const message =
+        typeof data?.safe_message === 'string'
+          ? data.safe_message
+          : typeof data?.detail === 'string'
+            ? data.detail
+            : '请求未完成，请核对后重试。'
+      throw new WorkflowRequestError(
+        response.status,
+        `${response.status === 409 ? '资料或状态已变化，请刷新后核对。' : ''}${message}`,
+        typeof data?.error_code === 'string' ? data.error_code : undefined,
+      )
     }
     return await consume(response)
   } catch (error) {
     if (error instanceof WorkflowRequestError) throw error
-    throw new WorkflowRequestError(0, '网络请求未能确认结果，请检查连接后使用同一请求编号重试。')
+    throw new WorkflowRequestError(
+      0,
+      '网络请求未能确认结果，请检查连接后使用同一请求编号重试。',
+    )
   } finally {
     clearTimeout(timeout)
   }
@@ -733,25 +784,42 @@ async function authorizedRequest<T>(path: string, init: NonNullable<Parameters<t
 export async function requestBinary(
   path: string,
   file: Blob,
-  contentType: 'image/jpeg' | 'image/png',
+  contentType: 'image/jpeg' | 'image/png' | 'image/webp',
   key: string,
   timeoutMs = 90000,
 ): Promise<unknown> {
   if (file.size < 1 || file.size > 4 * 1024 * 1024)
     throw new WorkflowRequestError(413, '照片不能为空且不能超过4MiB。')
-  const value = await authorizedRequest(path, {
-    method: 'POST',
-    headers: { 'Content-Type': contentType, 'Idempotency-Key': key },
-    body: file,
-  }, response => response.json().catch(() => null), timeoutMs)
+  const value = await authorizedRequest(
+    path,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': contentType, 'Idempotency-Key': key },
+      body: file,
+    },
+    (response) => response.json().catch(() => null),
+    timeoutMs,
+  )
   if (!value || typeof value !== 'object' || typeof value.id !== 'string')
-    throw new WorkflowRequestError(502, '照片上传结果格式异常，请核实当前状态后再重试。')
+    throw new WorkflowRequestError(
+      502,
+      '照片上传结果格式异常，请核实当前状态后再重试。',
+    )
   return value
 }
 
-export async function requestBlob(path: string, timeoutMs = 30000): Promise<Blob> {
-  const value = await authorizedRequest(path, { method: 'GET' }, response => response.blob(), timeoutMs)
-  if (!value.size) throw new WorkflowRequestError(502, '照片内容为空，未能生成预览。')
+export async function requestBlob(
+  path: string,
+  timeoutMs = 30000,
+): Promise<Blob> {
+  const value = await authorizedRequest(
+    path,
+    { method: 'GET' },
+    (response) => response.blob(),
+    timeoutMs,
+  )
+  if (!value.size)
+    throw new WorkflowRequestError(502, '照片内容为空，未能生成预览。')
   return value
 }
 
@@ -759,6 +827,7 @@ export class WorkflowRequestError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    readonly code?: string,
   ) {
     super(message)
   }
@@ -837,6 +906,8 @@ export function optionLabel(
   catalogs: Record<string, Row[]> = {},
 ): string {
   const raw = rowName(row)
+  if (resourceFor[field] === 'beds')
+    return `${raw} · ${row.status === 'conflict' ? '占用关系待核对' : display(row.status)}`
   const index = Math.max(
     0,
     choices.findIndex((item) => item.id === row.id),
@@ -852,7 +923,8 @@ export function optionLabel(
     const elder = catalogs.elders?.find((item) => item.id === row.elder_id)
     const elderName = elder ? rowName(elder) : ''
     const bed = elder?.bed_label ? ` · ${elder.bed_label}` : ''
-    const taskName = row.title && row.title !== row.id ? String(row.title) : `任务${index + 1}`
+    const taskName =
+      row.title && row.title !== row.id ? String(row.title) : `任务${index + 1}`
     return `${elderName ? `${elderName}${bed} · ` : ''}${taskName}${row.status ? ` · ${display(row.status)}` : ''}`
   }
   return name + (row.status ? ` · ${display(row.status)}` : '')

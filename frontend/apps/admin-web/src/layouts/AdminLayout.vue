@@ -115,25 +115,14 @@ function leaveAccount(event: FocusEvent) {
       :class="{ 'is-open': navigationOpen }"
       aria-label="管理端导航"
     >
-      <RouterLink
-        :to="homeForRole(auth.role)"
-        class="brand"
-      >
-        <span class="brand-mark"><Activity
-          :size="24"
-          aria-hidden="true"
+      <RouterLink :to="homeForRole(auth.role)" class="brand">
+        <span class="brand-mark"
+          ><Activity :size="24" aria-hidden="true"
         /></span>
         <span class="brand-copy">护老智交<small>护理协作管理</small></span>
       </RouterLink>
-      <nav
-        class="side-menu"
-        aria-label="业务导航"
-      >
-        <div
-          v-for="group in groups"
-          :key="group.label"
-          class="nav-group"
-        >
+      <nav class="side-menu" aria-label="业务导航">
+        <div v-for="group in groups" :key="group.label" class="nav-group">
           <p class="nav-group-label">
             {{ group.label }}
           </p>
@@ -162,14 +151,12 @@ function leaveAccount(event: FocusEvent) {
           title="打开本机草稿"
           @click="showDrafts"
         >
-          <Files
-            :size="18"
-            aria-hidden="true"
-          /><span>草稿管理</span>
+          <Files :size="18" aria-hidden="true" /><span>草稿管理</span>
         </button>
       </div>
       <div class="sidebar-foot">
-        <span class="status-dot" /><span>管理端</span><span>{{ mode === 'demo' ? '演示模式' : '正式模式' }}</span>
+        <span class="status-dot" /><span>管理端</span
+        ><span>{{ mode === 'demo' ? '演示模式' : '正式模式' }}</span>
       </div>
     </aside>
     <button
@@ -195,23 +182,39 @@ function leaveAccount(event: FocusEvent) {
           />
         </button>
         <div class="breadcrumb">
-          <span>{{ activeGroup }}</span><ChevronRight
-            :size="14"
-            aria-hidden="true"
-          /><strong>{{
+          <span>{{ activeGroup }}</span
+          ><ChevronRight :size="14" aria-hidden="true" /><strong>{{
             activeItem?.label || '管理端'
           }}</strong>
         </div>
         <div class="header-actions">
-          <RouterLink v-if="auth.role && auth.role !== 'family'" to="/notifications" class="icon-button" title="待我处理" aria-label="待我处理"><Bell :size="20" aria-hidden="true" /></RouterLink>
-          <span
-            class="mode-label"
-            :class="{ 'is-demo': mode === 'demo' }"
-          ><FlaskConical
-            v-if="mode === 'demo'"
-            :size="14"
-            aria-hidden="true"
-          />{{ mode === 'demo' ? '虚构演示' : '正式模式' }}</span>
+          <button
+            type="button"
+            class="identity-switch"
+            aria-label="切换身份"
+            title="切换身份"
+            @click="logout"
+          >
+            <ArrowLeftRight :size="17" aria-hidden="true" /><span
+              >切换身份</span
+            >
+          </button>
+          <RouterLink
+            v-if="auth.role && auth.role !== 'family'"
+            to="/notifications"
+            class="icon-button"
+            title="待我处理"
+            aria-label="待我处理"
+          >
+            <Bell :size="20" aria-hidden="true" />
+          </RouterLink>
+          <span class="mode-label" :class="{ 'is-demo': mode === 'demo' }"
+            ><FlaskConical
+              v-if="mode === 'demo'"
+              :size="14"
+              aria-hidden="true"
+            />{{ mode === 'demo' ? '虚构演示' : '正式模式' }}</span
+          >
           <ClearLocalDraftsButton ref="drafts" />
           <div
             ref="accountElement"
@@ -224,7 +227,7 @@ function leaveAccount(event: FocusEvent) {
               class="account-button"
               :aria-label="
                 '当前账号 · ' +
-                  (auth.role ? roleLabels[auth.role] : '权限未识别')
+                (auth.role ? roleLabels[auth.role] : '权限未识别')
               "
               :aria-expanded="accountOpen"
               aria-controls="account-panel"
@@ -235,10 +238,8 @@ function leaveAccount(event: FocusEvent) {
               }}</span>
               <span class="account-role">{{
                 auth.role ? roleLabels[auth.role] : '权限未识别'
-              }}</span><ChevronDown
-                :size="14"
-                aria-hidden="true"
-              />
+              }}</span
+              ><ChevronDown :size="14" aria-hidden="true" />
             </button>
             <div
               v-if="accountOpen"
@@ -251,12 +252,14 @@ function leaveAccount(event: FocusEvent) {
               <p class="muted">
                 管理端 · {{ auth.role ? roleLabels[auth.role] : '权限未识别' }}
               </p>
-              <label class="preference-toggle"><span>降低透明度</span><input
-                type="checkbox"
-                role="switch"
-                :checked="reducedTransparency"
-                @change="changeTransparency"
-              ></label>
+              <label class="preference-toggle"
+                ><span>降低透明度</span
+                ><input
+                  type="checkbox"
+                  role="switch"
+                  :checked="reducedTransparency"
+                  @change="changeTransparency"
+              /></label>
               <p
                 v-if="preferenceError"
                 class="warning-text preference-error"
@@ -264,15 +267,8 @@ function leaveAccount(event: FocusEvent) {
               >
                 {{ preferenceError }}
               </p>
-              <button
-                type="button"
-                class="account-logout"
-                @click="logout"
-              >
-                <LogOut
-                  :size="17"
-                  aria-hidden="true"
-                />退出登录
+              <button type="button" class="account-logout" @click="logout">
+                <LogOut :size="17" aria-hidden="true" />退出登录
               </button>
             </div>
           </div>

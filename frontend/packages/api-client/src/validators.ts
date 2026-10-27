@@ -13,8 +13,122 @@ import {
 } from '@hulao/shared'
 import { ContractError } from './errors'
 import type { LoginResponse } from './index'
+import type { InlineRecordEnvelope } from './types'
 
 export type Parser<T> = (value: unknown, endpoint: string, path?: string) => T
+
+export function parseInlineRecordResponse(
+  value: unknown,
+  elderId: string,
+  endpoint = 'POST /elders/:id/record',
+): InlineRecordEnvelope {
+  const envelope = object(value, endpoint, '$')
+  const record = object(envelope.record, endpoint, '$.record')
+  strings(
+    record,
+    ['id', 'elder_id', 'status', 'raw_text', 'admission_id', 'created_at'],
+    endpoint,
+    '$.record',
+    true,
+  )
+  if (
+    record.elder_id !== elderId ||
+    !['confirmed', 'corrected'].includes(String(record.status)) ||
+    !Number.isSafeInteger(record.revision) ||
+    Number(record.revision) < 1 ||
+    !Number.isFinite(Date.parse(String(record.created_at))) ||
+    (record.happened_at != null &&
+      !Number.isFinite(Date.parse(String(record.happened_at))))
+  )
+    invalid(endpoint, '$.record', '正式记录编号、老人、状态、版本或时间无效')
+  enumeration(
+    envelope.analysis_status,
+    ['ready', 'failed', 'confirmed'],
+    endpoint,
+    '$.analysis_status',
+  )
+  if (envelope.analysis_status === 'failed' && envelope.analysis === null)
+    return envelope as unknown as InlineRecordEnvelope
+  const analysis = object(envelope.analysis, endpoint, '$.analysis')
+  strings(
+    analysis,
+    ['id', 'record_id', 'status', 'created_at'],
+    endpoint,
+    '$.analysis',
+    true,
+  )
+  if (
+    analysis.record_id !== record.id ||
+    analysis.record_revision !== record.revision ||
+    !['ready', 'confirmed'].includes(String(analysis.status)) ||
+    !Number.isFinite(Date.parse(String(analysis.created_at)))
+  )
+    invalid(endpoint, '$.analysis', '分析必须对应当前正式记录版本')
+  const sourceText = String(record.raw_text)
+  const cited = (value: unknown, path: string) => {
+    const quote = object(value, endpoint, path)
+    enumeration(
+      quote.source_field,
+      ['raw_text', 'observations'],
+      endpoint,
+      `${path}.source_field`,
+    )
+    string(quote.quote, endpoint, `${path}.quote`, true)
+    const source =
+      quote.source_field === 'raw_text'
+        ? sourceText
+        : Array.isArray(record.observations)
+          ? record.observations.join('\n')
+          : ''
+    if (!source.includes(String(quote.quote)))
+      invalid(endpoint, path, '引文不在正式记录原文中')
+  }
+  const scene = object(analysis.scene, endpoint, '$.analysis.scene')
+  if (scene.citation !== null)
+    cited(scene.citation, '$.analysis.scene.citation')
+  for (const [index, item] of (Array.isArray(analysis.observations)
+    ? analysis.observations
+    : []
+  ).entries()) {
+    const observation = object(
+      item,
+      endpoint,
+      `$.analysis.observations[${index}]`,
+    )
+    strings(
+      observation,
+      ['id', 'text'],
+      endpoint,
+      `$.analysis.observations[${index}]`,
+      true,
+    )
+    cited(observation.citation, `$.analysis.observations[${index}].citation`)
+  }
+  for (const [field, fields] of [
+    ['task_suggestions', ['id', 'title', 'evidence_text']],
+    ['preference_suggestions', ['id', 'content', 'evidence_text']],
+  ] as const) {
+    if (!Array.isArray(analysis[field]))
+      invalid(endpoint, `$.analysis.${field}`, '需要列表')
+    for (const [index, item] of (analysis[field] as unknown[]).entries()) {
+      const suggestion = object(item, endpoint, `$.analysis.${field}[${index}]`)
+      strings(
+        suggestion,
+        fields,
+        endpoint,
+        `$.analysis.${field}[${index}]`,
+        true,
+      )
+      if (!sourceText.includes(String(suggestion.evidence_text)))
+        invalid(
+          endpoint,
+          `$.analysis.${field}[${index}].evidence_text`,
+          '引文不在正式记录原文中',
+        )
+    }
+  }
+  return envelope as unknown as InlineRecordEnvelope
+}
 
 function invalid(endpoint: string, path: string, expected: string): never {
   throw new ContractError(
@@ -161,9 +275,11 @@ export const parseElder: Parser<Elder> = (value, endpoint, path = '$') => {
     )
     if (wire.bed_id !== null && wire.bed_id !== undefined)
       string(wire.bed_id, endpoint, `${path}.bed_id`)
+    if (wire.bed_label != null)
+      string(wire.bed_label, endpoint, `${path}.bed_label`)
     value = {
       ...wire,
-      bedLabel: wire.bed_id ?? '',
+      bedLabel: wire.bed_label ?? '',
       status: (
         {
           pending: '待入住',
@@ -209,6 +325,10 @@ export const parseTask: Parser<Task> = (value, endpoint, path = '$') => {
       dueAt: wire.due_at ?? '',
       result: wire.result ?? '',
       itemId: wire.id,
+      assigneeName:
+        typeof wire.assigned_name === 'string' ? wire.assigned_name : undefined,
+      shiftName:
+        typeof wire.shift_name === 'string' ? wire.shift_name : undefined,
     }
   const row = object(value, endpoint, path)
   strings(row, ['id', 'elderId', 'title'], endpoint, path, true)
@@ -217,11 +337,30 @@ export const parseTask: Parser<Task> = (value, endpoint, path = '$') => {
   date(row.dueAt, endpoint, `${path}.dueAt`, 'deadline')
   optionalStrings(row, ['result'], endpoint, path)
   optionalStrings(row, ['itemId'], endpoint, path, true)
-  optionalStrings(row, ['nameSnapshot', 'bedSnapshot', 'assigneeName', 'shiftName', 'sourceRecordId'], endpoint, path, true)
+  optionalStrings(
+    row,
+    [
+      'nameSnapshot',
+      'bedSnapshot',
+      'assigneeName',
+      'shiftName',
+      'sourceRecordId',
+    ],
+    endpoint,
+    path,
+    true,
+  )
   for (const field of ['executionAt', 'deadlineAt']) {
-    if (row[field] !== undefined) date(row[field], endpoint, `${path}.${field}`, 'timestamp')
+    if (row[field] !== undefined)
+      date(row[field], endpoint, `${path}.${field}`, 'timestamp')
   }
-  if (row.scene !== undefined) enumeration(row.scene, ['activity', 'rest', 'dining', 'communication', 'other'], endpoint, `${path}.scene`)
+  if (row.scene !== undefined)
+    enumeration(
+      row.scene,
+      ['bathing', 'activity', 'rest', 'dining', 'communication', 'other'],
+      endpoint,
+      `${path}.scene`,
+    )
   return value as Task
 }
 
@@ -266,17 +405,25 @@ export const parseTimelineEvent: Parser<TimelineEvent> = (
   path = '$',
 ) => {
   const wire = object(value, endpoint, path)
-  if ('happened_at' in wire)
+  const serverEvent = 'happened_at' in wire || 'recorded_at' in wire
+  if (serverEvent)
     value = {
       ...wire,
       happenedAt: wire.happened_at,
-      enteredAt: wire.entered_at,
+      enteredAt: 'recorded_at' in wire ? wire.recorded_at : wire.entered_at,
+      recordedAt: 'recorded_at' in wire ? wire.recorded_at : wire.entered_at,
     }
   const row = object(value, endpoint, path)
   strings(row, ['id', 'label'], endpoint, path, true)
   strings(row, ['detail', 'actor'], endpoint, path)
-  date(row.happenedAt, endpoint, `${path}.happenedAt`, 'timestamp')
-  date(row.enteredAt, endpoint, `${path}.enteredAt`, 'timestamp')
+  if (!serverEvent || row.happenedAt !== null)
+    date(row.happenedAt, endpoint, `${path}.happenedAt`, 'timestamp')
+  if (!(
+    serverEvent &&
+    row.enteredAt === null &&
+    wire.recorded_at_status === 'unverified'
+  ))
+    date(row.enteredAt, endpoint, `${path}.enteredAt`, 'timestamp')
   optionalStrings(row, ['itemId'], endpoint, path, true)
   if (row.source !== undefined)
     enumeration(row.source, ['demo'], endpoint, `${path}.source`)
@@ -348,7 +495,13 @@ export const parseLoginResponse: Parser<LoginResponse> = (
 ) => {
   const row = object(value, endpoint, path)
   strings(row, ['access_token'], endpoint, path, true)
-  optionalStrings(row, ['token_type', 'user_id'], endpoint, path, true)
+  optionalStrings(
+    row,
+    ['token_type', 'user_id', 'display_name'],
+    endpoint,
+    path,
+    true,
+  )
   if (row.role !== undefined && normalizeRole(row.role) === null)
     invalid(endpoint, `${path}.role`, '未知角色')
   return value as LoginResponse

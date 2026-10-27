@@ -14,6 +14,38 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('backend 0.4.0 wire contract', () => {
+  it('uses bed display labels without presenting internal bed IDs as labels', () => {
+    const elder = {
+      id: 'E1',
+      name: '虚构老人',
+      status: 'active',
+      bed_id: 'internal-bed-id',
+    }
+    expect(parseElder(elder, '/elders').bedLabel).toBe('')
+    expect(
+      parseElder({ ...elder, bed_label: '101房·1床' }, '/elders').bedLabel,
+    ).toBe('101房·1床')
+    expect(() => parseElder({ ...elder, bed_label: 1 }, '/elders')).toThrow()
+  })
+  it('validates optional task context and supports bathing', () => {
+    const task = {
+      id: 'T1',
+      elderId: 'E1',
+      title: '询问沐浴意愿',
+      status: 'pending',
+      shift: '',
+      assignee: '',
+      dueAt: '',
+      scene: 'bathing',
+    }
+    expect(parseTask(task, '/tasks').scene).toBe('bathing')
+    for (const patch of [
+      { nameSnapshot: 1 },
+      { executionAt: 'yesterday' },
+      { scene: 'unknown' },
+    ])
+      expect(() => parseTask({ ...task, ...patch }, '/tasks')).toThrow()
+  })
   const draft = {
     id: 'AI-1',
     elder_id: 'E-1',
@@ -143,6 +175,46 @@ describe('backend 0.4.0 wire contract', () => {
     ).toMatchObject({
       happenedAt: '2026-10-20T10:00:00+08:00',
       enteredAt: '2026-10-20T10:20:00+08:00',
+    })
+  })
+  it('accepts schema-9 audit events with no actual occurrence time', () => {
+    expect(
+      parseTimelineEvent(
+        {
+          id: 'EV-audit',
+          label: '任务登记',
+          detail: '',
+          actor: '护理员',
+          happened_at: null,
+          recorded_at: '2026-10-27T08:00:00Z',
+          recorded_at_status: 'verified',
+        },
+        '/timeline',
+      ),
+    ).toMatchObject({
+      happenedAt: null,
+      enteredAt: '2026-10-27T08:00:00Z',
+      recordedAt: '2026-10-27T08:00:00Z',
+    })
+  })
+  it('keeps an explicitly unverified registration time unknown instead of using occurrence time', () => {
+    expect(
+      parseTimelineEvent(
+        {
+          id: 'EV-unknown',
+          label: '历史事件',
+          detail: '',
+          actor: '护理员',
+          happened_at: '2026-10-27T07:00:00Z',
+          recorded_at: null,
+          recorded_at_status: 'unverified',
+        },
+        '/timeline',
+      ),
+    ).toMatchObject({
+      happenedAt: '2026-10-27T07:00:00Z',
+      recordedAt: null,
+      enteredAt: null,
     })
   })
 })

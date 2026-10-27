@@ -10,11 +10,20 @@ export function elderWorkbench(elders: Elder[], tasks: Task[]) {
   }
   return elders.flatMap((elder) => {
     const related = byElder.get(elder.id)
-    return related?.length ? [{
-      elder, tasks: related,
-      pending: related.filter((task) => task.status === 'pending' || task.status === 'not_done').length,
-      overdue: related.filter((task) => task.status === 'overdue').length,
-      inProgress: related.filter((task) => task.status === 'in_progress').length,
-    }] : []
+    return related?.length
+      ? [
+          {
+            elder,
+            tasks: related,
+            pending: related.filter(
+              (task) =>
+                task.status === 'pending' || task.status === 'transferred',
+            ).length,
+            overdue: related.filter((task) => task.status === 'overdue').length,
+            inProgress: related.filter((task) => task.status === 'in_progress')
+              .length,
+          },
+        ]
+      : []
   })
 }

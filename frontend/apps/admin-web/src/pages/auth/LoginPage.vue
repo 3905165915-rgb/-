@@ -1,27 +1,73 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
-import { Activity, LogIn } from 'lucide-vue-next'
+import { ref } from 'vue'
+import {
+  Activity,
+  ArrowRight,
+  HeartHandshake,
+  HandHeart,
+  ShieldCheck,
+  UsersRound,
+} from 'lucide-vue-next'
 import { useRoute, useRouter } from 'vue-router'
 import type { Role } from '@hulao/shared'
-import { useAuthStore, roleLabels } from '../../stores/auth'
+import careFieldImage from '../../assets/care-field.jpg'
+import { useAuthStore } from '../../stores/auth'
 import { homeForRole } from '../../router/access'
 import { mode, errorMessage } from '../../services/data'
+
 const router = useRouter()
 const route = useRoute()
 const auth = useAuthStore()
-const form = reactive({ username: '', password: '' })
-const selected = ref<Role>('supervisor')
 const error = ref('')
 const submitting = ref(false)
-async function submit() {
+const passwordOpen = ref(false)
+const form = ref({ username: '', password: '' })
+const image = careFieldImage
+const roleCards: {
+  role: Role
+  title: string
+  caption: string
+  icon: typeof HandHeart
+}[] = [
+  {
+    role: 'caregiver',
+    title: '护理员',
+    caption: '查看当班工作与老人照护',
+    icon: HandHeart,
+  },
+  {
+    role: 'supervisor',
+    title: '护士 / 主管',
+    caption: '审核照护事项并跟进交接',
+    icon: HeartHandshake,
+  },
+  {
+    role: 'admin',
+    title: '管理员',
+    caption: '查看机构运营与服务质量',
+    icon: ShieldCheck,
+  },
+  {
+    role: 'family',
+    title: '家属',
+    caption: '查看已授权的照护动态',
+    icon: UsersRound,
+  },
+]
+
+async function openRole(role: Role) {
   if (submitting.value) return
   error.value = ''
   submitting.value = true
   try {
-    await auth.login(form.username, form.password)
+    await auth.demoRoleLogin(role)
+    if (auth.role === 'family') {
+      window.location.replace('/mobile/family')
+      return
+    }
     if (
-      mode === 'api' &&
       route.query.view !== 'admin' &&
+      role !== 'admin' &&
       window.matchMedia('(max-width: 768px)').matches
     ) {
       window.location.replace('/mobile/')
@@ -34,83 +80,116 @@ async function submit() {
     submitting.value = false
   }
 }
-async function demoLogin() {
-  auth.demoLogin(selected.value)
-  await router.replace(homeForRole(auth.role))
+
+async function submit() {
+  if (submitting.value) return
+  error.value = ''
+  submitting.value = true
+  try {
+    await auth.login(form.value.username, form.value.password)
+    if (auth.role === 'family') {
+      window.location.replace('/mobile/family')
+      return
+    }
+    await router.replace(homeForRole(auth.role))
+  } catch (failure) {
+    error.value = errorMessage(failure)
+  } finally {
+    submitting.value = false
+  }
 }
 </script>
+
 <template>
-  <section
-    class="login-card"
-    aria-labelledby="login-title"
-  >
-    <div class="login-brand">
-      <span class="brand-mark"><Activity
-        :size="24"
-        aria-hidden="true"
-      /></span>
-      <div>
-        <h1 id="login-title">
-          护老智交
-        </h1>
-        <p>管理端登录 · {{ mode === 'demo' ? '虚构演示' : '正式模式' }}</p>
-      </div>
-    </div>
-    <p><a href="/mobile/login">打开手机护理端</a></p>
-    <el-form
-      label-position="top"
-      @submit.prevent="submit"
-    >
-      <el-form-item label="账号">
-        <el-input
-          v-model="form.username"
-          autocomplete="username"
-        />
-      </el-form-item>
-      <el-form-item label="密码">
-        <el-input
-          v-model="form.password"
-          type="password"
-          show-password
-          autocomplete="current-password"
-        />
-      </el-form-item>
-      <el-alert
-        v-if="error"
-        :title="error"
-        type="error"
-        :closable="false"
-      />
-      <el-button
-        class="login-button"
-        type="primary"
-        native-type="submit"
-        :loading="submitting"
-      >
-        <LogIn
-          :size="17"
-          aria-hidden="true"
-        />登录
-      </el-button>
-      <template v-if="mode === 'demo'">
-        <el-divider>虚构演示</el-divider><p>仅使用本机王爷爷样本。演示按北京时间每日重建，旧样本与草稿留存本机归档；不会修改服务器数据。</p><el-select
-          v-model="selected"
-          aria-label="演示角色"
-        >
-          <el-option
-            v-for="(label, key) in roleLabels"
-            :key="key"
-            :value="key"
-            :label="label"
+  <main class="role-login">
+    <header class="login-topbar">
+      <a class="login-wordmark" href="/" aria-label="护老智交首页">
+        <span class="login-mark"
+          ><Activity :size="21" aria-hidden="true"
+        /></span>
+        <span>护老智交<small>个性化养老照护协同平台</small></span>
+      </a>
+      <a class="login-mobile-link" href="/mobile/login"
+        >手机护理端<ArrowRight :size="16" aria-hidden="true"
+      /></a>
+    </header>
+    <section class="login-content" aria-labelledby="login-title">
+      <div class="login-intro">
+        <span class="login-eyebrow">护老智交 · 照护协同</span>
+        <h1 id="login-title">让每一次照护，都接得上。</h1>
+        <p>从老人的日常习惯到每班照护安排，让团队了解同一件事、做好下一步。</p>
+        <figure class="login-photo">
+          <img
+            :src="image"
+            alt="两位长者在林间相依而坐，微笑望向前方"
+            width="1920"
+            height="1272"
+            fetchpriority="high"
           />
-        </el-select><el-button
-          class="login-button"
-          plain
-          @click="demoLogin"
-        >
-          进入演示
-        </el-button>
-      </template>
-    </el-form>
-  </section>
+        </figure>
+      </div>
+      <section class="role-panel hl-glass" aria-label="选择工作入口">
+        <header class="role-panel-heading">
+          <div>
+            <span class="panel-kicker">工作入口</span>
+            <h2>请选择你的身份</h2>
+          </div>
+          <span class="demo-pill">演示体验</span>
+        </header>
+        <p v-if="mode === 'demo'" class="muted">
+          虚构王爷爷样本，仅保存在本机；北京时间每日更新时归档旧演示草稿，不修改服务器数据。
+        </p>
+        <div class="role-list">
+          <button
+            v-for="item in roleCards"
+            :key="item.role"
+            class="role-choice"
+            type="button"
+            :disabled="submitting"
+            @click="openRole(item.role)"
+          >
+            <span class="role-icon"
+              ><component :is="item.icon" :size="22" aria-hidden="true"
+            /></span>
+            <span class="role-copy"
+              ><strong>{{ item.title }}</strong
+              ><small>{{ item.caption }}</small></span
+            >
+            <ArrowRight class="role-arrow" :size="19" aria-hidden="true" />
+          </button>
+        </div>
+        <p v-if="error" class="error-text" role="alert">
+          {{ error }}
+        </p>
+        <details class="credential-login" :open="passwordOpen">
+          <summary>使用账号密码登录</summary>
+          <el-form label-position="top" @submit.prevent="submit">
+            <el-form-item label="账号">
+              <el-input v-model="form.username" autocomplete="username" />
+            </el-form-item>
+            <el-form-item label="密码">
+              <el-input
+                v-model="form.password"
+                type="password"
+                show-password
+                autocomplete="current-password"
+              />
+            </el-form-item>
+            <el-button
+              class="login-button"
+              type="primary"
+              native-type="submit"
+              :loading="submitting"
+            >
+              登录
+            </el-button>
+          </el-form>
+        </details>
+      </section>
+    </section>
+    <footer class="login-footer">
+      <span>照护有依据 · 交接有回应 · 每位长者都被看见</span
+      ><span>以人为本 · 协同照护</span>
+    </footer>
+  </main>
 </template>

@@ -1,5 +1,14 @@
 import { businessDay } from './business-time'
-import { buildWangRecords, buildWangMemories, historicalWangTasks, offsetDemoDay, type DemoPlan, type DemoMemory, type DemoMemoryReview, type DemoOriginal } from './demo-sample'
+import {
+  buildWangRecords,
+  buildWangMemories,
+  historicalWangTasks,
+  offsetDemoDay,
+  type DemoPlan,
+  type DemoMemory,
+  type DemoMemoryReview,
+  type DemoOriginal,
+} from './demo-sample'
 export type { DemoPlan } from './demo-sample'
 import type {
   Elder,
@@ -14,7 +23,13 @@ import type {
 export interface DemoState {
   batchId: string
   demoDay: string
-  assessments: Array<{ id: string; elderId: string; status: 'valid'; assessedAt: string; summary: string }>
+  assessments: Array<{
+    id: string
+    elderId: string
+    status: 'valid'
+    assessedAt: string
+    summary: string
+  }>
   plans: DemoPlan[]
   memories: DemoMemory[]
   memoryReviews: DemoMemoryReview[]
@@ -40,10 +55,47 @@ export function createInitialDemoState(): DemoState {
     batchId: DEMO_BATCH_ID,
     demoDay: DEMO_DAY,
     originals: [],
-    assessments: [{ id: 'assessment-wang-1', elderId, status: 'valid', assessedAt: iso(offsetDemoDay(DEMO_DAY, -7), '10:00:00'), summary: '演示评估：沟通时先说明、询问意愿；活动由本人选择。' }],
-    plans: [{ id: 'plan-wang-1', elderId, assessmentId: 'assessment-wang-1', status: 'active', confirmedBy: '演示护理主管', confirmedAt: iso(offsetDemoDay(DEMO_DAY, -6), '11:00:00'), items: [{ title: '询问并安排听戏活动', executionAt: iso(DEMO_DAY, '15:00:00'), deadlineAt: iso(DEMO_DAY, '16:00:00'), assignee: '小王', shiftName: '午班' }] }],
+    assessments: [
+      {
+        id: 'assessment-wang-1',
+        elderId,
+        status: 'valid',
+        assessedAt: iso(offsetDemoDay(DEMO_DAY, -7), '10:00:00'),
+        summary: '演示评估：沟通时先说明、询问意愿；活动由本人选择。',
+      },
+    ],
+    plans: [
+      {
+        id: 'plan-wang-1',
+        elderId,
+        assessmentId: 'assessment-wang-1',
+        status: 'active',
+        confirmedBy: '演示护理主管',
+        confirmedAt: iso(offsetDemoDay(DEMO_DAY, -6), '11:00:00'),
+        items: [
+          {
+            title: '询问并安排听戏活动',
+            executionAt: iso(DEMO_DAY, '15:00:00'),
+            deadlineAt: iso(DEMO_DAY, '16:00:00'),
+            assignee: '小王',
+            shiftName: '午班',
+          },
+        ],
+      },
+    ],
     memories: buildWangMemories(records, DEMO_DAY),
-    memoryReviews: [{ id: 'review-wang-1', elderId, memoryId: 'memory-wang-2', itemId: 'item-wang-listen', status: 'pending', description: '本次想先休息，需核对本次意愿；一次拒绝不代表长期听戏偏好变化。', revision: 1 }],
+    memoryReviews: [
+      {
+        id: 'review-wang-1',
+        elderId,
+        memoryId: 'memory-wang-2',
+        itemId: 'item-wang-listen',
+        status: 'pending',
+        description:
+          '本次想先休息，需核对本次意愿；一次拒绝不代表长期听戏偏好变化。',
+        revision: 1,
+      },
+    ],
     elders: [
       {
         id: elderId,
@@ -65,7 +117,6 @@ export function createInitialDemoState(): DemoState {
       },
     ],
     tasks: [
-      ...historicalWangTasks(DEMO_DAY),
       {
         id: 'task-wang-listen',
         scene: 'activity',
@@ -132,11 +183,22 @@ export function createInitialDemoState(): DemoState {
         source: 'manual',
       },
       {
-        id: 'task-wang-next-day', itemId: 'item-wang-next-day', elderId,
-        title: '明早询问当天活动意愿', shift: '早班', shiftName: '早班', assignee: '小王', status: 'pending',
-        executionAt: iso(offsetDemoDay(DEMO_DAY, 1), '09:00:00'), dueAt: iso(offsetDemoDay(DEMO_DAY, 1), '09:30:00'), deadlineAt: iso(offsetDemoDay(DEMO_DAY, 1), '09:30:00'),
-        bedSnapshot: '101房·1床', source: 'manual', scene: 'communication',
+        id: 'task-wang-next-day',
+        itemId: 'item-wang-next-day',
+        elderId,
+        title: '明早询问当天活动意愿',
+        shift: '早班',
+        shiftName: '早班',
+        assignee: '小王',
+        status: 'pending',
+        executionAt: iso(offsetDemoDay(DEMO_DAY, 1), '09:00:00'),
+        dueAt: iso(offsetDemoDay(DEMO_DAY, 1), '09:30:00'),
+        deadlineAt: iso(offsetDemoDay(DEMO_DAY, 1), '09:30:00'),
+        bedSnapshot: '101房·1床',
+        source: 'manual',
+        scene: 'communication',
       },
+      ...historicalWangTasks(DEMO_DAY),
     ],
     drafts: [
       {
@@ -206,6 +268,8 @@ export function createInitialDemoState(): DemoState {
         source: 'demo',
       },
     ],
-    notifications: ['演示资料均为虚构，AI整理结果仅供核对，正式记录必须人工确认。'],
+    notifications: [
+      '演示资料均为虚构，AI整理结果仅供核对，正式记录必须人工确认。',
+    ],
   }
 }
