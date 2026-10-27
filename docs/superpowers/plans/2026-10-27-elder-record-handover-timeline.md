@@ -366,10 +366,12 @@ Verify text/voice/photo record → AI review → one task/preference decision �
 
 Run git diff --check in each checkout. Commit on feat/backend and feat/frontend, then push only those branches; do not merge them.
 
-- [ ] **Step 4: Back up, migrate, deploy, and verify without resetting live data**
+- [x] **Step 4: Back up, migrate, deploy, and verify without resetting live data**
 
 Run the documented backup and schema-9 migration on an isolated copy first. Back up the live store, migrate with the explicit command, deploy backend then frontend, and check health, role-scoped responses, saved-record retry, handover, and registration-time ordering on the public site.
 
-- [ ] **Step 5: Record release evidence**
+- [x] **Step 5: Record release evidence**
 
 Update both release notes with commits, test counts, schema version, backup location, deployment health, and known limitations. Exclude secrets and real resident data.
+
+2026-10-27 final deployment: backend 07214ac, frontend e538357, https://sdau.fun/ health schema 9 / API 0.6.0. Backup: /root/hulaozhijiao-backup-verified-20261027. Full migration/restore rehearsal and live role/read-only checks passed; accounts and business data retained. Final counts and limits are recorded in the branch-specific release notes.

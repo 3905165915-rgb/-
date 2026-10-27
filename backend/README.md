@@ -2,7 +2,7 @@
 
 这是参赛演示版后端，使用 FastAPI 和 JSON 文件存储，不使用数据库。JSON 存储适用于单服务器、低并发演示；正式生产部署前应替换为事务数据库并重新进行安全与隐私评估。AI适配层支持 DeepSeek OpenAI兼容接口，当前默认仍为 Mock，配置真实密钥后再切换。
 
-当前本地API版本0.4.3，JSON schema 7。新增主动照护建议闭环，接入见[照护建议接口说明](CARE_ADVICE_API_2026-10-25.md)，本轮结果与范围见[建议闭环验收记录](ACCEPTANCE_CARE_ADVICE_2026-10-25.md)。旧schema 1至6均须停服备份并显式迁移；不要删除数据文件重新初始化。本轮未推送、未部署，新增能力的前端联调另行验收。
+当前 API 版本 0.6.0，JSON schema 9。2026-10-27 已完成前后端联调、线上备份及 schema 8→9 迁移，并部署到 https://sdau.fun/ 。修复内容、最终测试结果、备份位置与验证边界见[本次发布记录](RELEASE_2026-10-27_RECORD_HANDOVER_TIMELINE.md)。旧版本必须停服备份并显式迁移，不能删除数据文件重新初始化。主动照护建议的历史接口见[照护建议接口说明](CARE_ADVICE_API_2026-10-25.md)。
 
 此前0.4.2改进清单的逐项实现与验收见[ACCEPTANCE_IMPROVEMENTS_2026-10-25.md](ACCEPTANCE_IMPROVEMENTS_2026-10-25.md)，其他新增接口、权限与前端对接见[IMPROVEMENT_API_2026-10-25.md](IMPROVEMENT_API_2026-10-25.md)。以下历史测试数字均对应各自版本，不能代替本轮结果。
 
@@ -43,14 +43,14 @@ AI_FALLBACK_MOCK=false
 
 真实API不可用时，接口返回503，前端应保留人工录入入口；不要把AI错误伪装成成功结果。
 
-照片识别也可复用同一DeepSeek账号：在私有配置中填写`VISION_API_KEY`（与文字密钥的实际值相同）、`VISION_BASE_URL=https://api.deepseek.com/v1`、`VISION_MODEL=deepseek-flash`、`VISION_TIMEOUT_SECONDS=45`。Flash视觉请求使用非思考模式与JSON输出，结果仍须人工核对。配置在进程启动时读取；服务器已保存配置，但新视觉接口代码尚未部署，不能仅凭配置保存宣称线上已可识别。
+照片识别也可复用同一DeepSeek账号：在私有配置中填写`VISION_API_KEY`（与文字密钥的实际值相同）、`VISION_BASE_URL=https://api.deepseek.com/v1`、`VISION_MODEL=deepseek-flash`、`VISION_TIMEOUT_SECONDS=45`。Flash视觉请求使用非思考模式与JSON输出，结果仍须人工核对。配置在进程启动时读取；当前线上包含视觉接口，本轮真实供应商验收仅覆盖文字记录分析和家属小结，不代表照片识别效果已重新验收。
 
 搭档电脑可使用仓库中的加密AI配置：安装`requirements-setup.txt`后运行`python backend/scripts/setup_ai_test.py`，输入单独提供的口令生成私有`.env`。具体步骤见[AI_TEST_SETUP.md](AI_TEST_SETUP.md)；口令与解密后的文件不提交Git。
 
 ## 数据安全约束
 
 - `backend/data/` 不提交到Git；使用 `seed_demo.py` 生成虚构数据。
-- AI草稿必须人工确认后才会创建正式记录和任务。
+- 新版记录入口先保存正式记录再进行 AI 分析；AI 提出的任务和长期偏好必须经人工核对后创建。旧草稿接口仍须人工确认才保存正式记录。
 - 不把API密钥、真实老人数据、录音或服务器密码提交到仓库。
 - 当前服务按单进程设计，写入JSON前使用文件锁和原子替换。
 
