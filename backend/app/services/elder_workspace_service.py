@@ -115,15 +115,46 @@ def save_record(store, elder_id, payload, user_id, role, key):
         return inline_record_envelope(store, record['id'], existing)
     try:
         analysis = analyze_record(store, record['id'], user_id, role, scene=payload.scene)
-    except (AIProviderError, ValueError, TypeError, KeyError):
-        analysis = persist_analysis_failure(store, record['id'], user_id, role)
+    except (AIProviderError, ValueError, TypeError, KeyError) as exc:
+        analysis = persist_analysis_failure(store, record['id'], user_id, role, analysis_failure_code(exc))
     return inline_record_envelope(store, record['id'], analysis)
 
 
 def inline_record_envelope(store, record_id, analysis):
     record = next(row for row in store.read()['care_records'] if row['id'] == record_id)
-    return {'record': copy.deepcopy(record), 'analysis_status': analysis['status'],
-            'analysis': analysis_view(analysis) if analysis['status'] != 'failed' else None}
+    result = {'record': copy.deepcopy(record), 'analysis_status': analysis['status'],
+              'analysis': analysis_view(analysis) if analysis['status'] != 'failed' else None}
+    if analysis['status'] == 'failed':
+        code = analysis.get('error_code', 'analysis_unavailable')
+        messages = {
+            'analysis_timeout': '分析等待超时，原记录已保存，可重试此记录。',
+            'analysis_rate_limited': '分析服务暂时繁忙，原记录已保存，请稍后重试。',
+            'analysis_configuration': '分析服务配置异常，原记录已保存，请联系管理员。',
+            'analysis_invalid_output': '分析结果未通过原文核验，原记录已保存，可重试。',
+            'analysis_unavailable': '分析暂不可用，原记录已保存，可重试此记录。',
+        }
+        result['analysis_error'] = {'code': code if code in messages else 'analysis_unavailable',
+                                    'message': messages.get(code, messages['analysis_unavailable'])}
+    return result
+
+
+def analysis_failure_code(exc):
+    import httpx
+    code = 'analysis_unavailable'
+    seen = set()
+    while exc is not None and id(exc) not in seen:
+        seen.add(id(exc))
+        if isinstance(exc, httpx.TimeoutException):
+            return 'analysis_timeout'
+        if isinstance(exc, httpx.HTTPStatusError):
+            if exc.response.status_code in {401, 403}:
+                return 'analysis_configuration'
+            if exc.response.status_code == 429:
+                return 'analysis_rate_limited'
+        if isinstance(exc, (ValueError, TypeError, KeyError)):
+            code = 'analysis_invalid_output'
+        exc = exc.__cause__
+    return code
 
 
 def analysis_view(analysis):
@@ -147,20 +178,20 @@ def _record_analysis_data(data, record_id, user_id, role):
     return record, elder
 
 
-def persist_analysis_failure(store, record_id, user_id, role):
+def persist_analysis_failure(store, record_id, user_id, role, error_code='analysis_unavailable'):
     def mutate(data):
         record, _ = _record_analysis_data(data, record_id, user_id, role)
         revision = record.get('revision', 1)
         existing = next((row for row in data['record_analyses'] if row['record_id'] == record_id
                          and row['record_revision'] == revision and row['status'] != 'confirmed'), None)
         if existing:
-            existing.update(status='failed', error_code='analysis_unavailable', updated_at=now(),
+            existing.update(status='failed', error_code=error_code, updated_at=now(),
                             source_text='\n'.join(record.get('observations') or [record['raw_text']]))
             return copy.deepcopy(existing)
         analysis = {'id': identifier('ANALYSIS'), 'record_id': record_id, 'record_revision': revision,
                     'source_text': '\n'.join(record.get('observations') or [record['raw_text']]),
                     'status': 'failed', 'provider': 'unavailable',
-                    'error_code': 'analysis_unavailable', 'created_by': user_id,
+                    'error_code': error_code, 'created_by': user_id,
                     'created_at': now(), 'updated_at': now()}
         data['record_analyses'].append(analysis)
         audit(data, 'analyze_record_failed', record_id, user_id, elder_id=record['elder_id'],
@@ -235,8 +266,8 @@ def retry_record_analysis(store, elder_id, record_id, user_id, role):
     from app.services.ai_service import AIProviderError
     try:
         analysis = analyze_record(store, record_id, user_id, role)
-    except (AIProviderError, ValueError, TypeError, KeyError):
-        analysis = persist_analysis_failure(store, record_id, user_id, role)
+    except (AIProviderError, ValueError, TypeError, KeyError) as exc:
+        analysis = persist_analysis_failure(store, record_id, user_id, role, analysis_failure_code(exc))
     return inline_record_envelope(store, record_id, analysis)
 
 

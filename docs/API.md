@@ -5,6 +5,7 @@ All routes are under `/api/v1`. Staff routes must validate the active account, e
 ## Inline Care Records
 
 - `POST /elders/{elder_id}/record` persists a formal record, then analyzes that saved record in the same request. The response contains `record`, `analysis_status`, and `analysis`. AI failure does not roll back the record.
+- Failed analysis optionally includes `analysis_error: {code, message}`. Safe codes distinguish timeout, rate limiting, configuration, invalid output and unavailable service. The message is predefined Chinese text; provider details are never returned. Older clients may ignore this field.
 - `POST /elders/{elder_id}/records/{record_id}/analyze` retries analysis for the same record ID and current revision; it must not create a second record.
 - `POST /elders/{elder_id}/records/{record_id}/analysis/{analysis_id}/confirm` accepts reviewed preference decisions and complete follow-up tasks. Use `Idempotency-Key`; reject stale revisions and evidence not present in the cited source.
 - Explicit recurring wording such as daily, weekly, or often may become a long-term preference after submitter confirmation. Ambiguous frequency and one-time wishes remain recent observations.

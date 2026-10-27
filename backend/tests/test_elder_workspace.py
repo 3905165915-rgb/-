@@ -4,6 +4,7 @@ import json
 from datetime import datetime, timedelta, timezone
 
 import pytest
+import httpx
 
 from app.schemas.elder_workspace import AutomationRule, PlanAutomation
 from app.services import ai_service, assessment_service, elder_workspace_service as service
@@ -228,6 +229,37 @@ def test_inline_record_ai_failure_keeps_saved_record_and_retry_recovers(api, mon
     retried = post(api, BASE + f'/records/{record_id}/analyze', None, expected=200)
     assert retried['analysis_status'] == 'ready' and retried['record']['id'] == record_id
     assert len(store.read()['care_records']) == 1
+
+
+@pytest.mark.parametrize('failure,code', [
+    (httpx.ReadTimeout('private-provider-detail'), 'analysis_timeout'),
+    (ValueError('private-output'), 'analysis_invalid_output'),
+    (RuntimeError('private-error'), 'analysis_unavailable'),
+])
+def test_inline_failure_classification_preserves_record_and_safe_retry(api, monkeypatch, failure, code):
+    def extract(*args):
+        raise AIProviderError('private-provider-detail') from failure
+    monkeypatch.setattr(ai_service, 'get_ai_provider', lambda: type('Failing', (), {'extract': extract})())
+    result = post(api, BASE + '/record', {'text': '今日完成床铺整理。'}, key='classified-failure')
+    assert result['analysis_status'] == 'failed'
+    assert result['analysis_error']['code'] == code
+    assert '原记录已保存' in result['analysis_error']['message']
+    assert 'private' not in json.dumps(result)
+    assert api[1].read()['record_analyses'][0]['error_code'] == code
+    monkeypatch.setattr(ai_service, 'get_ai_provider', lambda: MockAIProvider())
+    retried = post(api, BASE + f'/records/{result["record"]["id"]}/analyze', None, expected=200)
+    assert retried['analysis_status'] == 'ready' and retried['record']['id'] == result['record']['id']
+    assert len(api[1].read()['care_records']) == 1
+
+
+@pytest.mark.parametrize('status,code', [(401, 'analysis_configuration'), (403, 'analysis_configuration'),
+                                       (429, 'analysis_rate_limited'), (503, 'analysis_unavailable')])
+def test_inline_http_failure_codes(status, code):
+    response = httpx.Response(status, request=httpx.Request('POST', 'https://example.invalid'))
+    cause = httpx.HTTPStatusError('private-response', request=response.request, response=response)
+    error = AIProviderError('private-response')
+    error.__cause__ = cause
+    assert service.analysis_failure_code(error) == code
 
 
 def test_inline_analysis_confirm_creates_only_reviewed_explicit_memory_once(api):

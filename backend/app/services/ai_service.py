@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 from uuid import uuid4
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -112,6 +113,10 @@ class DeepSeekAIProvider:
                 {"role": "user", "content": text},
             ],
         }
+        if urlsplit(self.base_url).hostname == 'api.deepseek.com':
+            # Match the verified vision adapter: these extraction workflows do
+            # not need a long thinking trace before the structured JSON.
+            request['thinking'] = {'type': 'disabled'}
         try:
             response = httpx.post(
                 f"{self.base_url}/chat/completions",
