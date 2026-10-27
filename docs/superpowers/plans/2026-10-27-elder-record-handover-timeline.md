@@ -373,4 +373,3 @@ Run the documented backup and schema-9 migration on an isolated copy first. Back
 - [ ] **Step 5: Record release evidence**
 
 Update both release notes with commits, test counts, schema version, backup location, deployment health, and known limitations. Exclude secrets and real resident data.
-

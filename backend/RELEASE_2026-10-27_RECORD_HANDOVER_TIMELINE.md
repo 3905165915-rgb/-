@@ -14,6 +14,7 @@
 - 后端全量 `pytest -q`：685 passed、15 skipped；1 条 Starlette/httpx 兼容弃用警告。跳过项未作为真实 AI 质量验证。
 - 新增覆盖：schema 8→9 备份迁移、内联记录保存/失败重试/版本与权限重查、频率核对与任务幂等、交班任务延续和角色裁剪、家属公开摘要范围、登记时间分页排序。
 - 最新安全/附件聚焦回归：89 passed；Schema：9。
+- 2026-10-27 仓库上传前重新运行全量回归：685 passed、15 skipped；新增改动的敏感信息扫描未发现凭据、私钥、生产配置或 store 文件，差异空白检查通过。
 - 实现已提交于 `2e2cb18`（`feat(backend): inline record analysis and handover workflow`）；分支仍待推送，线上部署尚未执行。前端与浏览器验收由对应前端分支负责。
 
 ## 部署边界
