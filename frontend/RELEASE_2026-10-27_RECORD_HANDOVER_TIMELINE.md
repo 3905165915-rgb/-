@@ -22,5 +22,6 @@
 ## Release State
 
 - Branch: `feat/frontend`.
-- Push and production deployment: pending.
+- Source and verification changes through `7306140` were pushed to `feat/frontend` on 2026-10-27; backend changes through `67a1a84` were pushed separately to `feat/backend`.
+- Production deployment: pending. Uploading the branches does not update the running website.
 - Tests use synthetic data; this does not verify real AI quality or clinical outcomes.

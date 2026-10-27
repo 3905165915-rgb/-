@@ -362,7 +362,7 @@ Expected: All existing and new tests pass; migration verifies the backup and liv
 Run: pnpm test && pnpm typecheck && pnpm build:deploy && pnpm test:e2e from frontend/.
 Verify text/voice/photo record → AI review → one task/preference decision → handover analysis/submit → elder timeline. Confirm caregiver and family responses contain only permitted fields.
 
-- [ ] **Step 3: Review diffs and commit/push branches separately**
+- [x] **Step 3: Review diffs and commit/push branches separately**
 
 Run git diff --check in each checkout. Commit on feat/backend and feat/frontend, then push only those branches; do not merge them.
 
