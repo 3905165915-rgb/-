@@ -29,6 +29,7 @@ class Elder(BaseModel):
     id: str
     name: str
     bed_id: str | None = None
+    bed_label: str = ''
     status: Literal["pending", "active", "out", "discharged"] = "active"
     contact_name: str | None = None
     contact_phone: str | None = None
@@ -97,6 +98,12 @@ class CareRecord(BaseModel):
 
 
 class CareTask(BaseModel):
+    elder_name: str = ''
+    bed_label: str = ''
+    assignee_name: str = ''
+    shift_name: str = ''
+    allowed_actions: list[str] = Field(default_factory=list)
+    display_snapshot: dict | None = None
     id: str
     elder_id: str
     title: str
@@ -131,4 +138,5 @@ class CareTask(BaseModel):
     scheduled_at: str | None = None
     occurrence_key: str | None = None
     source_plan_snapshot: dict | None = None
+    time_confirmation: dict | None = None
     replaces_task_id: str | None = None

@@ -56,6 +56,8 @@ def _followup_due(quote, record):
     period, hour, minute, chinese_minute = clocks[0]
     hour = _number(hour)
     minute = int(minute) if minute else (30 if chinese_minute == '半' else _number(chinese_minute[:-1]) if chinese_minute else 0)
+    if (period == '上午' and hour > 12) or (period == '晚上' and hour == 12):
+        raise ValueError('Clock conflicts with the stated period')
     if period in {'下午','晚上'} and 1 <= hour < 12:
         hour += 12
     elif period == '上午' and hour == 12:
@@ -67,6 +69,22 @@ def _followup_due(quote, record):
     if not 0 <= hour < 24 or not 0 <= minute < 60:
         raise ValueError('Invalid clock')
     return base.replace(year=day.year, month=day.month, day=day.day, hour=hour, minute=minute, second=0, microsecond=0)
+
+
+def time_proposal(quote, record):
+    """Keep source, interpretation and unresolved fields distinct from assignment."""
+    result = {'original_expression': quote, 'anchor_at': record.get('happened_at') or record['created_at'],
+              'timezone': 'Asia/Shanghai', 'suggested_at': None, 'missing': [], 'conflicts': [],
+              'semantics': 'deadline' if re.search(r'之前|前完成|截止', quote) else 'service_time'}
+    try:
+        result['suggested_at'] = _followup_due(quote, record).isoformat()
+    except (ValueError, TypeError):
+        if re.search(r'上午\s*(?:1[3-9]|2[0-3])(?:点|[:：])|晚上\s*(?:12|十二)点', quote):
+            result['conflicts'].append('时段与钟点含义需重新核对')
+        if len(re.findall(r'20\d{2}-\d{2}-\d{2}|今天|明天|后天', quote)) != 1:
+            result['missing'].append('请确认具体日期')
+        result['missing'].append('请确认明确时段及时间')
+    return result
 
 
 def _scenes(point):
@@ -90,7 +108,7 @@ def enqueue_record(data, record_id, user_id):
     if not record or record.get('status') not in {'confirmed', 'corrected'}:
         return
     version = record.get('revision', 1)
-    if any(job['record_id'] == record_id and job['record_revision'] == version for job in data['care_jobs']):
+    if any(job.get('kind') != 'inline' and job['record_id'] == record_id and job['record_revision'] == version for job in data['care_jobs']):
         return
     stamp = now()
     data['care_jobs'].append({'id': identifier('JOB'), 'elder_id': record['elder_id'],
@@ -104,6 +122,9 @@ def save_record(store, elder_id, payload, user_id, role, key):
     from app.schemas.api import ManualRecordRequest
     from app.services import record_service
     from app.services.ai_service import AIProviderError
+    if payload.background:
+        from app.services.record_job_service import save_background
+        return save_background(store, elder_id, payload, user_id, role, key)
     result = record_service.manual(store, ManualRecordRequest(elder_id=elder_id,
         raw_text=payload.text, observations=[payload.text], shift_id=payload.shift_id,
         happened_at=payload.happened_at, attachment_ids=payload.attachment_ids,
@@ -123,7 +144,7 @@ def save_record(store, elder_id, payload, user_id, role, key):
 def inline_record_envelope(store, record_id, analysis):
     record = next(row for row in store.read()['care_records'] if row['id'] == record_id)
     result = {'record': copy.deepcopy(record), 'analysis_status': analysis['status'],
-              'analysis': analysis_view(analysis) if analysis['status'] != 'failed' else None}
+              'analysis': analysis_view(analysis) if analysis['status'] in {'ready', 'confirmed'} else None}
     if analysis['status'] == 'failed':
         code = analysis.get('error_code', 'analysis_unavailable')
         messages = {
@@ -178,8 +199,18 @@ def _record_analysis_data(data, record_id, user_id, role):
     return record, elder
 
 
-def persist_analysis_failure(store, record_id, user_id, role, error_code='analysis_unavailable'):
+def _assert_inline_claim(data, claim):
+    if claim is None:
+        return
+    live = next((j for j in data['care_jobs'] if j['id'] == claim['id']), None)
+    if (data.get('demo_batch_id') != claim.get('batch_id') or not live
+            or live['status'] != 'processing' or live.get('claim_token') != claim.get('claim_token')):
+        raise DomainError('job_claim_changed', 409)
+
+
+def persist_analysis_failure(store, record_id, user_id, role, error_code='analysis_unavailable', claim=None):
     def mutate(data):
+        _assert_inline_claim(data, claim)
         record, _ = _record_analysis_data(data, record_id, user_id, role)
         revision = record.get('revision', 1)
         existing = next((row for row in data['record_analyses'] if row['record_id'] == record_id
@@ -200,7 +231,7 @@ def persist_analysis_failure(store, record_id, user_id, role, error_code='analys
     return store.mutate(mutate)
 
 
-def analyze_record(store, record_id, user_id, role, scene=None):
+def analyze_record(store, record_id, user_id, role, scene=None, claim=None):
     from app.services.ai_service import get_ai_provider
     snapshot = store.read()
     record, elder = _record_analysis_data(snapshot, record_id, user_id, role)
@@ -226,7 +257,8 @@ def analyze_record(store, record_id, user_id, role, scene=None):
     for candidate in draft.task_candidates:
         suggestions.append({'id': identifier('SUG'), 'title': candidate.get('title', ''),
             'evidence_text': candidate.get('evidence_text') or source_text,
-            'condition': candidate.get('condition'), 'due_text': candidate.get('due_text')})
+            'condition': candidate.get('condition'), 'due_text': candidate.get('due_text'),
+            'time_proposal': time_proposal(candidate.get('evidence_text') or source_text, record)})
     analysis = {'id': identifier('ANALYSIS'), 'record_id': record_id, 'record_revision': revision,
         'status': 'ready', 'scene': {'value': scene, 'citation': evidence if scene else None},
         'observations': observations, 'task_suggestions': suggestions,
@@ -234,6 +266,9 @@ def analyze_record(store, record_id, user_id, role, scene=None):
         'created_by': user_id, 'created_at': now(), 'source_text': source_text,
         'source_fingerprint': __import__('hashlib').sha256(source_text.encode()).hexdigest()}
     def commit(data):
+        _assert_inline_claim(data, claim)
+        if data.get('demo_batch_id') != snapshot.get('demo_batch_id'):
+            raise DomainError('demo_batch_changed', 409)
         current_staff(data, user_id, role)
         live, live_elder = _record_analysis_data(data, record_id, user_id, role)
         if (live.get('revision', 1) != revision or
@@ -302,6 +337,12 @@ def confirm_record_analysis(store, elder_id, record_id, analysis_id, payload, us
                 if not suggestion or suggestion['evidence_text'] not in current_source:
                     raise DomainError('analysis_suggestion_source_invalid', 422)
                 due = accepted.due_at
+                proposal = suggestion.get('time_proposal') or time_proposal(suggestion['evidence_text'], record)
+                suggested = proposal.get('suggested_at')
+                proposed_final = accepted.scheduled_at if proposal.get('semantics') == 'service_time' else due
+                # Legacy clients may only provide a deadline; record this as an explicit adjustment.
+                if suggested and proposed_final != parse_time(suggested) and not accepted.time_change_reason:
+                    raise DomainError('task_time_change_reason_required', 422)
                 if due <= parse_time(now()):
                     raise DomainError('task_due_must_be_future', 422)
                 shift = find(data, 'shifts', accepted.shift_id, 'shift_not_found')
@@ -310,6 +351,8 @@ def confirm_record_analysis(store, elder_id, record_id, analysis_id, payload, us
                     raise DomainError('assignee_not_in_open_shift', 422)
                 if not parse_time(shift['start_at']) <= due < parse_time(shift['end_at']):
                     raise DomainError('task_due_outside_shift', 422)
+                if accepted.scheduled_at and (accepted.scheduled_at > due or not parse_time(shift['start_at']) <= accepted.scheduled_at < parse_time(shift['end_at'])):
+                    raise DomainError('task_service_time_invalid', 422)
                 active_staff(data, accepted.assigned_to)
                 from app.services.care_scope_service import require_elder_access
                 assigned = find(data, 'users', accepted.assigned_to, 'assignee_not_found')
@@ -332,6 +375,13 @@ def confirm_record_analysis(store, elder_id, record_id, analysis_id, payload, us
                 saved['shift_id'] = accepted.shift_id
                 saved['completion_criteria'] = accepted.completion_criteria
                 saved['suggestion_id'] = accepted.suggestion_id
+                saved['time_confirmation'] = {**proposal, 'final_due_at': due.isoformat(),
+                    'final_scheduled_at': accepted.scheduled_at.isoformat() if accepted.scheduled_at else None,
+                    'change_reason': accepted.time_change_reason, 'confirmed_by': user_id, 'confirmed_at': now()}
+                if accepted.scheduled_at:
+                    if accepted.scheduled_at > due or not parse_time(shift['start_at']) <= accepted.scheduled_at < parse_time(shift['end_at']):
+                        raise DomainError('task_service_time_invalid', 422)
+                    saved['scheduled_at'] = accepted.scheduled_at.isoformat()
                 created_tasks.append(copy.deepcopy(saved))
             for decision in payload.preference_decisions:
                 suggestion = preferences_by_id.get(decision.suggestion_id)
@@ -484,7 +534,7 @@ def retry_job(store, elder_id, job_id, user_id, role):
             raise DomainError('job_not_found', 404)
         if item['status'] != 'failed':
             raise DomainError('job_not_failed')
-        if item.get('error_code') == 'requires_inline_reanalysis':
+        if item.get('kind') == 'inline' or item.get('error_code') == 'requires_inline_reanalysis':
             raise DomainError('inline_record_retry_required', 409)
         item.update(status='queued', not_before=now(), updated_at=now(), error_code=None)
         audit(data, 'retry_care_job', item['id'], user_id, elder_id=elder_id)
@@ -582,6 +632,9 @@ def _automatic_followups(data, record, suggestions):
                 completion_criteria='询问并记录本人当次意愿及回应；尊重本人选择', source_type='record',
                 source_id=record['id'], source_revision=record.get('revision', 1)), rule['approved_by'], approver['role'])
             saved = next(t for t in data['care_tasks'] if t['id'] == task['id'])
+            saved['time_confirmation'] = {**time_proposal(quote, record), 'final_due_at': due.isoformat(),
+                'final_scheduled_at': due.isoformat(), 'confirmed_by': rule['approved_by'], 'rule_id': rule['id']}
+            saved['scheduled_at'] = due.isoformat()
             saved.update(automatic_action=action, automation_rule_id=rule['id'], automation_rule_revision=rule['revision'])
             created.append(task['id'])
             audit(data, 'automatically_schedule_followup', task['id'], rule['approved_by'],
@@ -596,11 +649,11 @@ def process_next(store, force=False):
     from app.services.ai_service import get_ai_provider
     from app.services import impression_service
     instant = now()
-    if not any(j['status'] == 'queued' and (force or parse_time(j['not_before']) <= parse_time(instant)) for j in store.read()['care_jobs']):
+    if not any(j.get('kind') != 'inline' and j['status'] == 'queued' and (force or parse_time(j['not_before']) <= parse_time(instant)) for j in store.read()['care_jobs']):
         return False
     def claim(data):
         processing = {j['elder_id'] for j in data['care_jobs'] if j['status'] == 'processing'}
-        eligible = [j for j in data['care_jobs'] if j['status'] == 'queued' and j['elder_id'] not in processing
+        eligible = [j for j in data['care_jobs'] if j.get('kind') != 'inline' and j['status'] == 'queued' and j['elder_id'] not in processing
                     and (force or parse_time(j['not_before']) <= parse_time(instant))]
         if not eligible:
             return None
@@ -653,6 +706,8 @@ def process_next(store, force=False):
             if not isinstance(followups, list) or len(followups) > 10:
                 raise ValueError('Invalid followups')
         def commit(current):
+            if current.get('demo_batch_id') != data.get('demo_batch_id'):
+                raise DomainError('demo_batch_changed', 409)
             for claimed in selected:
                 live = find(current, 'care_jobs', claimed['id'], 'job_not_found')
                 if live['status'] != 'processing' or live.get('claim_token') != claimed['claim_token']:
@@ -713,8 +768,8 @@ def recover_jobs(store):
     def recover(data):
         for job in data['care_jobs']:
             if job['status'] == 'processing':
-                job.update(status='failed', claim_token=None, updated_at=now(),
-                           error_code='requires_inline_reanalysis')
+                job.update(status='queued', claim_token=None, updated_at=now(),
+                           not_before=now(), error_code=None)
     store.mutate(recover)
 
 

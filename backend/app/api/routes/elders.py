@@ -20,7 +20,9 @@ router = APIRouter(prefix="/elders", tags=["elders"])
 def elders(current: StaffUser, store: Store) -> list[Elder]:
     data = store.read()
     scope = care_scope_service.elder_ids(data, current['sub'], current['role']) if current['role'] == 'caregiver' else None
-    return [Elder.model_validate(row) for row in data['elders'] if scope is None or row['id'] in scope]
+    from app.services.presentation_service import bed_label
+    return [Elder.model_validate({**row, 'bed_label': bed_label(data, row.get('bed_id'))})
+            for row in data['elders'] if scope is None or row['id'] in scope]
 
 
 @router.get('/worklist/me')
@@ -50,7 +52,8 @@ def revoke_care(assignment_id: str, payload: RevokeAssignment, current: Manageme
 
 
 @router.get('/{elder_id}', response_model=Elder)
-def elder(elder_id: str, _: StaffUser, store: Store) -> Elder:
+def elder(elder_id: str, current: StaffUser, store: Store) -> Elder:
+    care_scope_service.require_elder_access(store.read(), elder_id, current['sub'], current['role'])
     item = get_elder(store, elder_id)
     if item is None:
         raise HTTPException(status_code=404, detail="Elder not found")

@@ -234,7 +234,15 @@ class JsonStore:
             with self.path.open("r", encoding="utf-8") as stream:
                 data = json.load(stream)
             self._validate(data)
+            previous_task_ids = {row['id'] for row in data['care_tasks']}
+            from app.storage.request_context import expected_demo_batch
+            expected = expected_demo_batch.get()
+            if expected is not None and data.get('demo_batch_id', '') != expected:
+                from app.services.workflow import DomainError
+                raise DomainError('demo_batch_changed', 409)
             result = callback(data)
+            from app.services.presentation_service import capture_new_tasks
+            capture_new_tasks(data, previous_task_ids)
             # Reject malformed callback output before it can replace the valid live file.
             self._validate(data)
             data["updated_at"] = _utc_now()

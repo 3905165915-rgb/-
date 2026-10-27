@@ -29,7 +29,8 @@ def list_tasks(store: JsonStore, elder_id=None, shift_id=None, assigned_to=None,
         from app.services.care_scope_service import elder_ids
         scope = elder_ids(data, user_id, role)
         items = [r for r in items if r['elder_id'] in scope or r.get('assigned_to') == user_id]
-    items = [task_view(item) for item in items]
+    from app.services.presentation_service import task_context
+    items = [task_context(data, task_view(item), user_id, role) for item in items]
     items = [item for item in items if (elder_id is None or item['elder_id'] == elder_id)
              and (shift_id is None or item['shift_id'] == shift_id)
              and (assigned_to is None or item['assigned_to'] == assigned_to)

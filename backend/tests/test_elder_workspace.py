@@ -460,12 +460,12 @@ def test_recovered_worker_cannot_commit_its_old_claim(api, monkeypatch):
     monkeypatch.setattr(ai_service, 'get_ai_provider', lambda: provider)
     records(api, 3)
     service.process_next(api[1], force=True)
-    assert all(j['status'] == 'failed' and j['error_code'] == 'requires_inline_reanalysis'
+    assert all(j['status'] == 'queued' and j['claim_token'] is None
                for j in api[1].read()['care_jobs'])
     assert not api[1].read()['elder_impressions']
     provider.impression = original
     service.process_next(api[1], force=True)
-    assert not api[1].read()['elder_impressions']
+    assert api[1].read()['elder_impressions']
 
 
 def test_authorization_revoked_during_model_work_creates_no_followup(api, monkeypatch):

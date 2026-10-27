@@ -273,3 +273,18 @@ POST /api/v1/elders/{elder_id}/impressions/{report_id}/points/{point_id}/review
 同一报告同一条目只允许建立一条关联记忆；完全相同的重复请求返回已有结果，不同内容的重复请求报409。条目未核对、临时意愿或证据不匹配报422；旧版、过期或来源已变报409；无权角色报403。条目返回可选 `care_memory: {id, status, effective}`，供页面刷新后显示关联状态。
 
 新建时绑定该条目全部引用记录的版本。任何被引用来源更正、撤回或条目被撤回核对，记忆均不再进入 `GET /memories/context` 或上下文助手。单纯新增一条无直接引用关系的记录会要求重新整理印象，不直接作废既有已确认记忆。
+
+## 2026-10-27 流程简化补充
+
+任务展示返回老人、床位、责任人、班次、计划快照、允许动作和历史快照；任务时间统一传输带时区的 ISO 值，`time_confirmation` 保留原文、建议值、最终确认值和调整原因。
+
+- `GET /elders/{elder_id}/arrangement` 返回照护安排上下文。
+- `POST /elders/{elder_id}/arrangement/preview` 生成只读预览和 `context_token`。
+- `POST /elders/{elder_id}/arrangement/confirm` 使用预览令牌、版本和幂等键确认安排，不覆盖已开始、已完成或人工调整的任务。
+- `POST /elders/{elder_id}/followups/check-today` 执行今日检查；可传 `kinds: ["quality"]` 或 `["coverage"]` 只重试失败单项。
+- `GET /followups?elder_id=...` 返回当前账号可见跟进；质量事项仍需人工整改、复查和关闭。
+- `GET /elders/{elder_id}/records/{record_id}/analysis` 查询后台整理状态；`POST /elders/{elder_id}/records/{record_id}/analyze?background=true` 重试持久整理。
+
+后台整理要求任务建议、观察和偏好引用当前记录有效原文；只有对象、事项、时间、授权条件完整时自动建任务，否则生成待核实跟进。`demo_batch_id` 变化时旧客户端提交返回 `409 demo_batch_changed`。
+
+王爷爷重建脚本只用于隔离演示/测试目录，生产环境不自动清理或替换老人资料。`DEMO_FAMILY_ALL_ELDERS=true` 只在 demo/development/test 环境启用家属切换演示，生产仍按显式授权。

@@ -28,13 +28,16 @@ async def lifespan(_: FastAPI):
             raise RuntimeError('Production must not silently use Mock AI; use APP_ENV=demo for synthetic demos')
     store = JsonStore(settings.data_dir)
     store.read()  # Fail startup on an unmigrated/corrupt store.
-    from app.services.elder_workspace_service import recover_jobs, run_plan_rules
+    from app.services.elder_workspace_service import recover_jobs, run_plan_rules, process_next
+    from app.services.record_job_service import process_inline_next
     recover_jobs(store)
     stop = threading.Event()
     def organise():
         while not stop.wait(5):
             try:
                 run_plan_rules(store)
+                process_inline_next(store)
+                process_next(store)
             except Exception:
                 # Jobs retain a persistent failure state; never echo record text
                 # or credentials into process logs.
@@ -57,10 +60,25 @@ app = FastAPI(title="护老智交 Backend", version="0.6.0", lifespan=lifespan)
 
 @app.middleware('http')
 async def private_api_responses(request: Request, call_next):
-    response = await call_next(request)
+    from app.storage.request_context import expected_demo_batch
+    token = None
+    if request.url.path.startswith('/api/'):
+        batch = JsonStore(settings.data_dir).read().get('demo_batch_id')
+        supplied = request.headers.get('X-Demo-Batch')
+        if batch and supplied and supplied != batch:
+            return JSONResponse(status_code=409, content={'detail': 'demo_batch_changed',
+                'safe_message': '演示资料已重建，请刷新页面后继续。'}, headers={'X-Demo-Batch': batch})
+        token = expected_demo_batch.set(batch or '')
+    try:
+        response = await call_next(request)
+    finally:
+        if token is not None:
+            expected_demo_batch.reset(token)
     if request.url.path.startswith('/api/'):
         response.headers['Cache-Control'] = 'no-store'
         response.headers['X-Content-Type-Options'] = 'nosniff'
+        if batch:
+            response.headers['X-Demo-Batch'] = batch
     return response
 
 
@@ -76,6 +94,12 @@ async def validation_error_handler(request: Request, exc: RequestValidationError
 @app.exception_handler(DomainError)
 async def domain_error_handler(_, exc: DomainError):
     messages = {
+        'task_time_change_reason_required': '最终时间与原文建议不同，请补充调整原因后重试',
+        'task_service_time_invalid': '执行时间需在班次内且不晚于截止时间',
+        'demo_batch_changed': '演示资料已重建，请刷新页面后继续。',
+        'arrangement_context_changed': '相关资料或任务已变化，请重新预览安排后确认。',
+        'arrangement_no_service_in_shift': '所选日期与班次没有待安排服务，请核对服务日期、时间和班次。',
+        'job_claim_changed': '整理任务已恢复或重新领取，请等待最新结果。',
         'elder_not_in_current_work_scope': '该老人不在你的当前照护范围，请主管安排照护分配或临时支援',
         'elder_not_in_care': '该老人当前不在可提供在院照护的状态，请先核对入住或离院信息',
         'attachment_size_invalid': '照片不能为空且不能超过4MB，请压缩后重试',
@@ -138,6 +162,7 @@ app.add_middleware(
     allow_origins=list(settings.cors_origins),
     allow_credentials=True,
     allow_methods=["*"],
+    expose_headers=['X-Demo-Batch'],
     allow_headers=["*"],
 )
 
