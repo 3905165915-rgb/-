@@ -6,6 +6,12 @@ const output = { status: 'visible_observations', observations: ['虚构可见观
 const analysis = { id: 'AI1', attachment_id: 'P1', elder_id: 'E1', admission_id: 'A1', revision: 2, status: 'pending_review', model_status: 'visible_observations', created_at: photo.created_at, reviews: [], output }
 
 describe('private photo observation contract and human review', () => {
+  it('restores a photo sharing request only with a fixed local API path and a real boolean', () => {
+    const saved = { publication: { id: 'P1', key: 'share-key', path: '/attachments/P1/family-sharing', payload: { expected_revision: 2, share_with_family: false, note: '停止展示' } } }
+    expect(parsePhotoRecovery(JSON.stringify(saved), 'E1')).toEqual(saved)
+    expect(() => parsePhotoRecovery(JSON.stringify({ publication: { ...saved.publication, path: 'https://other.invalid/' } }), 'E1')).toThrow()
+    expect(() => parsePhotoRecovery(JSON.stringify({ publication: { ...saved.publication, payload: { ...saved.publication.payload, share_with_family: 'false' } } }), 'E1')).toThrow()
+  })
   it('rejects corrupt recovery journals and cross-elder upload retries', () => {
     expect(parsePhotoRecovery('{}', 'E1')).toEqual({})
     const saved = { upload: { key: 'fixed-key', signature: 'original-file', query: 'elder_id=E1&occurred_at=2026-10-25T00%3A00%3A00Z', type: 'image/jpeg' } }

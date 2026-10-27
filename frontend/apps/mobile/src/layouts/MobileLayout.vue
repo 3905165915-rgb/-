@@ -55,7 +55,7 @@ function logout() {
 <template>
   <main
     class="mobile-layout"
-    :class="{ 'focus-layout': focused, 'keyboard-open': keyboardOpen }"
+    :class="{ 'focus-layout': focused, 'keyboard-open': keyboardOpen, 'family-layout': auth.role === 'family' }"
     :style="{ '--mobile-keyboard-offset': `${keyboardOffset}px` }"
   >
     <header class="mobile-header hl-glass">
@@ -111,7 +111,7 @@ function logout() {
           v-if="mode === 'demo'"
           class="demo-marker"
         >虚构演示</span>
-        <ClearLocalDraftsButton />
+        <ClearLocalDraftsButton v-if="auth.role !== 'family'" />
         <button
           type="button"
           class="icon-button account-trigger"
@@ -132,7 +132,7 @@ function logout() {
       <RouterView />
     </section>
     <van-tabbar
-      v-if="!focused && !keyboardOpen"
+      v-if="!focused && !keyboardOpen && auth.role !== 'family'"
       :model-value="activeTab"
       class="hl-glass"
       aria-label="主导航"
@@ -208,3 +208,10 @@ function logout() {
     </van-popup>
   </main>
 </template>
+
+<style scoped>
+.family-layout { background:radial-gradient(ellipse at 0 10%,#e6eddb80,transparent 50%),radial-gradient(ellipse at 100% 45%,#f1e6ce60,transparent 45%),#f4f6ef; min-height:100dvh; }
+.family-layout .mobile-header { background:#ffffffb8; border-bottom:1px solid #e1e6d8; box-shadow:0 3px 20px #6f7f5610; }
+.family-layout .mobile-brand { color:#426d54; }
+.family-layout .mobile-content { padding-bottom:calc(20px + env(safe-area-inset-bottom)); }
+</style>

@@ -113,7 +113,7 @@ describe('mobile entry and session recovery', () => {
       '/notifications',
     ]) {
       await router.push(path)
-      expect(router.currentRoute.value.path).toBe('/403')
+      expect(router.currentRoute.value.path).toBe('/family')
     }
     await router.push('/login')
     expect(router.currentRoute.value.path).toBe('/family')
@@ -170,7 +170,7 @@ describe('mobile entry and session recovery', () => {
     expect(router.currentRoute.value.meta.focused).toBe(true)
     sessionStorage.setItem(key, JSON.stringify(loginSession('family')))
     await router.push('/notifications/business/memories')
-    expect(router.currentRoute.value.path).toBe('/403')
+    expect(router.currentRoute.value.path).toBe('/family')
   })
   it.each([
     { mode: 'api', accountKey: 'old', role: null, accessToken: 'old' },

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import {
   ChevronRight,
   Clock3,
@@ -21,6 +22,8 @@ import { elderWorkbench } from './elder-workbench'
 const tasks = useTasks()
 const elders = useElders()
 const worklist = useCareWorklist()
+const route = useRoute()
+const router = useRouter()
 const { filters, filtered, shifts, assignees, sync, reset } = useTaskFilters(
   () => tasks.data.value ?? [],
   () => elders.data.value ?? [],
@@ -53,6 +56,10 @@ const ready = computed(() => !pending.value && !queryError.value)
 const elderMap = computed(
   () => new Map(elders.data.value?.map((elder) => [elder.id, elder])),
 )
+const selectedElder = computed(() => {
+  const elderId = filters.value.elder
+  return elderId ? elderMap.value.get(elderId) : undefined
+})
 const statistics = computed(() => {
   const rows = tasks.data.value ?? []
   return {
@@ -86,9 +93,26 @@ function refresh() {
   void elders.refetch()
   if (mode === 'api') void worklist.refetch()
 }
+async function scrollToTasks() {
+  await nextTick()
+  const heading = document.getElementById('care-task-list')
+  heading?.focus({ preventScroll: true })
+  heading?.scrollIntoView({
+    behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth',
+    block: 'start',
+  })
+}
+async function focusElderTasks(elderId: string) {
+  // The shortcut means all tasks for this elder, regardless of earlier filters.
+  await router.push({ path: '/caregiver', query: { elder: elderId } })
+  await scrollToTasks()
+}
 watch(filtered, () => {
   limit.value = 30
 })
+watch([() => route.query.elder, ready], () => {
+  if (route.query.elder && ready.value) void scrollToTasks()
+}, { immediate: true })
 </script>
 <template>
   <section class="workbench-page">
@@ -169,7 +193,14 @@ watch(filtered, () => {
             <nav class="elder-card-actions" :aria-label="card.elder.name + '的快捷操作'">
               <RouterLink :to="{ path: '/records/new', query: { elder: card.elder.id } }">记一条</RouterLink>
               <RouterLink :to="{ path: '/tasks/new', query: { elder: card.elder.id } }">新建任务</RouterLink>
-              <RouterLink :to="{ path: '/caregiver', query: { elder: card.elder.id } }">相关任务 {{ card.tasks.length }}</RouterLink>
+              <button
+                type="button"
+                :aria-label="`查看${card.elder.name || '该老人'}的相关任务`"
+                :aria-pressed="filters.elder === card.elder.id"
+                @click="focusElderTasks(card.elder.id)"
+              >
+                相关任务
+              </button>
               <RouterLink :to="'/elders/' + encodeURIComponent(card.elder.id)">档案与动态</RouterLink>
             </nav>
           </li>
@@ -222,9 +253,13 @@ watch(filtered, () => {
         />
       </van-tabs>
     </div>
-    <div class="list-heading">
+    <div
+      id="care-task-list"
+      class="list-heading"
+      tabindex="-1"
+    >
       <span role="status">{{
-        ready ? '当前 ' + filtered.length + ' 项' : '任务列表'
+        ready && selectedElder ? `${selectedElder.name}的相关任务 · 当前 ${filtered.length} 项` : ready ? '当前 ' + filtered.length + ' 项' : '任务列表'
       }}</span><button
         type="button"
         class="text-button"
@@ -427,8 +462,12 @@ watch(filtered, () => {
 .elder-card-overdue { color: #a52a32; font-weight: 600; }
 .elder-card-note { white-space: pre-wrap; line-height: 1.6; }
 .elder-card-actions { display: flex; flex-wrap: wrap; gap: 4px 16px; border-top: 1px solid var(--hl-border); }
-.elder-card-actions a, .elder-card-tasks a { display: inline-flex; align-items: center; min-height: 44px; color: var(--hl-primary); }
-.elder-workbench a:focus-visible { outline: 3px solid var(--hl-primary); outline-offset: 2px; }
+.elder-card-actions a, .elder-card-actions button, .elder-card-tasks a { display: inline-flex; align-items: center; min-height: 44px; color: var(--hl-primary); }
+.elder-card-actions button { padding: 0; border: 0; background: none; font: inherit; cursor: pointer; }
+.elder-card-actions button[aria-pressed='true'] { font-weight: 700; text-decoration: underline; text-underline-offset: 4px; }
+.elder-workbench a:focus-visible, .elder-workbench button:focus-visible { outline: 3px solid var(--hl-primary); outline-offset: 2px; }
+#care-task-list { scroll-margin-top: 86px; }
+#care-task-list:focus-visible { outline: 2px solid var(--hl-primary); outline-offset: 4px; border-radius: 4px; }
 @media (hover: hover) and (prefers-reduced-motion: no-preference) {
   .elder-work-card { transition: box-shadow 120ms ease; }
   .elder-work-card:hover { box-shadow: 0 2px 8px rgb(23 44 69 / 10%); }

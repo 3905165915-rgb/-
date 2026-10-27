@@ -398,4 +398,3 @@ onBeforeUnmount(() => {
 .accept-row input { width: 20px; }
 @media (max-width: 480px) { .handover-shifts { grid-template-columns: minmax(0, 1fr); } }
 </style>
-

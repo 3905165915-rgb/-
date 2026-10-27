@@ -419,7 +419,8 @@ try {
     const family = await context.newPage()
     await loginMobile(family, 'family')
     await family.goto(`${base}/mobile/records/new`)
-    await family.waitForURL('**/403')
+    await family.waitForURL('**/mobile/family')
+    await family.getByRole('heading', { name: '今天想看看谁？' }).waitFor()
     assert.equal(
       await family.getByRole('button', { name: '提取AI草稿' }).count(),
       0,

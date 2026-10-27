@@ -403,8 +403,9 @@ try {
   const family = await setup('family')
   try {
     await family.page.goto(base + '/mobile/tasks/new')
-    await family.page.waitForURL('**/mobile/403')
-    assert.equal(family.requests.length, 0)
+    await family.page.waitForURL('**/mobile/family')
+    await family.page.getByRole('heading', { name: '今天想看看谁？' }).waitFor()
+    assert.equal(family.requests.filter(request => !request.path.startsWith('/family/me/')).length, 0)
     results.push({ name: '家属拒绝内部新建任务入口且不发内部请求', passed: true })
   } finally { await family.context.close() }
   assert.deepEqual(errors, [])
