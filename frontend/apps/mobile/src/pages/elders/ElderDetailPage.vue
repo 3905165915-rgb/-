@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { workspaceDate } from '../../../../../packages/shared/src/workflow/workspace-action'
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import {
@@ -58,7 +59,7 @@ const related = computed(() =>
         {{ elder.bedLabel || '床位未提供' }}
       </p>
       <p class="muted elder-id">
-        编号：{{ elder.id }}
+        老人照护
       </p>
       <RouterLink
         :to="{ path: '/records/new', query: { elder: elder.id } }"
@@ -186,7 +187,7 @@ const related = computed(() =>
               {{ task.assignee || '负责人未提供' }}
             </p>
             <p class="muted">
-              到期：{{ task.dueAt || '未提供' }}
+              到期：{{ workspaceDate(task.dueAt) }}
             </p>
             <RouterLink
               v-if="task.itemId"

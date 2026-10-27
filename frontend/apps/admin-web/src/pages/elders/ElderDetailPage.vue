@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { workspaceDate } from '../../../../../packages/shared/src/workflow/workspace-action'
 import WorkflowPanel from '@hulao/shared/workflow'
 import ElderWorkspace from '../../../../../packages/shared/src/workflow/ElderWorkspace.vue'
 import { computed } from 'vue'
@@ -73,7 +74,7 @@ const related = computed(
             aria-hidden="true"
           /></span>
           <div>
-            <strong>{{ elder.bedLabel || '床位未提供' }}</strong><span>{{ elder.id }}</span>
+            <strong>{{ elder.bedLabel || '床位未提供' }}</strong>
           </div>
         </div>
         <div class="elder-fact">
@@ -115,7 +116,7 @@ const related = computed(
         <div class="profile-section">
           <div class="section-title">
             <h2>基本资料</h2>
-            <span class="muted">{{ elder.id }}</span>
+
           </div>
           <dl class="details-grid">
             <div>
@@ -176,7 +177,7 @@ const related = computed(
             prop="dueAt"
             label="截止时间"
             min-width="160"
-          /><el-table-column
+          ><template #default="{ row }">{{ workspaceDate(row.dueAt) }}</template></el-table-column><el-table-column
             label="操作"
             width="128"
             fixed="right"

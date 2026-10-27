@@ -2,7 +2,7 @@
 import WorkflowPanel from '@hulao/shared/workflow'
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import type { Task } from '@hulao/shared'
+import { workspaceDate, type Task } from '@hulao/shared'
 import {
   History,
   RefreshCw,
@@ -258,9 +258,6 @@ watch(
             <div class="table-primary">
               {{ row.title }}
             </div>
-            <div class="table-secondary">
-              {{ row.id }}
-            </div>
           </template> </el-table-column
         ><el-table-column label="老人 / 床位" min-width="180">
           <template #default="{ row }">
@@ -270,20 +267,17 @@ watch(
               :to="'/elders/' + encodeURIComponent(row.elderId)"
             >
               <span class="bed-label">{{
-                elderMap.get(row.elderId)?.bedLabel || '床位未提供'
+                row.bedLabel || elderMap.get(row.elderId)?.bedLabel || '床位待核对'
               }}</span>
               <span
                 ><span class="table-primary">{{
-                  elderMap.get(row.elderId)?.name
+                  row.elderName || elderMap.get(row.elderId)?.name
                 }}</span
-                ><span class="table-secondary">{{ row.elderId }}</span></span
+                ></span
               >
             </RouterLink>
             <span v-else class="muted"
-              >{{ row.elderId }} ·
-              {{
-                elders.isPending.value ? '档案加载中' : '姓名及床位未提供'
-              }}</span
+              >{{ row.elderName || (elders.isPending.value ? '档案加载中' : '老人信息待核对') }} · {{ row.bedLabel || '床位待核对' }}</span
             >
           </template> </el-table-column
         ><el-table-column label="班次 · 责任人" min-width="140">
@@ -295,11 +289,9 @@ watch(
               {{ row.shift || '班次未提供' }}
             </div>
           </template> </el-table-column
-        ><el-table-column
-          prop="dueAt"
-          label="截止时间"
-          min-width="160"
-        /><el-table-column label="状态" min-width="100">
+        ><el-table-column label="服务 / 截止时间" min-width="180">
+          <template #default="{row}"><p v-if="row.scheduledAt">服务 {{ workspaceDate(row.scheduledAt) }}</p><p>截止 {{ workspaceDate(row.dueAt) }}</p></template>
+        </el-table-column><el-table-column label="状态" min-width="100">
           <template #default="{ row }">
             <StatusLabel :status="row.status" />
           </template> </el-table-column
@@ -352,11 +344,11 @@ watch(
       :assignees="assignees"
       @close="closeTask"
     />
-    <WorkflowPanel
+    <details><summary>转交、条件核验与其他办理</summary><WorkflowPanel
       group="tasks"
       title="任务办理与依据核验"
       @changed="tasks.refetch()"
-    />
+    /></details>
     </template>
   </section>
 </template>

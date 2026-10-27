@@ -2,7 +2,8 @@
 import WorkflowPanel from './WorkflowPanel.vue'
 import { readSession } from '../session'
 import type { Row } from './model'
-withDefaults(defineProps<{ context?: Row; report?: boolean; recordPath?: string }>(), { context: () => ({}), report: false, recordPath: '/records/new' })
+withDefaults(defineProps<{ context?: Row; report?: boolean; recordPath?: string; initialAction?: string; focused?: boolean }>(), { context: () => ({}), report: false, recordPath: '/records/new' })
+const emit=defineEmits<{changed:[]}>()
 const apiMode = readSession()?.mode === 'api'
 </script>
 <template>
@@ -11,7 +12,7 @@ const apiMode = readSession()?.mode === 'api'
     <p>登记事实、已采取措施及依据，接续人工分级、整改和独立复查。</p>
     <RouterLink :to="{ path: recordPath, query: { elder: String(context.elder_id || ''), elder_id: String(context.elder_id || '') } }" class="wf-secondary">先人工记一条事实</RouterLink>
     <p v-if="!apiMode" role="status">当前是虚构演示环境，尚未提供安全事件本机演示；切换服务器账号后可人工上报。</p>
-    <WorkflowPanel v-else group="incidents" :context="context" :initial-action="context.incident_id ? '/incidents/{incident_id}' : '/incidents'" :auto-read="!!context.incident_id || !report" />
+    <WorkflowPanel v-else group="incidents" :focused="focused" :context="context" :initial-action="initialAction || (context.incident_id ? '/incidents/{incident_id}' : '/incidents')" :auto-read="!initialAction && (!!context.incident_id || !report)" @changed="emit('changed')" />
   </section>
 </template>
 <style scoped>

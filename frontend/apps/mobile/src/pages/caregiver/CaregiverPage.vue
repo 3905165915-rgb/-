@@ -19,6 +19,7 @@ import {
 } from '../../composables/useTaskFilters'
 import FeedbackState from '../../components/FeedbackState.vue'
 import { elderWorkbench } from './elder-workbench'
+import { workspaceDate } from '@hulao/shared'
 const tasks = useTasks()
 const elders = useElders()
 const worklist = useCareWorklist()
@@ -145,6 +146,7 @@ watch([() => route.query.elder, ready], () => {
         <ChevronRight :size="18" aria-hidden="true" />
       </RouterLink>
       <p class="scope-label">
+        <RouterLink to="/followups">查看需要跟进的事项</RouterLink>
         已载入任务统计
       </p>
       <dl
@@ -166,7 +168,7 @@ watch([() => route.query.elder, ready], () => {
       </dl>
       <section class="elder-workbench" aria-labelledby="workbench-elders-title">
         <h2 id="workbench-elders-title">先看老人</h2>
-        <p class="scope-label">{{ mode === 'api' ? (worklist.data.value?.scope_rule || '照护范围由服务器核定。') : '本地演示范围；不代表固定责任分配。' }} 任务筛选仅影响下方列表。</p>
+        <p class="scope-label">选择老人，查看今日安排并登记照护情况。</p>
         <FeedbackState :loading="pending" :error="queryError"
           :empty="ready && !elderCards.length" :empty-text="mode === 'api' ? '当前没有授权照护的老人，请联系主管安排照护范围。' : '暂无已载入任务关联的老人'"
           @retry="refresh" />
@@ -288,13 +290,13 @@ watch([() => route.query.elder, ready], () => {
       >
         <div class="task-bed">
           <span>床位</span><strong>{{
-            elderMap.get(task.elderId)?.bedLabel || '未提供'
+            task.bedLabel || elderMap.get(task.elderId)?.bedLabel || '床位待核对'
           }}</strong>
         </div>
         <div class="task-content">
           <div class="row-person">
             <strong>{{
-              elderMap.get(task.elderId)?.name || '老人信息未提供'
+              task.elderName || elderMap.get(task.elderId)?.name || '老人信息待核对'
             }}</strong><span
               class="status-label"
               :data-tone="resolveStatus(taskStatusMeta, task.status).tone"
@@ -306,7 +308,7 @@ watch([() => route.query.elder, ready], () => {
               :size="14"
               aria-hidden="true"
             /><span>{{
-              task.dueAt || '截止时间未提供'
+              task.dueAt ? '截止 ' + workspaceDate(task.dueAt) : '待安排时间'
             }}</span>
           </p>
           <p class="task-assignee">

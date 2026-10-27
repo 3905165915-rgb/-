@@ -144,7 +144,7 @@ try {
         ),
       ])
       const concurrent = await core.loadDemoState()
-      const stale = core.createRecordEditor('demo', 'test-a', 'elder-305-wang')
+      const stale = core.createRecordEditor('demo', 'test-a', 'elder-101-wang')
       stale.demoEpoch = before.epoch
       stale.text = '观察'
       stale.review.observation = '观察'
@@ -420,7 +420,7 @@ try {
     await loginMobile(family, 'family')
     await family.goto(`${base}/mobile/records/new`)
     await family.waitForURL('**/mobile/family')
-    await family.getByRole('heading', { name: '今天想看看谁？' }).waitFor()
+    await family.getByRole('heading', { name: '王爷爷的日常' }).waitFor()
     assert.equal(
       await family.getByRole('button', { name: '提取AI草稿' }).count(),
       0,

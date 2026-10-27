@@ -29,8 +29,8 @@ export function parseInlineRecordResponse(
     !Number.isSafeInteger(record.revision) || Number(record.revision) < 1 || !Number.isFinite(Date.parse(String(record.created_at))) ||
     (record.happened_at != null && !Number.isFinite(Date.parse(String(record.happened_at)))))
     invalid(endpoint, '$.record', '正式记录编号、老人、状态、版本或时间无效')
-  enumeration(envelope.analysis_status, ['ready', 'failed', 'confirmed'], endpoint, '$.analysis_status')
-  if (envelope.analysis_status === 'failed' && envelope.analysis === null)
+  enumeration(envelope.analysis_status, ['ready', 'failed', 'confirmed', 'queued', 'processing'], endpoint, '$.analysis_status')
+  if (['failed', 'queued', 'processing'].includes(String(envelope.analysis_status)) && envelope.analysis === null)
     return envelope as unknown as InlineRecordEnvelope
   const analysis = object(envelope.analysis, endpoint, '$.analysis')
   strings(analysis, ['id', 'record_id', 'status', 'created_at'], endpoint, '$.analysis', true)
@@ -216,7 +216,7 @@ export const parseElder: Parser<Elder> = (value, endpoint, path = '$') => {
       string(wire.bed_id, endpoint, `${path}.bed_id`)
     value = {
       ...wire,
-      bedLabel: wire.bed_id ?? '',
+      bedLabel: wire.bed_label ?? '',
       status: (
         {
           pending: '待入住',
@@ -257,8 +257,11 @@ export const parseTask: Parser<Task> = (value, endpoint, path = '$') => {
     value = {
       ...wire,
       elderId: wire.elder_id,
-      shift: wire.shift_id ?? '',
-      assignee: wire.assigned_to ?? '',
+      shift: wire.shift_name ?? '',
+      assignee: wire.assignee_name ?? '',
+      elderName: wire.elder_name ?? '',
+      bedLabel: wire.bed_label ?? '',
+      scheduledAt: wire.scheduled_at ?? '',
       dueAt: wire.due_at ?? '',
       result: wire.result ?? '',
       itemId: wire.id,

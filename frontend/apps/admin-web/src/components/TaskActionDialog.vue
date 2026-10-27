@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import WorkflowPanel from '@hulao/shared/workflow'
+import TaskExecution from '../../../../packages/shared/src/workflow/TaskExecution.vue'
 import TaskCareContext from '@hulao/shared/task-care-context'
 import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -8,6 +8,7 @@ import { Clock3, Paperclip, Save, Send, Trash2 } from 'lucide-vue-next'
 import StatusLabel from './StatusLabel.vue'
 import { useTaskAction } from '../composables/useTaskAction'
 import { mode, queryClient, session } from '../services/data'
+const contextRevision = ref(0)
 const serverWorkflow = ['api'].includes(import.meta.env.VITE_APP_MODE || 'api')
 const props = defineProps<{
   task: Task | null
@@ -78,16 +79,9 @@ async function saveAsNew() {
       :task-id="task.id"
       :mode="mode"
       :session="session"
+      :refresh-key="contextRevision"
     />
-    <WorkflowPanel
-      v-if="task"
-      ref="workflowPanel"
-      :key="task.id"
-      group="tasks"
-      :context="{ task_id: task.id }"
-      initial-action="/tasks/{task_id}/transition"
-      @changed="queryClient.invalidateQueries()"
-    />
+    <TaskExecution v-if="task" ref="workflowPanel" :key="task.id" :task-id="task.id" @changed="queryClient.invalidateQueries();contextRevision++" />
   </el-drawer>
   <el-drawer
     v-else

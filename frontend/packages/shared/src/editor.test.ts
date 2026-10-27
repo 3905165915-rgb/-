@@ -10,7 +10,7 @@ import { canAccess } from './access'
 import { normalizeRole } from './session'
 
 function reviewed() {
-  const editor = createRecordEditor('demo', 'caregiver', 'elder-305-wang')
+  const editor = createRecordEditor('demo', 'caregiver', 'elder-101-wang')
   const draft = createInitialDemoState().drafts[0]
   editor.text = draft.originalText
   editor.phase = 'reviewing'

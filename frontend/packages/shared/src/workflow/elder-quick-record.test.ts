@@ -171,3 +171,11 @@ describe('inline elder record workflow', () => {
     })
   })
 })
+
+
+it('validates suggestions against corrected observations instead of superseded raw text', () => {
+  const corrected={...record,status:'corrected',raw_text:'老人过去说喜欢高音量音乐。',observations:[record.raw_text]}
+  expect(validateInlineRecordResponse({record:corrected,analysis_status:'ready',analysis},record.elder_id).analysis?.taskSuggestions).toHaveLength(1)
+  const oldOnly={...analysis,preference_suggestions:[{...analysis.preference_suggestions[0],evidence_text:'喜欢高音量音乐'}]}
+  expect(()=>validateInlineRecordResponse({record:corrected,analysis_status:'ready',analysis:oldOnly},record.elder_id)).toThrow('偏好建议缺少有效原文依据')
+})

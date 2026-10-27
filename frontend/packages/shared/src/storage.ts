@@ -1,6 +1,7 @@
 import type { RecordEditor } from './editor'
 import type { HandoverEditor } from './handover-editor'
 import type { AppMode } from './session'
+import { demoBatch } from './demo-batch'
 
 const databaseName = 'hulao-frontend-v2'
 export const stores = [
@@ -14,10 +15,18 @@ export const stores = [
 ] as const
 export type StoreName = (typeof stores)[number]
 let database: Promise<IDBDatabase> | undefined
+let openedBatch = ''
 export function openDatabase(): Promise<IDBDatabase> {
+  const batch = demoBatch()
+  if (openedBatch !== batch) {
+    const old = database
+    database = undefined
+    openedBatch = batch
+    if (old) void old.then(db => db.close(), () => undefined)
+  }
   if (!database)
     database = new Promise((resolve, reject) => {
-      const request = indexedDB.open(databaseName, 2)
+      const request = indexedDB.open(batch ? databaseName + '-' + batch : databaseName, 2)
       request.onupgradeneeded = () => {
         for (const name of stores)
           if (!request.result.objectStoreNames.contains(name))

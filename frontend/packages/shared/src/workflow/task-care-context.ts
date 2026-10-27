@@ -14,6 +14,11 @@ export const contextDisplayLimit = 10
 
 type Row = Record<string, unknown>
 export interface TaskContext {
+  service_scene?: CareScene
+  elder_name?: string
+  bed_label?: string
+  assignee_name?: string
+  shift_name?: string
   id: string
   elder_id: string
   title: string
@@ -169,9 +174,16 @@ function scene(value: unknown): CareScene {
 }
 export function parseTaskContext(value: unknown, taskId: string): TaskContext {
   const row = object(value)
+  const plan = row.source_plan_snapshot as Row | undefined
+  const planItem = plan?.item as Row | undefined
   ensure(row.id === taskId)
   return {
     id: taskId,
+    service_scene: isCareScene(planItem?.scene) ? planItem.scene : undefined,
+    elder_name: typeof row.elder_name === 'string' ? row.elder_name : undefined,
+    bed_label: typeof row.bed_label === 'string' ? row.bed_label : undefined,
+    assignee_name: typeof row.assignee_name === 'string' ? row.assignee_name : undefined,
+    shift_name: typeof row.shift_name === 'string' ? row.shift_name : undefined,
     elder_id: text(row.elder_id),
     title: text(row.title),
     status: text(row.status),
@@ -479,6 +491,7 @@ export function createTaskCareContext(deps: {
       `/tasks/${encodeURIComponent(task.id)}/memory-references`,
       (value) => parseReferenceContext(value, task),
     )
+    if (current(ticket) && task.service_scene && !state.value.scene) await selectScene(task.service_scene)
   }
   async function selectScene(selected: string) {
     const ticket = generation

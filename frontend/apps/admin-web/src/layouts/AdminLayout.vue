@@ -56,6 +56,8 @@ const activeGroup = computed(
     )?.label,
 )
 const icons = {
+  '/followups': ShieldCheck,
+  '/settings': Menu,
   '/dashboard': LayoutDashboard,
   '/tasks': ListChecks,
   '/elders': ContactRound,

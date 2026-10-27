@@ -71,7 +71,7 @@ watch(keyword, () => {
             <div class="elder-identity">
               <strong>{{ elder.name || '姓名未提供' }}</strong>
               <span>{{ elder.bedLabel || '床位未提供' }}</span>
-              <small class="muted">编号：{{ elder.id }}</small>
+
             </div>
             <span class="elder-status">{{ elder.status }}</span>
             <ChevronRight

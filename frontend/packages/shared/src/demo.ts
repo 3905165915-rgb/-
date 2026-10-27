@@ -21,9 +21,9 @@ export function createInitialDemoState(): DemoState {
   return {
     elders: [
       {
-        id: 'elder-305-wang',
-        name: '王阿姨',
-        bedLabel: '305床',
+        id: 'elder-101-wang',
+        name: '王爷爷',
+        bedLabel: '101房·1床',
         age: 78,
         status: '入住',
         risk: '中',
@@ -34,8 +34,8 @@ export function createInitialDemoState(): DemoState {
     ],
     tasks: [
       {
-        id: 'task-305-meal',
-        elderId: 'elder-305-wang',
+        id: 'task-101-meal',
+        elderId: 'elder-101-wang',
         title: '记录午餐进食观察',
         shift: '早班',
         assignee: '李护理',
@@ -43,8 +43,8 @@ export function createInitialDemoState(): DemoState {
         dueAt: '今天 14:00',
       },
       {
-        id: 'task-305-family',
-        elderId: 'elder-305-wang',
+        id: 'task-101-family',
+        elderId: 'elder-101-wang',
         title: '晚餐不足时联系女儿',
         shift: '晚班',
         assignee: '待分派',
@@ -54,8 +54,8 @@ export function createInitialDemoState(): DemoState {
     ],
     drafts: [
       {
-        id: 'draft-305-001',
-        elderId: 'elder-305-wang',
+        id: 'draft-101-001',
+        elderId: 'elder-101-wang',
         originalText: '午餐只吃一半，晚上联系女儿。',
         fields: {
           observation: '午餐进食量约一半',
@@ -69,8 +69,8 @@ export function createInitialDemoState(): DemoState {
     ],
     handover: [
       {
-        id: 'handover-305-1',
-        title: '王阿姨进食观察',
+        id: 'handover-101-1',
+        title: '王爷爷进食观察',
         detail: '午餐约半量，晚餐不足时联系女儿。',
         status: '待接收',
         owner: '晚班护理员',
@@ -78,8 +78,8 @@ export function createInitialDemoState(): DemoState {
     ],
     familyCases: [
       {
-        id: 'case-305-1',
-        elderId: 'elder-305-wang',
+        id: 'case-101-1',
+        elderId: 'elder-101-wang',
         subject: '想了解今日进食情况',
         status: 'replied',
         reply: '午餐已完成记录，晚餐情况将在审核后更新。',

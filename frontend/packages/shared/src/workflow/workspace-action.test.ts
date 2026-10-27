@@ -53,6 +53,12 @@ const validate = (value: unknown) => {
   return value
 }
 describe('durable elder workspace writes', () => {
+  it('restores only the current task operation prefix', () => {
+    const attempt=JSON.stringify({path:'/tasks/T1/complete',body:{result:'实际结果'},key:'original-key'})
+    expect(parseAttempt(attempt,'T1','/tasks/T1/')?.key).toBe('original-key')
+    expect(()=>parseAttempt(attempt,'T2','/tasks/T2/')).toThrow()
+    expect(()=>parseAttempt(attempt,'T1')).toThrow()
+  })
   it('snapshots nested Vue reactive inputs without structuredClone errors', () => {
     const body = reactive({ text: '虚构记录', nested: { chosen: ['a'] } })
     const copy = plainBody(body)

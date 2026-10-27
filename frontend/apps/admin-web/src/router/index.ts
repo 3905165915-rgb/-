@@ -26,6 +26,8 @@ const router = createRouter({
       component: () => import('../layouts/AdminLayout.vue'),
       meta: { requiresAuth: true },
       children: [
+        { path: 'followups', component: () => import('../pages/workflows/FollowupsPage.vue'), meta: { roles: internalRoles } },
+        { path: 'settings', component: () => import('../pages/workflows/SettingsPage.vue'), meta: { roles: internalRoles } },
         {
           path: 'workflows/:group',
           component: () => import('../pages/workflows/WorkflowsPage.vue'),

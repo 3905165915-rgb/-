@@ -78,6 +78,11 @@ const router = createRouter({
           meta: { roles: internalRoles, focused: true },
         },
         {
+          path: 'followups',
+          component: () => import('../pages/followups/FollowupsPage.vue'),
+          meta: { roles: internalRoles, focused: true },
+        },
+        {
           path: 'notifications',
           component: () => import('../pages/notifications/NotificationsPage.vue'),
           meta: { roles: internalRoles, focused: true },

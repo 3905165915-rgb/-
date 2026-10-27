@@ -20,7 +20,7 @@ import { useMobileViewport } from '../composables/useMobileViewport'
 const auth = useAuthStore()
 const router = useRouter()
 const route = useRoute()
-const menu = computed(() => allowedRoutes(auth.role))
+const menu = computed(() => allowedRoutes(auth.role).filter(item => auth.role === 'family' || ['/caregiver','/records/new','/handover'].includes(item.path)))
 const focused = computed(() => route.meta.focused === true)
 const activeTab = computed(
   () =>

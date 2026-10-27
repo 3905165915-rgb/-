@@ -1,10 +1,11 @@
 <script setup lang="ts">
 const serverWorkflow = ['api'].includes(import.meta.env.VITE_APP_MODE || 'api')
-import WorkflowPanel from '@hulao/shared/workflow'
+import TaskExecution from '../../../../../packages/shared/src/workflow/TaskExecution.vue'
 import TaskCareContext from '@hulao/shared/task-care-context'
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
+const contextRevision=ref(0)
 import { Clock3, Save, Send, Paperclip } from 'lucide-vue-next'
-import { compactReference, isKnownStatus, resolveStatus, taskStatusMeta } from '@hulao/shared'
+import { compactReference, isKnownStatus, resolveStatus, taskStatusMeta, workspaceDate } from '@hulao/shared'
 import {
   onBeforeRouteLeave,
   onBeforeRouteUpdate,
@@ -98,14 +99,9 @@ async function saveAsNew() {
     :task-id="String(route.params.id)"
     :mode="mode"
     :session="session"
+    :refresh-key="contextRevision"
   />
-  <WorkflowPanel
-    v-if="serverWorkflow"
-    group="tasks"
-    title="任务处理与依据核验"
-    :context="{ task_id: String(route.params.id) }"
-    initial-action="/tasks/{task_id}/transition"
-  />
+  <TaskExecution v-if="serverWorkflow" :task-id="String(route.params.id)" @changed="tasks.refetch();contextRevision++" />
   <section v-else class="task-detail-page editor-page">
     <p class="page-kicker">任务详情</p>
     <FeedbackState
@@ -126,14 +122,12 @@ async function saveAsNew() {
         <div class="detail-bed">
           <small>床位</small
           ><strong>{{
-            elders.error.value ? '未载入' : elder?.bedLabel || '未提供'
+            task.bedLabel || elder?.bedLabel || '历史床位待核对'
           }}</strong>
         </div>
         <div>
           <strong>{{
-            elders.error.value
-              ? '老人信息未载入'
-              : elder?.name || '老人信息未提供'
+            task.elderName || elder?.name || '老人关联待核对'
           }}</strong>
           <p class="muted">
             {{ task.shift || '班次未提供' }} ·
@@ -144,7 +138,7 @@ async function saveAsNew() {
       <h1>{{ task.title }}</h1>
       <p class="task-deadline">
         <Clock3 :size="16" aria-hidden="true" />截止：{{
-          task.dueAt || '未提供'
+          workspaceDate(task.dueAt)
         }}
       </p>
       <p v-if="task.result">最新结果：{{ task.result }}</p>

@@ -32,12 +32,12 @@ function initial(): DemoStateV2 {
     epoch: crypto.randomUUID(),
     revision: 0,
     tasks: seed.tasks
-      .filter((task) => task.id !== 'task-305-family')
-      .map((task) => ({ ...task, itemId: 'item-305-meal' })),
+      .filter((task) => task.id !== 'task-101-family')
+      .map((task) => ({ ...task, itemId: 'item-101-meal' })),
     handover: [],
     timeline: seed.timeline
       .slice(0, 2)
-      .map((event) => ({ ...event, itemId: 'item-305-meal', source: 'demo' })),
+      .map((event) => ({ ...event, itemId: 'item-101-meal', source: 'demo' })),
     handoverVersions: [],
     confirmedDrafts: {},
     appliedOperations: [],

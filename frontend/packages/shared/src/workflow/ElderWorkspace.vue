@@ -1,15 +1,18 @@
 <script setup lang="ts">
-import { onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { listAll, type Row } from './model'
+import { listAll, request, type Row } from './model'
 import { useWorkspaceScope } from './workspace-scope'
+import { localTime } from './workspace-time'
 import { workspaceDate } from './workspace-action'
-import ElderQuickRecord from './ElderQuickRecord.vue'
+import ElderRecordEntry from './ElderRecordEntry.vue'
 import ElderUnderstanding from './ElderUnderstanding.vue'
 import ElderAssessment from './ElderAssessment.vue'
 import ElderCareAdvice from './ElderCareAdvice.vue'
 import ElderAutomation from './ElderAutomation.vue'
 import ElderActivity from './ElderActivity.vue'
+import CareArrangement from './CareArrangement.vue'
+import CareFollowups from './CareFollowups.vue'
 import './elder-workspace.css'
 const props = defineProps<{ elderId: string; mobile?: boolean }>()
 const scope = useWorkspaceScope()
@@ -17,12 +20,14 @@ const { active, management } = scope
 const route = useRoute(),
   router = useRouter()
 const tabs = [
-  { key: 'today', label: '今日照护' },
-  { key: 'understanding', label: '了解这位老人' },
-  { key: 'records', label: '记录' },
-  { key: 'assessment', label: '评估与安排' },
+  { key: 'today', label: '今日安排' },
+  { key: 'understanding', label: '了解他' },
+  { key: 'records', label: '最近记录' },
+  { key: 'followups', label: '需要跟进' },
 ]
 const section = ref('today')
+const followupCount=ref<number|null>(null)
+const todayTasks=computed(()=>tasks.value.filter(task=>{const at=String(task.scheduled_at||task.due_at||'');return Number.isFinite(Date.parse(at))&&localTime(new Date(at)).slice(0,10)===localTime(new Date()).slice(0,10)}))
 const tasks = ref<Row[]>([]),
   loading = ref(false),
   error = ref('')
@@ -34,7 +39,7 @@ function sync() {
       : route.query.impression_id
         ? 'understanding'
         : 'today'
-  section.value = tabs.some((tab) => tab.key === query) ? query : 'today'
+  section.value = (query==='assessment' || tabs.some((tab) => tab.key === query)) ? query : 'today'
 }
 function select(value: string) {
   section.value = value
@@ -55,6 +60,10 @@ async function load() {
         row.elder_id === props.elderId &&
         !['completed', 'cancelled', 'not_done'].includes(String(row.status)),
     )
+    try {
+      const followups=await request('/followups?elder_id='+encodeURIComponent(props.elderId)) as {counts:{pending:number;review:number}}
+      if(ticket===epoch&&scope.valid()) followupCount.value=followups.counts.pending+followups.counts.review
+    } catch { if(ticket===epoch) followupCount.value=null }
   } catch (failure) {
     if (ticket === epoch && scope.valid())
       error.value = (failure as Error).message
@@ -88,6 +97,7 @@ onBeforeUnmount(() => {
     class="elder-workspace"
     aria-label="老人照护工作区"
   >
+    <header class="workspace-actions"><span>今日待办 {{todayTasks.length}} 项 · 需要跟进 {{followupCount === null ? '暂未读取' : followupCount+' 项'}}</span><button v-if="management" type="button" @click="select('assessment')">制定安排</button></header>
     <nav
       class="workspace-tabs"
       aria-label="老人照护栏目"
@@ -130,14 +140,14 @@ onBeforeUnmount(() => {
           正在读取照护安排…
         </p>
         <p
-          v-if="!loading && !error && !tasks.length"
+          v-if="!loading && !error && !todayTasks.length"
           class="muted"
         >
           当前没有待办理任务。可记录本次观察，或查看评估与安排。
         </p>
         <ul class="workspace-task-list">
           <li
-            v-for="task in tasks"
+            v-for="task in todayTasks"
             :key="String(task.id)"
           >
             <RouterLink
@@ -187,17 +197,13 @@ onBeforeUnmount(() => {
       :record-path="mobile ? '/records/new' : '/workflows/records'"
     />
     <template v-else-if="section === 'records'">
-      <ElderQuickRecord
-        :key="elderId"
-        :elder-id="elderId"
-      /><ElderActivity
-        :key="elderId"
-        :elder-id="elderId"
-        mode="api"
-        :session="scope.owner"
-      />
+      <ElderRecordEntry :key="elderId" :elder-id="elderId" />
+      <details><summary>完整照护过程</summary><ElderActivity :key="elderId" :elder-id="elderId" mode="api" :session="scope.owner" /></details>
     </template>
+    <CareFollowups v-else-if="section === 'followups'" :elder-id="elderId" :mobile="mobile" />
     <template v-else-if="section === 'assessment'">
+      <CareArrangement v-if="management" :key="elderId" :elder-id="elderId" :mobile="mobile" />
+      <details><summary>评估与排期设置</summary>
       <ElderAssessment
         :key="elderId"
         :elder-id="elderId"
@@ -210,6 +216,7 @@ onBeforeUnmount(() => {
         :elder-id="elderId"
         :mobile="mobile"
       />
+      </details>
     </template>
   </section>
   <p

@@ -6,16 +6,15 @@ const messages = new Map<string, FamilyMessage[]>()
 export async function demoFamilyMembers(): Promise<FamilyMember[]> {
   const first = (await loadDemoState()).elders[0]
   return [
-    { id: 'family-wang', elder_id: first?.id || 'elder-wang', elder_name: first?.name || '王阿姨' },
-    { id: 'family-li', elder_id: 'elder-family-li', elder_name: '李爷爷' },
+    { id: 'family-wang', elder_id: first?.id || 'elder-wang', elder_name: first?.name || '王爷爷' },
   ].map(row => ({ ...row, admission_id: `admission-${row.id}`, scopes: ['summary', 'feedback'], expires_at: new Date(Date.now() + 86400000).toISOString() }))
 }
 export function demoFamilyFeed(member: FamilyMember): FamilyFeed {
   const wang = member.id === 'family-wang'
   const stories = wang ? [
-    ['午后的院子', '午后的活动时段，王阿姨在工作人员陪同下到院子里坐了坐，和大家聊起家乡的小院。回房后听了一会儿喜欢的戏曲。'],
-    ['一段熟悉的旋律', '另一次活动时间，王阿姨选择听戏曲，跟着熟悉的段落轻轻哼唱。工作人员记下了她希望活动音量小一些的想法。'],
-    ['把心意带到身边', '家属送来的相册已交到王阿姨手中。她翻看了几张旧照片，并请工作人员把相册放在床头方便拿取的位置。'],
+    ['午后的院子', '午后的活动时段，王爷爷在工作人员陪同下到院子里坐了坐，和大家聊起家乡的小院。回房后听了一会儿喜欢的戏曲。'],
+    ['一段熟悉的旋律', '另一次活动时间，王爷爷选择听戏曲，跟着熟悉的段落轻轻哼唱。工作人员记下了他希望活动音量小一些的想法。'],
+    ['把心意带到身边', '家属送来的相册已交到王爷爷手中。他翻看了几张旧照片，并请工作人员把相册放在床头方便拿取的位置。'],
   ] : [
     ['今天的小故事', '下午的活动时段，李爷爷和同伴下了一会儿棋，随后选择在窗边休息。工作人员已把棋盘收在他熟悉的位置。'],
     ['按照自己的节奏', '上午的活动时段，李爷爷选择在院内慢慢散步。工作人员陪同完成活动后，询问了他下次希望参加的活动。'],

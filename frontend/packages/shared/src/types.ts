@@ -19,6 +19,9 @@ export interface Elder {
 }
 
 export interface Task {
+  elderName?: string
+  bedLabel?: string
+  scheduledAt?: string
   id: string
   elderId: string
   title: string

@@ -188,6 +188,10 @@ defineExpose({ refresh: load })
         刷新
       </button>
     </header>
+    <section v-if="confirmed.length" class="workspace-panel" aria-label="照护要点">
+      <h4>先了解这几件事</h4><ul><li v-for="row in confirmed.slice(0,5)" :key="String(row.id)">{{ row.content }}</li></ul>
+    </section>
+    <details><summary>查看分类资料、原文与逐项核对</summary>
     <p
       v-if="loading"
       role="status"
@@ -237,7 +241,7 @@ defineExpose({ refresh: load })
             >
               {{ source.quote }}
               <footer>
-                {{ source.source_id }} · {{ workspaceDate(source.happened_at) }}
+                {{ workspaceDate(source.happened_at) }}
               </footer>
             </blockquote>
           </details>
@@ -273,7 +277,7 @@ defineExpose({ refresh: load })
             >
               {{ source.quote }}
               <footer>
-                {{ source.source_id }} · {{ workspaceDate(source.happened_at) }}
+                {{ workspaceDate(source.happened_at) }}
               </footer>
             </blockquote>
           </details>
@@ -336,5 +340,6 @@ defineExpose({ refresh: load })
         :record-path="recordPath"
       />
     </div>
+    </details>
   </section>
 </template>

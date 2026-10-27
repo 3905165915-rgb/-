@@ -91,6 +91,7 @@ async function initialize() {
     if (!valid(ticket)) return
     members.value = rows.filter(row => row.scopes.includes('summary') && Date.parse(row.expires_at) > Date.now())
     choice.value = members.value[0]?.id || ''
+    if (members.value.length === 1) { loading.value=false; await confirmFamily() }
   } catch (failure) { if (valid(ticket)) error.value = friendly(failure) }
   finally { if (ticket === epoch) loading.value = false }
 }

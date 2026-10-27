@@ -130,6 +130,8 @@ export const navigation: NavigationItem[] = [
     group: '机构管理',
     roles: internalRoles,
   },
+  { path: '/followups', label: '照护跟进', group: '质量跟进', roles: internalRoles },
+  { path: '/settings', label: '机构设置', group: '机构管理', roles: internalRoles },
   { path: '/demo', label: '演示保障', group: '机构管理', roles: internalRoles },
   {
     path: '/recovery',
@@ -151,7 +153,9 @@ export function allowedNavigationGroups(
   includeDemo = false,
 ) {
   const items = allowedRoutes(role).filter(
-    (item) => includeDemo || item.path !== '/demo',
+    (item) => (includeDemo || item.path !== '/demo') &&
+      (role === 'family' ? item.path === '/family' :
+        ['/dashboard','/elders','/followups','/settings', ...(includeDemo ? ['/demo'] : [])].includes(item.path)),
   )
   return navigationGroups
     .map((label) => ({

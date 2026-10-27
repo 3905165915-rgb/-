@@ -1,4 +1,5 @@
 import contract from './contract.json'
+import { acceptDemoBatch, demoBatch } from '../demo-batch'
 import { clearSession, readSession, type Role } from '../session'
 import { sameCareSession } from './task-care-context'
 
@@ -624,12 +625,14 @@ export async function request(
         cache: 'no-store',
         headers: {
           Authorization: 'Bearer ' + current.accessToken,
+          ...(demoBatch() ? { 'X-Demo-Batch': demoBatch() } : {}),
           ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
           ...(key ? { 'Idempotency-Key': key } : {}),
         },
         ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
       },
     )
+    acceptDemoBatch(res.headers.get('X-Demo-Batch'))
     const data = await res.json().catch(() => null)
     if (!res.ok) {
       if (res.status === 401 && sameCareSession(readSession(), current)) {
@@ -725,10 +728,12 @@ async function authorizedRequest<T>(path: string, init: NonNullable<Parameters<t
         cache: 'no-store',
         headers: {
           Authorization: 'Bearer ' + current.accessToken,
+          ...(demoBatch() ? {'X-Demo-Batch': demoBatch()} : {}),
           ...init.headers,
         },
       },
     )
+    acceptDemoBatch(response.headers.get('X-Demo-Batch'))
     if (response.status === 401 && sameCareSession(readSession(), current)) {
       clearSession()
       window.dispatchEvent(new Event('hulao:unauthorized'))

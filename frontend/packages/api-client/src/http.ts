@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { clearSession, readSession } from '@hulao/shared'
+import { clearSession, readSession, demoBatch, acceptDemoBatch } from '@hulao/shared'
 
 export function createApiClient(baseURL = '/api/v1') {
   const client = axios.create({ baseURL, timeout: 15000 })
@@ -9,12 +9,14 @@ export function createApiClient(baseURL = '/api/v1') {
     if (session?.mode === 'demo') throw new Error('演示身份不能访问真实接口')
     if (session?.accessToken)
       config.headers.Authorization = `Bearer ${session.accessToken}`
+    if (demoBatch()) config.headers['X-Demo-Batch'] = demoBatch()
     return config
   })
 
   client.interceptors.response.use(
-    (response) => response,
+    (response) => { acceptDemoBatch(response.headers['x-demo-batch']); return response },
     (error: unknown) => {
+      if (axios.isAxiosError(error)) acceptDemoBatch(error.response?.headers['x-demo-batch'])
       if (axios.isAxiosError(error) && error.response?.status === 401) {
         clearSession()
         if (typeof window !== 'undefined')
