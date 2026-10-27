@@ -19,3 +19,10 @@ All routes are under `/api/v1`. Staff routes must validate the active account, e
 ## Timeline
 
 Timeline filters, ordering, and pagination use server-generated `recorded_at`. Optional `happened_at` is shown separately and never determines event ordering.
+
+## Demo Family Selection
+
+- With `DEMO_FAMILY_ALL_ELDERS=true` in demo/development/test, active family accounts explicitly marked `demo_login_enabled=true` receive virtual choices for every elder from `GET /family/me/bindings`. New elders appear on the next list refresh without manual grants.
+- These choices include `demo_access: true`; `admission_id` may be null for an elder without a current admission. No admission, consent or authorization record is created by reading the list.
+- Virtual choices support existing timeline, published summaries, protected shared photos, insights and feedback endpoints. Published family content may be read across stays for the selected elder; internal records, drafts and unshared photos remain excluded.
+- Production/prod and ordinary family accounts retain the existing explicit-grant behavior. Turning off the setting or disabling demo access invalidates virtual choices on the next request.

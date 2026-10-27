@@ -16,6 +16,7 @@ import tempfile
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--data-dir', required=True, type=Path)
+    parser.add_argument('--all-elders', action='store_true', help='Enable all-elder selection for the synthetic family account')
     args = parser.parse_args()
     directory = args.data_dir.resolve()
     if directory.exists():
@@ -28,6 +29,7 @@ def main():
     sys.path.insert(0, str(root))
     os.environ.update(DATA_DIR=str(directory), APP_ENV='development',
                       SECRET_KEY=secrets.token_urlsafe(48), AI_PROVIDER='mock', AI_FALLBACK_MOCK='false')
+    os.environ['DEMO_FAMILY_ALL_ELDERS'] = 'true' if args.all_elders else 'false'
     from PIL import Image
     from app.storage.json_store import JsonStore
     from app.schemas.photo import PhotoLink, PhotoReview
@@ -41,6 +43,8 @@ def main():
                           for username, (role, display) in accounts.items()]}
     # Deliberately non-production credential, used only on this loopback fixture.
     data = module['build_demo'](previous, 'family-browser-test')
+    if args.all_elders:
+        next(user for user in data['users'] if user['role'] == 'family')['demo_login_enabled'] = True
     store = JsonStore(directory)
     store.replace(data)
     record = data['care_records'][0]

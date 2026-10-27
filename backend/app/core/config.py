@@ -35,6 +35,7 @@ class Settings:
     vision_model: str = ''
     vision_timeout_seconds: float = 45
     background_jobs_enabled: bool = True
+    demo_family_all_elders: bool = False
 
 
 def get_settings() -> Settings:
@@ -63,6 +64,7 @@ def get_settings() -> Settings:
         vision_model=os.getenv('VISION_MODEL', '').strip(),
         vision_timeout_seconds=float(os.getenv('VISION_TIMEOUT_SECONDS', '45')),
         background_jobs_enabled=os.getenv('BACKGROUND_JOBS_ENABLED', 'true').lower() in {'1', 'true', 'yes'},
+        demo_family_all_elders=os.getenv('DEMO_FAMILY_ALL_ELDERS', 'false').lower() in {'1', 'true', 'yes'},
     )
 
 

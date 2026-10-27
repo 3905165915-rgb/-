@@ -4,6 +4,8 @@ The pre-existing family_cases collection is a tagged union (kind). No new store
 collection or implicit migration; legacy untagged cases remain untouched.
 """
 import copy
+import hashlib
+import json
 from datetime import timedelta
 
 from app.services import assessment_service as evidence_service
@@ -86,6 +88,11 @@ def effective(data, binding, at=None):
 
 def authorize(data, binding_id, user_id, scope):
     account(data, user_id)
+    # Demo selection is computed on each request; never create or broaden a
+    # formal family authorization merely by opening the selection page.
+    demo_binding = next((row for row in demo_bindings(data, user_id) if row['id'] == binding_id), None)
+    if demo_binding is not None and scope in demo_binding['scopes']:
+        return demo_binding
     binding = case(data, binding_id, 'binding')
     if binding['family_id'] != user_id or scope not in binding['scopes'] or not effective(data, binding):
         raise DomainError('family_access_not_authorized', 403)
@@ -95,12 +102,42 @@ def authorize(data, binding_id, user_id, scope):
 def safe_binding(data, binding):
     elder = find(data, 'elders', binding['elder_id'], 'elder_not_found')
     return {**{key: binding[key] for key in ('id', 'elder_id', 'admission_id', 'scopes', 'expires_at')},
-            'elder_name': elder['name']}
+            'elder_name': elder['name'], **({'demo_access': True} if binding.get('demo_access') is True else {})}
+
+
+def demo_bindings(data, user_id):
+    """Virtual selection entries for the explicitly enabled demo family account.
+
+    All elders can be selected, including new/not-yet-admitted elders. No
+    admission or consent record is fabricated. Only already-published family
+    content is readable, across stays for demonstration purposes.
+    """
+    from app.core.config import settings
+    user = account(data, user_id)
+    if (not settings.demo_family_all_elders or settings.app_env.lower() not in {'demo', 'development', 'test'}
+            or user.get('demo_login_enabled') is not True):
+        return []
+    expires = (parse_time(now()) + timedelta(days=1)).isoformat()
+    result = []
+    for elder in data['elders']:
+        digest = hashlib.sha256(json.dumps([user_id, elder['id']], ensure_ascii=False).encode()).hexdigest()[:24]
+        result.append({'id': 'DEMO-FAMILY-' + digest, 'kind': 'binding', 'family_id': user_id,
+                       'elder_id': elder['id'], 'admission_id': elder.get('current_admission_id'),
+                       'scopes': ['summary', 'feedback'], 'expires_at': expires, 'demo_access': True})
+    return result
+
+
+def in_family_scope(binding, item):
+    return (item['elder_id'] == binding['elder_id'] and
+            (binding.get('demo_access') is True or item.get('admission_id') == binding['admission_id']))
 
 
 def my_bindings(store, user_id):
     data = store.read()
     account(data, user_id)
+    demo = demo_bindings(data, user_id)
+    if demo:
+        return [safe_binding(data, row) for row in demo]
     return [safe_binding(data, row) for row in rows(data, 'binding') if row['family_id'] == user_id and effective(data, row)]
 
 
@@ -258,7 +295,7 @@ def summaries(store, binding_id, user_id, limit=100, offset=0):
     binding = authorize(data, binding_id, user_id, 'summary')
     return [{field: row[field] for field in ('id', 'elder_id', 'period_start', 'period_end', 'text', 'revision', 'reviewed_at')}
             for row in reversed(rows(data, 'summary'))
-            if row['elder_id'] == binding['elder_id'] and row['admission_id'] == binding['admission_id']
+            if in_family_scope(binding, row)
             and row['status'] == 'published' and evidence_service.sources_current(data, row)][offset:offset + limit]
 
 
@@ -278,8 +315,7 @@ def family_timeline(store, binding_id, user_id, limit=100, offset=0):
     data = store.read()
     binding = authorize(data, binding_id, user_id, 'summary')
     published = [row for row in reversed(rows(data, 'summary'))
-                 if row['elder_id'] == binding['elder_id']
-                 and row['admission_id'] == binding['admission_id']
+                 if in_family_scope(binding, row)
                  and row['status'] == 'published'
                  and evidence_service.sources_current(data, row)]
     published.sort(key=lambda row: parse_time(row['period_end']), reverse=True)
@@ -288,8 +324,7 @@ def family_timeline(store, binding_id, user_id, limit=100, offset=0):
         source_records = {source['record_id'] for source in item['evidence']}
         photos = []
         for photo in data['attachments']:
-            if (photo['elder_id'] != binding['elder_id'] or
-                photo.get('admission_id') != binding['admission_id'] or
+            if (not in_family_scope(binding, photo) or
                 photo.get('status') != 'approved' or
                 photo.get('family_visible') is not True or
                 not any(link.get('target_type') == 'record' and link.get('target_id') in source_records
@@ -313,12 +348,11 @@ def family_photo(store, binding_id, attachment_id, user_id):
     data = store.read()
     binding = authorize(data, binding_id, user_id, 'summary')
     item = find(data, 'attachments', attachment_id, 'attachment_not_found')
-    if (item['elder_id'] != binding['elder_id'] or
-        item.get('admission_id') != binding['admission_id'] or
+    if (not in_family_scope(binding, item) or
         item.get('status') != 'approved' or item.get('family_visible') is not True):
         raise DomainError('family_photo_not_published', 404)
     published = [row for row in rows(data, 'summary')
-        if row['elder_id'] == binding['elder_id'] and row['admission_id'] == binding['admission_id']
+        if in_family_scope(binding, row)
         and row['status'] == 'published' and evidence_service.sources_current(data, row)]
     source_records = {source['record_id'] for row in published for source in row['evidence']}
     if not any(link.get('target_type') == 'record' and link.get('target_id') in source_records
