@@ -5,7 +5,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { Save, Send } from 'lucide-vue-next'
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute } from 'vue-router'
 import { showConfirmDialog } from 'vant'
-import { compactReference, loadDemoState } from '@hulao/shared'
+import { formatBusinessTime, loadDemoState } from '@hulao/shared'
 import {
   useElders,
   useTasks,
@@ -74,8 +74,19 @@ onMounted(async () => {
   if (serverWorkflow) return
   await initialize(
     typeof route.query.draft === 'string' ? route.query.draft : undefined,
+    typeof route.query.elder === 'string' ? route.query.elder : undefined,
   )
+  const elderFromRoute =
+    typeof route.query.elder === 'string' ? route.query.elder : ''
+  if (elderFromRoute && !editor.value.elderId) {
+    editor.value.elderId = elderFromRoute
+    changed(true)
+  }
   ready.value = true
+  if (!editor.value.elderId && elders.data.value?.length === 1) {
+    editor.value.elderId = elders.data.value[0].id
+    changed(true)
+  }
 })
 async function confirm() {
   if (!requireElder()) return
@@ -116,6 +127,26 @@ watch(
       await initialize(value)
   },
 )
+watch(() => route.query.elder, async value => {
+  if (ready.value && typeof value === 'string' && value !== editor.value.elderId)
+    await initialize(undefined, value)
+})
+watch(() => elders.data.value, rows => {
+  if (ready.value && !editor.value.elderId && rows?.length === 1) {
+    editor.value.elderId = rows[0].id
+    changed(true)
+  }
+})
+async function switchElder(event: Event) {
+  const value = (event.target as HTMLSelectElement).value
+  if (busy.value || frozen.value || value === editor.value.elderId) return
+  const previous = editor.value.localId
+  await fresh()
+  if (editor.value.localId === previous) return
+  editor.value.elderId = value
+  manual.value = false
+  changed(true)
+}
 async function useExample() {
   if (busy.value || frozen.value) return
   const localId = editor.value.localId
@@ -138,6 +169,12 @@ async function useExample() {
 }
 async function newDraft() {
   await fresh()
+  const elderFromRoute =
+    typeof route.query.elder === 'string' ? route.query.elder : ''
+  if (elderFromRoute) {
+    editor.value.elderId = elderFromRoute
+    changed(true)
+  }
   manual.value = false
 }
 function retryQueries() {
@@ -218,7 +255,7 @@ async function restoreDraft() {
           >
             {{ draft.recoveredFrom ? '其他窗口恢复 · ' : ''
             }}{{ draft.text.slice(0, 20) || '空白草稿' }} ·
-            {{ phaseLabels[draft.phase] }} · {{ draft.updatedAt }}
+            {{ phaseLabels[draft.phase] }} · {{ formatBusinessTime(draft.updatedAt) }}
           </option>
         </select></label
       ><van-button
@@ -230,13 +267,14 @@ async function restoreDraft() {
       </van-button>
     </details>
     <template v-if="ready">
+      <RouterLink v-if="editor.phase === 'submitted' && mode === 'demo'" :to="{ path: '/tasks/new', query: { elder: editor.elderId, source_record: editor.confirmedRecordId } }" class="record-link">核对并新建后续任务</RouterLink>
       <div class="form-band">
         <h2>护理记录</h2>
         <label class="select-field"
           >老人<select
-            v-model="editor.elderId"
+            :value="editor.elderId"
             :disabled="frozen"
-            @change="changed(true)"
+            @change="switchElder"
           >
             <option value="">请选择老人</option>
             <option
@@ -246,7 +284,7 @@ async function restoreDraft() {
               "
               :value="editor.elderId"
             >
-              {{ editor.elderId }}（当前列表未找到）
+              当前草稿的老人不在授权列表，请重新核对
             </option>
             <option
               v-for="elder in elders.data.value"
@@ -271,7 +309,7 @@ async function restoreDraft() {
         <p v-if="saveError" class="error-text" role="alert">
           {{ saveError }}
         </p>
-        <p v-else-if="saved" class="muted" role="status">已保存到本机</p>
+        <p v-else-if="saved" class="success-text" role="status">记录已保存到本机</p>
         <p v-if="error" class="error-text" role="alert">
           {{ error }}
         </p>
@@ -295,18 +333,15 @@ async function restoreDraft() {
             :disabled="busy || frozen || !editor.text.trim() || !validElder"
             @click="extractDraft"
           >
-            提取AI草稿 </van-button
+            保存并查看整理结果 </van-button
           ><van-button :disabled="busy || frozen" @click="manual = true">
             手工录入
           </van-button>
         </div>
         <template v-if="editor.ai">
-          <h2>AI原始结果</h2>
+          <h2>整理结果（待核对）</h2>
           <p>
-            来源：{{
-              editor.ai.draft.provider ||
-              (mode === 'demo' ? 'mock（演示）' : '未知，请核实')
-            }}
+            已保存原文，当前整理结果仍需人工核对。
           </p>
           <p v-if="stale" class="error-text">
             原文或老人已变更，旧结果不可确认。
@@ -314,7 +349,7 @@ async function restoreDraft() {
           <details class="evidence">
             <summary>提取时的原文证据</summary>
             <p>{{ editor.ai.sourceText }}</p>
-            <p>老人编号：{{ compactReference(editor.ai.elderId) }}</p>
+            <p>老人：{{ elders.data.value?.find((item) => item.id === editor.ai?.elderId)?.name || '当前老人' }}</p>
             <p>观察：{{ editor.ai.draft.fields.observation }}</p>
             <p>后续：{{ editor.ai.draft.fields.followUp }}</p>
             <p>联系对象：{{ editor.ai.draft.fields.contactTarget }}</p>

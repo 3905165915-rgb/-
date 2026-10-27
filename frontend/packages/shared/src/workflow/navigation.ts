@@ -55,10 +55,10 @@ function areaFor(op: Operation): [string, string, string] {
       {
         new: [
           'new',
-          '新增记录',
+          '写记录',
           '说一段或写下来，整理核对后保存，也可直接填写。',
         ],
-        records: ['records', '记录', '查看已保存记录、来源与更正历史。'],
+        records: ['records', '历史', '查看已保存记录、来源与更正历史。'],
         drafts: ['drafts', '草稿', '统一查看待核对内容，继续核对或放弃。'],
         more: ['more', '更多', '语音服务等辅助设置。'],
       } as Record<string, [string, string, string]>
@@ -139,7 +139,7 @@ export function workflowAreas(ops: Operation[]): WorkflowArea[] {
     area.actions.push(op)
   }
   if (ops[0]?.group === 'records') {
-    const order = ['new', 'records', 'drafts', 'more']
+    const order = ['new', 'drafts', 'records', 'more']
     result.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id))
     const creation = result.find((area) => area.id === 'new')
     if (creation)

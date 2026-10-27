@@ -16,6 +16,13 @@ export interface Elder {
   contact?: string
   notes?: string
   lastUpdate?: string
+  preferences?: {
+    habits: string[]
+    activities: string[]
+    communication: string[]
+    recentChanges: string[]
+    attention: string[]
+  }
 }
 
 export interface Task {
@@ -28,6 +35,27 @@ export interface Task {
   dueAt: string
   result?: string
   itemId?: string
+  executionAt?: string
+  deadlineAt?: string
+  bedSnapshot?: string
+  shiftName?: string
+  source?: 'demo' | 'record' | 'plan' | 'manual'
+  scene?: 'activity' | 'rest' | 'dining' | 'communication' | 'other'
+  sourceRecordId?: string
+  nameSnapshot?: string
+  assigneeName?: string
+}
+
+export interface DemoRecord {
+  id: string
+  elderId: string
+  title: string
+  content: string
+  category: '本人表达' | '护理观察' | '家属补充'
+  happenedAt: string
+  enteredAt: string
+  actor: string
+  familyVisible: boolean
 }
 
 export interface RecordDraft {
@@ -39,6 +67,7 @@ export interface RecordDraft {
   warnings: string[]
   status: AiDraftStatus
   provider?: string
+  demoEpoch?: string
   taskCandidates?: { title: string; [key: string]: unknown }[]
 }
 
@@ -53,6 +82,7 @@ export interface HandoverItem {
   receiverId?: string
   receivedBy?: string
   note?: string
+  demoEpoch?: string
 }
 
 export interface FamilyCase {

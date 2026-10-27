@@ -7,7 +7,7 @@ function state(): DemoStateV2 {
   const seed = createInitialDemoState()
   return {
     ...seed,
-    schemaVersion: 2,
+    schemaVersion: 3,
     epoch: 'demo-epoch',
     revision: 0,
     tasks: seed.tasks.map((task) => ({ ...task, itemId: 'item-01' })),

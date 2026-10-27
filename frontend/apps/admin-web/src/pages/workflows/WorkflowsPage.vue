@@ -2,6 +2,9 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import WorkflowPanel from '@hulao/shared/workflow'
+import DemoRecordsHub from '../../../../../packages/shared/src/workflow/DemoRecordsHub.vue'
+import DemoHandovers from '../../../../../packages/shared/src/workflow/DemoHandovers.vue'
+import { mode } from '../../services/data'
 import CareSafety from '@hulao/shared/care-safety'
 const route = useRoute()
 const group = computed(() => String(route.params.group || 'records'))
@@ -27,6 +30,6 @@ const titles: Record<string, string> = {
   <section>
     <CareSafety v-if="group === 'incidents'" :context="route.query" record-path="/workflows/records" :report="route.query.report === '1'" />
     <template v-else><h1>{{ titles[group] || '业务办理' }}</h1>
-    <WorkflowPanel :key="group" :group="group" :context="route.query" :initial-action="typeof route.query.action === 'string' ? route.query.action : ''" :auto-read="route.query.read === '1'" /></template>
+    <DemoRecordsHub v-if="group === 'records' && mode === 'demo'" /><DemoHandovers v-else-if="group === 'handovers' && mode === 'demo'" /><WorkflowPanel v-else :key="group" :group="group" :context="route.query" :initial-action="typeof route.query.action === 'string' ? route.query.action : ''" :auto-read="route.query.read === '1'" /></template>
   </section>
 </template>

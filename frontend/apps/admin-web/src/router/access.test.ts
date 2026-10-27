@@ -39,15 +39,24 @@ describe('route and menu policy', () => {
         '工作台',
         '老人照护',
         '当班工作',
-        '质量跟进',
+        '照护跟进',
         '家属沟通',
         '机构管理',
       ])
-      expect(groups[0]?.items.map((item) => item.path)).toEqual(['/dashboard', '/notifications'])
+      expect(groups[0]?.items.map((item) => item.path)).toEqual(['/dashboard'])
+      expect(
+        groups
+          .find((group) => group.label === '照护跟进')
+          ?.items.map((item) => item.path),
+      ).toEqual(['/notifications'])
       const paths = groups.flatMap((group) =>
         group.items.map((item) => item.path),
       )
-      expect(paths).toEqual(allowedRoutes(role).map((item) => item.path))
+      expect(paths).toEqual(
+        allowedRoutes(role)
+          .filter((item) => !item.internalOnly)
+          .map((item) => item.path),
+      )
       expect(new Set(paths).size).toBe(paths.length)
       expect([...paths].sort()).toEqual(
         [
@@ -58,11 +67,7 @@ describe('route and menu policy', () => {
           '/assessment',
           '/care-plan',
           '/tasks',
-          '/quality',
-          '/coverage',
-          '/changes',
           '/family',
-          '/timeline',
           '/demo',
           '/recovery',
           '/workflows/records',
@@ -70,10 +75,30 @@ describe('route and menu policy', () => {
           '/workflows/handovers',
           '/workflows/memories',
           '/workflows/staff',
-          '/workflows/incidents',
           '/workflows/reports',
         ].sort(),
       )
+    },
+  )
+  it.each(['admin', 'supervisor'] as Role[])(
+    'retains %s legacy tools as authorized internal entries',
+    (role) => {
+      const tools = [
+        '/quality',
+        '/coverage',
+        '/changes',
+        '/workflows/incidents',
+        '/timeline',
+      ]
+      expect(
+        allowedRoutes(role)
+          .filter((item) => item.internalOnly)
+          .map((item) => item.path),
+      ).toEqual(tools)
+      const sidebar = allowedNavigationGroups(role, true).flatMap((group) =>
+        group.items.map((item) => item.path),
+      )
+      for (const path of tools) expect(sidebar).not.toContain(path)
     },
   )
   it('keeps the family group isolated and omits groups with no authorized routes', () => {

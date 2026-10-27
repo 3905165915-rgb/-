@@ -217,6 +217,11 @@ export const parseTask: Parser<Task> = (value, endpoint, path = '$') => {
   date(row.dueAt, endpoint, `${path}.dueAt`, 'deadline')
   optionalStrings(row, ['result'], endpoint, path)
   optionalStrings(row, ['itemId'], endpoint, path, true)
+  optionalStrings(row, ['nameSnapshot', 'bedSnapshot', 'assigneeName', 'shiftName', 'sourceRecordId'], endpoint, path, true)
+  for (const field of ['executionAt', 'deadlineAt']) {
+    if (row[field] !== undefined) date(row[field], endpoint, `${path}.${field}`, 'timestamp')
+  }
+  if (row.scene !== undefined) enumeration(row.scene, ['activity', 'rest', 'dining', 'communication', 'other'], endpoint, `${path}.scene`)
   return value as Task
 }
 

@@ -79,7 +79,7 @@ export function createApi(baseURL?: string) {
         .get<unknown>('/elders', { params })
         .then((response) => parseList(response.data, 'GET /elders', parseElder))
     },
-    extractRecord(payload: { text: string; elder_id?: string }) {
+    extractRecord(payload: { text: string; elder_id?: string; expectedEpoch?: string; sourceKey?: string }) {
       return client
         .post<unknown>('/records/extract', payload, { timeout: 60000 })
         .then((response) =>
@@ -174,7 +174,7 @@ export function createApi(baseURL?: string) {
     },
     receiveHandover(
       id: string,
-      payload: { status: 'received' | 'clarifying'; note?: string },
+      payload: { status: 'received' | 'clarifying'; note?: string; expectedEpoch?: string },
     ) {
       const handoverId = handoverParents.get(id)
       if (!handoverId)

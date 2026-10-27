@@ -93,7 +93,7 @@ async function demoLogin() {
         />登录
       </el-button>
       <template v-if="mode === 'demo'">
-        <el-divider>虚构演示</el-divider><el-select
+        <el-divider>虚构演示</el-divider><p>仅使用本机王爷爷样本。演示按北京时间每日重建，旧样本与草稿留存本机归档；不会修改服务器数据。</p><el-select
           v-model="selected"
           aria-label="演示角色"
         >

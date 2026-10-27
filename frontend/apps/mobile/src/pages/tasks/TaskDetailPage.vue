@@ -2,7 +2,8 @@
 const serverWorkflow = ['api'].includes(import.meta.env.VITE_APP_MODE || 'api')
 import WorkflowPanel from '@hulao/shared/workflow'
 import TaskCareContext from '@hulao/shared/task-care-context'
-import { computed } from 'vue'
+import DemoServiceHints from '../../../../../packages/shared/src/workflow/DemoServiceHints.vue'
+import { computed, watch } from 'vue'
 import { Clock3, Save, Send, Paperclip } from 'lucide-vue-next'
 import { compactReference, isKnownStatus, resolveStatus, taskStatusMeta } from '@hulao/shared'
 import {
@@ -16,6 +17,7 @@ import FeedbackState from '../../components/FeedbackState.vue'
 import { useTasks, useElders, mode, session } from '../../services/data'
 import { useTaskAction } from '../../composables/useTaskAction'
 import { taskStatusLabels } from '../../composables/useTaskFilters'
+import { taskActionAllowed, taskPrimaryLabel, taskTime } from '../../composables/task-presentation'
 const route = useRoute()
 const router = useRouter()
 const tasks = useTasks()
@@ -30,6 +32,7 @@ const elder = computed(() =>
   elders.data.value?.find((row) => row.id === task.value?.elderId),
 )
 const status = computed(() => resolveStatus(taskStatusMeta, task.value?.status))
+const editable = computed(() => taskActionAllowed(task.value, 'complete'))
 const {
   form,
   busy,
@@ -57,6 +60,11 @@ const {
   () => (typeof route.query.draft === 'string' ? route.query.draft : undefined),
   () => !serverWorkflow,
 )
+watch(form, (value) => {
+  if (value && value.phase === 'editing' && value.persistedVersion === undefined && !value.editVersion) {
+    value.action = task.value?.status === 'in_progress' ? 'complete' : 'start'
+  }
+})
 const readonly = computed(
   () =>
     busy.value ||
@@ -66,6 +74,7 @@ const readonly = computed(
     deleted.value ||
     tasks.isPending.value ||
     !!tasks.error.value ||
+    !editable.value ||
     !task.value ||
     !isKnownStatus(taskStatusMeta, task.value.status),
 )
@@ -95,18 +104,13 @@ async function saveAsNew() {
 </script>
 <template>
   <TaskCareContext
+    v-if="mode === 'api'"
     :task-id="String(route.params.id)"
     :mode="mode"
     :session="session"
   />
-  <WorkflowPanel
-    v-if="serverWorkflow"
-    group="tasks"
-    title="任务处理与依据核验"
-    :context="{ task_id: String(route.params.id) }"
-    initial-action="/tasks/{task_id}/transition"
-  />
-  <section v-else class="task-detail-page editor-page">
+  <DemoServiceHints v-else :task="task" mobile />
+  <section class="task-detail-page" :class="{ 'editor-page': !serverWorkflow && editable }">
     <p class="page-kicker">任务详情</p>
     <FeedbackState
       :loading="tasks.isPending.value || loading"
@@ -117,7 +121,7 @@ async function saveAsNew() {
     />
     <div v-if="task" class="task-overview surface-band">
       <div class="task-reference">
-        <span>任务 {{ compactReference(task.id) }}</span
+        <details><summary>任务标识</summary>{{ compactReference(task.id) }}</details
         ><span class="status-label" :data-tone="status.tone">{{
           taskStatusLabels[task.status]
         }}</span>
@@ -126,28 +130,32 @@ async function saveAsNew() {
         <div class="detail-bed">
           <small>床位</small
           ><strong>{{
-            elders.error.value ? '未载入' : elder?.bedLabel || '未提供'
+            task.bedSnapshot || (elders.error.value ? '未载入' : elder?.bedLabel || '未提供')
           }}</strong>
         </div>
         <div>
           <strong>{{
-            elders.error.value
+            task.nameSnapshot || (elders.error.value
               ? '老人信息未载入'
-              : elder?.name || '老人信息未提供'
+              : elder?.name || '老人信息未提供')
           }}</strong>
           <p class="muted">
-            {{ task.shift || '班次未提供' }} ·
+            {{ task.shiftName || task.shift || '班次未提供' }} ·
             {{ task.assignee || '责任人未提供' }}
           </p>
         </div>
       </div>
       <h1>{{ task.title }}</h1>
+      <p class="task-deadline">执行：{{ taskTime(task.executionAt) }}</p>
       <p class="task-deadline">
         <Clock3 :size="16" aria-hidden="true" />截止：{{
-          task.dueAt || '未提供'
+          taskTime(task.deadlineAt || task.dueAt)
         }}
       </p>
-      <p v-if="task.result">最新结果：{{ task.result }}</p>
+      <section v-if="task.status === 'completed' || task.status === 'not_done' || task.result" class="task-result" aria-labelledby="task-result-title">
+        <h2 id="task-result-title">{{ task.status === 'not_done' ? '未执行原因' : '任务结果' }}</h2>
+        <p>{{ task.result || '结果未提供' }}</p>
+      </section>
       <van-button
         v-if="task.itemId"
         size="small"
@@ -158,7 +166,16 @@ async function saveAsNew() {
       </van-button>
     </div>
     <FeedbackState :error="elders.error.value" @retry="elders.refetch()" />
-    <template v-if="task">
+    <WorkflowPanel
+      v-if="serverWorkflow && task && !tasks.error.value"
+      group="tasks"
+      :title="taskPrimaryLabel(task)"
+      :context="{ task_id: task.id }"
+      :initial-action="!editable ? '/tasks/{task_id}' : task.status === 'in_progress' ? '/tasks/{task_id}/complete' : '/tasks/{task_id}/transition'"
+      :auto-read="!editable"
+      @changed="tasks.refetch()"
+    />
+    <template v-if="!serverWorkflow && task">
       <p v-if="!status.known" class="warning-text" role="status">
         任务状态待核实，暂不可处理，请刷新任务。
       </p>
@@ -174,16 +191,19 @@ async function saveAsNew() {
       <p v-if="message" role="status">
         {{ message }}
       </p>
+      <p v-if="form && editable && !taskActionAllowed(task, form.action)" class="warning-text" role="status">
+        任务状态已变化，请重新选择操作。
+      </p>
       <fieldset
-        v-if="form"
+        v-if="form && editable && !submitted"
         :disabled="readonly"
         class="plain-fieldset form-band"
       >
-        <h2>处理任务</h2>
+        <h2>{{ taskPrimaryLabel(task) }}</h2>
         <label class="select-field"
           >操作<select v-model="form.action" @change="changed">
-            <option value="start">开始</option>
-            <option value="complete">完成</option>
+            <option value="start" :disabled="!taskActionAllowed(task, 'start')">开始服务</option>
+            <option value="complete">登记结果</option>
             <option value="not_done">未执行</option>
             <option value="transfer">转交</option>
           </select></label
@@ -191,7 +211,7 @@ async function saveAsNew() {
         <van-field
           v-if="form.action === 'complete'"
           v-model="form.result"
-          label="完成结果"
+          label="服务结果"
           required
           type="textarea"
           :disabled="readonly"
@@ -316,14 +336,14 @@ async function saveAsNew() {
           另存当前内容
         </van-button>
       </div>
-      <footer class="editor-footer hl-glass">
+      <footer v-if="editable || uncertain" class="editor-footer hl-glass">
         <p
           class="save-status"
           :class="{ 'warning-text': !saved, 'error-text': error }"
           role="status"
         >
           {{ saveStatus
-          }}<span v-if="saved && form?.updatedAt"> · {{ form.updatedAt }}</span>
+          }}<span v-if="saved && form?.updatedAt"> · {{ taskTime(form.updatedAt) }}</span>
         </p>
         <div class="footer-actions">
           <van-button
@@ -334,11 +354,12 @@ async function saveAsNew() {
           ><van-button
             type="primary"
             :loading="busy"
-            :disabled="!canSend || readonly"
+            v-if="editable && !submitted"
+            :disabled="!canSend || readonly || !form || !taskActionAllowed(task, form.action)"
             @click="submit"
           >
             <Send :size="17" aria-hidden="true" />{{
-              mode === 'demo' ? '提交演示操作' : '提交完成结果'
+              form?.action === 'start' ? '开始服务' : form?.action === 'complete' ? '登记结果' : form?.action === 'not_done' ? '登记未执行' : '转交任务'
             }}
           </van-button>
         </div>
@@ -355,7 +376,7 @@ async function saveAsNew() {
           >
             核实状态 </van-button
           ><van-button
-            v-if="submitted && mode === 'demo'"
+            v-if="submitted && mode === 'demo' && editable"
             block
             size="small"
             :disabled="busy || !status.known || !!tasks.error.value"
@@ -368,3 +389,8 @@ async function saveAsNew() {
     </template>
   </section>
 </template>
+<style scoped>
+.task-result { margin-block: 16px; padding: 12px; border: 1px solid var(--hl-border); border-radius: 8px; }
+.task-result h2 { font-size: 17px; }
+.task-result p { white-space: pre-wrap; overflow-wrap: anywhere; }
+</style>

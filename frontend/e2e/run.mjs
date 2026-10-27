@@ -139,7 +139,7 @@ try {
         ),
       ])
       const concurrent = await core.loadDemoState()
-      const stale = core.createRecordEditor('demo', 'test-a', 'elder-305-wang')
+      const stale = core.createRecordEditor('demo', 'test-a', 'elder-wang-101')
       stale.demoEpoch = before.epoch
       stale.text = '观察'
       stale.review.observation = '观察'
@@ -212,7 +212,7 @@ try {
     await mobile.waitForFunction(
       () =>
         document.querySelector('textarea')?.value ===
-        '午餐只吃一半，晚上联系女儿。',
+        '今天想休息，下午活动前先问我，声音小一点。',
     )
     await mobile.locator('textarea').first().fill('刷新后应保留的最后原文')
     await mobile.reload()
@@ -313,56 +313,42 @@ try {
     assert.ok(texts.includes('其他窗口已经保存的内容'))
     assert.ok(texts.includes('本窗口连续编辑第二遍，必须保留'))
   })
-  await test('原文变化使AI失效，人工确认只生成一次任务', async () => {
+  await test('原文变化使整理失效；确认只保存一次记录；后续任务须人工补全', async () => {
     await admin.goto(`${base}/admin/tasks`)
     await mobile.getByRole('button', { name: '使用演示原文' }).click()
-    await mobile.waitForFunction(
-      () =>
-        document.querySelector('textarea')?.value ===
-        '午餐只吃一半，晚上联系女儿。',
-    )
-    await mobile.getByRole('button', { name: '提取AI草稿' }).click()
-    await text(mobile, '人工核对')
+    await mobile.getByRole('button', { name: '保存并查看整理结果' }).click()
+    await text(mobile, '整理结果（待核对）')
     await mobile.locator('textarea').first().fill('修改后的原文')
-    assert.equal(
-      await mobile
-        .getByRole('button', { name: '确认并提交', exact: true })
-        .isDisabled(),
-      true,
-    )
+    assert.equal(await mobile.getByRole('button', { name: '确认并提交', exact: true }).isDisabled(), true)
     await mobile.getByRole('button', { name: '使用演示原文' }).click()
-    await mobile.getByRole('button', { name: '提取AI草稿' }).click()
-    await mobile
-      .getByRole('button', { name: '确认并提交', exact: true })
-      .click()
-    await mobile.getByRole('button', { name: '确认', exact: true }).click()
-    await text(mobile, '演示记录已确认')
+    await mobile.getByRole('button', { name: '保存并查看整理结果' }).click()
+    await mobile.getByRole('button', { name: '确认并提交', exact: true }).click()
+    await mobile.locator('.van-dialog__confirm').click()
+    await text(mobile, '记录已确认并保存到本机')
     const result = await mobile.evaluate(async () => {
       const core = await import('/packages/shared/src/index.ts')
+      const { createDemoTask } = await import('/packages/shared/src/demo-task-create.ts')
       const state = await core.loadDemoState()
-      const task = state.tasks.find((item) => item.sourceDraftId)
-      const draft = state.drafts.find((item) => item.id === task.sourceDraftId)
-      await core
-        .createDemoApi()
-        .confirmRecord(draft.id, { fields: draft.fields })
+      const draft = state.drafts.find(item => item.status === 'confirmed')
+      const record = state.confirmedDrafts[draft.id]
+      await core.createDemoApi().confirmRecord(draft.id, { fields: draft.fields, demoEpoch: state.epoch })
       const next = await core.loadDemoState()
-      return {
-        id: task.id,
-        item: task.itemId,
-        count: next.tasks.filter((item) => item.sourceDraftId === draft.id)
-          .length,
-      }
+      const day = next.demoDay
+      const input = { epoch: state.epoch, operationKey: 'regression-followup', elderId: draft.elderId, sourceRecordId: record.record_id, title: '活动前询问本人意愿', executionAt: `${day}T19:00:00+08:00`, deadlineAt: `${day}T19:30:00+08:00`, assignee: '小王', shiftName: '晚班', scene: 'activity', confirmed: true }
+      const task = await createDemoTask(input)
+      await createDemoTask(input)
+      const after = await core.loadDemoState()
+      return { id: task.id, item: task.itemId, records: next.records.filter(item => item.id === record.record_id).length, unchanged: next.tasks.length === state.tasks.length, count: after.tasks.filter(item => item.id === task.id).length }
     })
-    assert.equal(result.count, 1)
-    newItem = result.item
-    newTask = result.id
-    await text(admin, '晚上联系女儿')
+    assert.equal(result.records, 1); assert.equal(result.unchanged, true); assert.equal(result.count, 1)
+    newItem = result.item; newTask = result.id
+    await text(admin, '活动前询问本人意愿')
   })
   await test('交班编辑版本、另一窗口接班与澄清', async () => {
     await mobile.goto(
       `${base}/mobile/handover?shift=${encodeURIComponent('晚班')}`,
     )
-    await mobile.getByRole('checkbox', { name: '晚上联系女儿' }).check()
+    await mobile.getByRole('checkbox', { name: '活动前询问本人意愿' }).check()
     await mobile.getByRole('button', { name: '提交演示交班' }).click()
     await text(mobile, '演示交班已提交')
     const receiving = await context.newPage()
@@ -372,13 +358,13 @@ try {
       `${base}/mobile/handover?shift=${encodeURIComponent('晚班')}`,
     )
     await receiving.getByRole('tab', { name: '接班', exact: true }).click()
-    await text(receiving, '晚上联系女儿')
-    await receiving.getByRole('button', { name: '提交澄清' }).click()
+    await text(receiving, '活动前询问本人意愿')
+    await receiving.locator('.receive-item').filter({ hasText: '活动前询问本人意愿' }).getByRole('button', { name: '提交澄清' }).click()
     await text(receiving, '请填写需要澄清的内容')
-    await receiving.locator('textarea:visible').fill('请确认联系号码')
-    await receiving.getByRole('button', { name: '提交澄清' }).click()
+    await receiving.locator('.receive-item').filter({ hasText: '活动前询问本人意愿' }).locator('textarea').fill('请确认当次意愿')
+    await receiving.locator('.receive-item').filter({ hasText: '活动前询问本人意愿' }).getByRole('button', { name: '提交澄清' }).click()
     await text(receiving, '需澄清')
-    await receiving.getByRole('button', { name: '接收', exact: true }).click()
+    await receiving.locator('.receive-item').filter({ hasText: '活动前询问本人意愿' }).getByRole('button', { name: '接收', exact: true }).click()
     await text(receiving, '已接收')
     await noOverflow(receiving)
     await receiving.screenshot({
@@ -391,12 +377,14 @@ try {
     await admin.goto(`${base}/admin/timeline/${newItem}`)
     await text(admin, '接班接收')
     await mobile.goto(`${base}/mobile/tasks/${newTask}`)
+    await mobile.getByRole('button', { name: '开始服务', exact: true }).click()
+    await mobile.getByRole('button', { name: '填写下一操作', exact: true }).click()
     await mobile
-      .getByRole('textbox', { name: '完成结果' })
+      .getByRole('textbox', { name: '服务结果' })
       .fill('已与女儿联系，说明午餐情况。')
-    await mobile.getByRole('button', { name: '提交演示操作' }).click()
+    await mobile.getByRole('button', { name: '登记结果', exact: true }).click()
     await text(mobile, '演示操作已保存')
-    for (const label of ['人工确认', '交班', '接班接收', '执行完成'])
+    for (const label of ['来源记录', '人工新建任务', '交班', '接班接收', '执行完成'])
       await text(admin, label)
     await noOverflow(admin)
     await admin.screenshot({
@@ -416,7 +404,7 @@ try {
     await family.goto(`${base}/mobile/records/new`)
     await family.waitForURL('**/403')
     assert.equal(
-      await family.getByRole('button', { name: '提取AI草稿' }).count(),
+      await family.getByRole('button', { name: '保存并查看整理结果' }).count(),
       0,
     )
     await family.close()
@@ -427,7 +415,7 @@ try {
     await mobile.waitForFunction(
       () =>
         document.querySelector('textarea')?.value ===
-        '午餐只吃一半，晚上联系女儿。',
+        '今天想休息，下午活动前先问我，声音小一点。',
     )
     await mobile.getByRole('button', { name: /保存本机/ }).click()
     await text(mobile, '已保存到本机')
@@ -435,7 +423,7 @@ try {
       const core = await import('/packages/shared/src/index.ts')
       await core.resetDemo()
     })
-    await mobile.getByRole('button', { name: '提取AI草稿' }).click()
+    await mobile.getByRole('button', { name: '保存并查看整理结果' }).click()
     await text(mobile, '演示数据已重置')
     await mobile.getByRole('button', { name: /新草稿/ }).click()
     await mobile.waitForFunction(
@@ -445,9 +433,9 @@ try {
     await mobile.waitForFunction(
       () =>
         document.querySelector('textarea')?.value ===
-        '午餐只吃一半，晚上联系女儿。',
+        '今天想休息，下午活动前先问我，声音小一点。',
     )
-    await mobile.getByRole('button', { name: '提取AI草稿' }).click()
+    await mobile.getByRole('button', { name: '保存并查看整理结果' }).click()
     await text(mobile, '人工核对')
   })
   if (process.env.API_ADMIN_URL)
@@ -545,7 +533,7 @@ try {
       await live.goto(new URL('/records/new', process.env.API_MOBILE_URL).href)
       await live.getByLabel(/^老人/).selectOption('e-live')
       await live.locator('textarea').first().fill('正式模式测试原文')
-      await live.getByRole('button', { name: '提取AI草稿' }).click()
+      await live.getByRole('button', { name: '保存并查看整理结果' }).click()
       await live
         .getByRole('button', { name: '确认并提交', exact: true })
         .click()
@@ -575,7 +563,7 @@ try {
       await preview.getByRole('button', { name: '进入演示' }).click()
       await text(preview, '主管')
       await preview.goto(`${root}/admin/elders`)
-      await text(preview, '王阿姨')
+      await text(preview, '王爷爷')
       const previewMobile = await context.newPage()
       await previewMobile.goto(`${root}/mobile/records/new`)
       await previewMobile.locator('select').selectOption('caregiver')
@@ -585,7 +573,7 @@ try {
       await previewMobile.waitForFunction(
         () =>
           document.querySelector('textarea')?.value ===
-          '午餐只吃一半，晚上联系女儿。',
+          '今天想休息，下午活动前先问我，声音小一点。',
       )
       await preview.close()
       await previewMobile.close()

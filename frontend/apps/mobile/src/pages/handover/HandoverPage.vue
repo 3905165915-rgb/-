@@ -17,7 +17,7 @@ import FeedbackState from '../../components/FeedbackState.vue'
 const route = useRoute()
 const router = useRouter()
 const shift = ref(
-  typeof route.query.shift === 'string' ? route.query.shift : '',
+  typeof route.query.shift === 'string' ? route.query.shift : mode === 'demo' ? '晚班' : '',
 )
 const inputShift = ref(shift.value)
 const tab = ref('send')
@@ -42,7 +42,7 @@ function chooseShift(name: string) {
 watch(
   () => route.query.shift,
   (value) => {
-    shift.value = typeof value === 'string' ? value : ''
+    shift.value = typeof value === 'string' ? value : mode === 'demo' ? '晚班' : ''
     inputShift.value = shift.value
   },
 )
@@ -76,8 +76,8 @@ onBeforeRouteUpdate(() => (mode === 'api' ? true : leave()))
     <h1>交接班</h1>
     <van-field
       v-model="inputShift"
-      label="班次编号"
-      placeholder="请输入班次编号"
+      label="交接班次"
+      placeholder="请选择或输入班次"
     >
       <template #button>
         <van-button
@@ -107,9 +107,9 @@ onBeforeRouteUpdate(() => (mode === 'api' ? true : leave()))
       :loading="tasks.isPending.value"
       :error="tasks.error.value"
       @retry="tasks.refetch()"
-    /><van-empty v-if="!shift" description="请选择或输入班次编号" />
+    /><van-empty v-if="!shift" description="请选择或输入交接班次" />
     <template v-else>
-      <p class="muted">班次编号：{{ compactReference(shift) }}</p>
+      <p class="muted">交接班次：{{ mode === 'demo' ? shift : compactReference(shift) }}</p>
       <van-tabs v-model:active="tab" :lazy-render="false">
         <van-tab title="交班" name="send">
           <HandoverEditor

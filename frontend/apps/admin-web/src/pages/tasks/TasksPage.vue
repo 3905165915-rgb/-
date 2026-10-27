@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import WorkflowPanel from '@hulao/shared/workflow'
+import DemoTaskCreate from '../../../../../packages/shared/src/workflow/DemoTaskCreate.vue'
+import { mode } from '../../services/data'
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import type { Task } from '@hulao/shared'
 import {
   History,
   RefreshCw,
@@ -19,6 +20,7 @@ import {
 import TaskActionDialog from '../../components/TaskActionDialog.vue'
 import QueryFeedback from '../../components/QueryFeedback.vue'
 import StatusLabel from '../../components/StatusLabel.vue'
+import { taskPrimaryLabel, taskTime } from '../../composables/task-presentation'
 const tasks = useTasks()
 const elders = useElders()
 const elderMap = computed(
@@ -64,13 +66,14 @@ const { filters, filtered, shifts, assignees, sync, reset } = useTaskFilters(
   () => tasks.data.value ?? [],
   () => elders.data.value ?? [],
 )
-const selected = ref<Task | null>(null)
+const selectedId = ref<string | null>(null)
+const selected = computed(() => tasks.data.value?.find(task => task.id === selectedId.value) ?? null)
 const route = useRoute()
 const router = useRouter()
 const creating = computed(() => route.query.create === '1')
 const createContext = computed(() => typeof route.query.elder === 'string' ? { elder_id: route.query.elder } : {})
 function closeTask() {
-  selected.value = null
+  selectedId.value = null
   if (route.query.task || route.query.draft) {
     const query = { ...route.query }
     delete query.task
@@ -93,8 +96,7 @@ watch(
   () => [route.query.task, route.query.draft, tasks.data.value],
   () => {
     if (typeof route.query.task === 'string')
-      selected.value =
-        tasks.data.value?.find((task) => task.id === route.query.task) ?? null
+      selectedId.value = route.query.task
   },
   { immediate: true },
 )
@@ -107,7 +109,8 @@ watch(
     </div>
     <section v-if="creating" aria-label="新建照护任务">
       <el-button link @click="router.push({ query: {} })">返回任务列表</el-button>
-      <WorkflowPanel group="tasks" title="新建照护任务" initial-action="/tasks" :context="createContext" task-creation @changed="tasks.refetch()" />
+      <DemoTaskCreate v-if="mode === 'demo'" :key="String(route.query.elder || '')" :elder-id="typeof route.query.elder === 'string' ? route.query.elder : undefined" @saved="tasks.refetch()" />
+      <WorkflowPanel v-else group="tasks" title="新建照护任务" initial-action="/tasks" :context="createContext" task-creation @changed="tasks.refetch()" />
     </section>
     <template v-else>
     <div class="page-title-row">
@@ -258,25 +261,22 @@ watch(
             <div class="table-primary">
               {{ row.title }}
             </div>
-            <div class="table-secondary">
-              {{ row.id }}
-            </div>
           </template> </el-table-column
         ><el-table-column label="老人 / 床位" min-width="180">
           <template #default="{ row }">
             <RouterLink
-              v-if="elderMap.has(row.elderId)"
+              v-if="row.elderId"
               class="elder-table-link"
               :to="'/elders/' + encodeURIComponent(row.elderId)"
             >
               <span class="bed-label">{{
-                elderMap.get(row.elderId)?.bedLabel || '床位未提供'
+                row.bedSnapshot || elderMap.get(row.elderId)?.bedLabel || '床位未提供'
               }}</span>
               <span
                 ><span class="table-primary">{{
-                  elderMap.get(row.elderId)?.name
+                  row.nameSnapshot || elderMap.get(row.elderId)?.name || '姓名未提供'
                 }}</span
-                ><span class="table-secondary">{{ row.elderId }}</span></span
+                ></span
               >
             </RouterLink>
             <span v-else class="muted"
@@ -292,28 +292,28 @@ watch(
               {{ row.assignee || '责任人未提供' }}
             </div>
             <div class="table-secondary">
-              {{ row.shift || '班次未提供' }}
+              {{ row.shiftName || row.shift || '班次未提供' }}
             </div>
           </template> </el-table-column
-        ><el-table-column
-          prop="dueAt"
-          label="截止时间"
-          min-width="160"
-        /><el-table-column label="状态" min-width="100">
+        ><el-table-column label="执行时间 / 截止时间" min-width="190">
+          <template #default="{ row }">
+            <div class="table-primary">执行：{{ taskTime(row.executionAt) }}</div>
+            <div class="table-secondary">截止：{{ taskTime(row.deadlineAt || row.dueAt) }}</div>
+          </template>
+        </el-table-column><el-table-column label="状态" min-width="100">
           <template #default="{ row }">
             <StatusLabel :status="row.status" />
           </template> </el-table-column
-        ><el-table-column label="操作" width="128" fixed="right">
+        ><el-table-column label="操作" width="170" fixed="right">
           <template #default="{ row }">
             <el-button
               link
               type="primary"
-              class="icon-button"
-              title="处理任务"
-              aria-label="处理任务"
-              @click="selected = row"
+              :title="taskPrimaryLabel(row)"
+              :aria-label="row.title + '：' + taskPrimaryLabel(row)"
+              @click="selectedId = row.id"
             >
-              <SquarePen :size="18" aria-hidden="true" /> </el-button
+              <SquarePen :size="18" aria-hidden="true" />{{ taskPrimaryLabel(row) }} </el-button
             ><el-button
               v-if="row.itemId"
               link

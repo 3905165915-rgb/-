@@ -14,9 +14,9 @@ describe('workflow navigation consolidation', () => {
     )
     const areas = workflowAreas(records)
     expect(areas.map((area) => area.title)).toEqual([
-      '新增记录',
-      '记录',
+      '写记录',
       '草稿',
+      '历史',
       '更多',
     ])
     expect(areas[0].entry.path).toBe('/records/context-extract')

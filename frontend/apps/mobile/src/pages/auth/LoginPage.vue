@@ -87,7 +87,7 @@ async function demoLogin() {
       class="demo-login"
     >
       <p class="muted">
-        虚构演示
+        虚构演示：仅使用本机王爷爷样本。演示按北京时间每日重建，旧样本与草稿留存本机归档；不会修改服务器数据。
       </p>
       <label class="select-field">角色<select v-model="selected">
         <option

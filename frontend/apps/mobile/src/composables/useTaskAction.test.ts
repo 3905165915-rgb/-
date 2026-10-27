@@ -74,6 +74,28 @@ afterEach(() => {
   for (const scope of scopes.splice(0)) scope.stop()
 })
 describe('task action write protection', () => {
+  it('refuses a repeated start from a restored draft', async () => {
+    mocks.tasks.value = [{ ...pending, status: 'in_progress' }]
+    const action = await setup()
+    action.form.value!.mode = 'demo'
+    action.form.value!.action = 'start'
+    expect(action.canSend.value).toBe(false)
+    await action.submit()
+    expect(mocks.fetch).not.toHaveBeenCalled()
+    expect(mocks.claim).not.toHaveBeenCalled()
+  })
+  it('rechecks the selected action after fetching the latest task status', async () => {
+    const action = await setup()
+    action.form.value!.mode = 'demo'
+    action.form.value!.action = 'start'
+    mocks.fetch.mockResolvedValue([{ ...pending, status: 'in_progress' }])
+    expect(action.canSend.value).toBe(true)
+    await action.submit()
+    expect(action.message.value).toContain('任务状态已变化')
+    expect(mocks.claim).not.toHaveBeenCalled()
+    expect(mocks.complete).not.toHaveBeenCalled()
+    expect(action.form.value!.phase).toBe('editing')
+  })
   it('does not mark newer edits saved when an older asynchronous save finishes', async () => {
     const action = await setup()
     let resolve!: () => void

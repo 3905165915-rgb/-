@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import WorkflowPanel from '@hulao/shared/workflow'
 import ElderImpression from '@hulao/shared/elder-impression'
+import DemoUnderstanding from '../../../../../packages/shared/src/workflow/DemoUnderstanding.vue'
 import ElderMemories from '../../../../../packages/shared/src/workflow/ElderMemories.vue'
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { useElders, useTasks } from '../../services/data'
+import { useQuery } from '@tanstack/vue-query'
+import { formatBusinessTime, isBusinessToday, loadDemoState } from '@hulao/shared'
+import { mode, queryKey, useElders, useTasks } from '../../services/data'
 import {
   ArrowLeft,
   ArrowUpRight,
@@ -25,6 +28,30 @@ const related = computed(
   () =>
     tasks.data.value?.filter((item) => item.elderId === elder.value?.id) ?? [],
 )
+const demo = useQuery({
+  queryKey: computed(() => queryKey('demo-elder', String(route.params.id || ''))),
+  queryFn: loadDemoState,
+  enabled: mode === 'demo',
+})
+const demoRecords = computed(() =>
+  demo.data.value?.records
+    .filter((record) => record.elderId === elder.value?.id)
+    .sort((a, b) => Date.parse(b.happenedAt) - Date.parse(a.happenedAt))
+    .slice(0, 5) ?? [],
+)
+const demoFollowups = computed(() =>
+  related.value.filter((task) => ['pending', 'in_progress', 'overdue', 'transferred'].includes(task.status)),
+)
+const demoTodayCount = computed(() =>
+  related.value.filter((task) => isBusinessToday(task.executionAt || task.dueAt)).length,
+)
+const demoRecordCount = computed(() =>
+  demo.data.value?.records.filter((row) => row.elderId === elder.value?.id).length ?? 0,
+)
+function time(value: string) {
+  return formatBusinessTime(value)
+}
+const todayTasks = computed(() => related.value.filter(task => isBusinessToday(task.executionAt || task.dueAt)))
 </script>
 <template>
   <section class="elder-detail-page">
@@ -57,6 +84,10 @@ const related = computed(
           }}</span
         >
       </div>
+      <div class="action-row">
+        <RouterLink :to="{ path: '/workflows/records', query: { elder_id: elder.id, action: '/records/context-extract' } }">写记录</RouterLink>
+        <RouterLink :to="{ path: '/care-plan', query: { elder: elder.id } }">制定安排</RouterLink>
+      </div>
       <div class="elder-summary">
         <div class="elder-identification">
           <span class="person-avatar"
@@ -64,7 +95,7 @@ const related = computed(
           /></span>
           <div>
             <strong>{{ elder.bedLabel || '床位未提供' }}</strong
-            ><span>{{ elder.id }}</span>
+            ><span>当前照护对象</span>
           </div>
         </div>
         <div class="elder-fact">
@@ -84,7 +115,7 @@ const related = computed(
           >
         </div>
         <div v-if="elder.lastUpdate" class="elder-fact">
-          <span>最近更新</span><strong>{{ elder.lastUpdate }}</strong>
+          <span>最近更新</span><strong>{{ time(elder.lastUpdate) }}</strong>
         </div>
         <el-button
           @click="$router.push({ path: '/tasks', query: { elder: elder.id } })"
@@ -92,13 +123,19 @@ const related = computed(
           <ListChecks :size="17" aria-hidden="true" />查看全部任务
         </el-button>
       </div>
-      <ElderMemories :key="elder.id" :elder-id="elder.id" record-path="/workflows/records" />
-      <ElderImpression :key="String(route.query.impression_id || elder.id)" :elder-id="elder.id" :report-id="typeof route.query.impression_id === 'string' ? route.query.impression_id : undefined" :point-id="typeof route.query.point_id === 'string' ? route.query.point_id : undefined" />
+      <dl v-if="mode === 'demo'" class="work-summary" aria-label="今日照护概况">
+        <div><dt>今日安排</dt><dd>{{ demoTodayCount }}</dd></div>
+        <div><dt>待执行任务</dt><dd>{{ demoFollowups.length }}</dd></div>
+        <div><dt>最近记录</dt><dd>{{ demo.data.value ? demoRecordCount : '—' }}</dd></div>
+      </dl>
+      <DemoUnderstanding v-if="mode === 'demo'" :key="elder.id" :elder-id="elder.id" />
+      <ElderMemories v-else :key="elder.id" :elder-id="elder.id" record-path="/workflows/records" />
+      <ElderImpression v-if="mode === 'api'" :key="String(route.query.impression_id || elder.id)" :elder-id="elder.id" :report-id="typeof route.query.impression_id === 'string' ? route.query.impression_id : undefined" :point-id="typeof route.query.point_id === 'string' ? route.query.point_id : undefined" />
       <div class="data-section">
         <div class="profile-section">
           <div class="section-title">
             <h2>基本资料</h2>
-            <span class="muted">{{ elder.id }}</span>
+            <span class="muted">{{ mode === 'demo' ? '演示资料' : '按权限显示' }}</span>
           </div>
           <dl class="details-grid">
             <div>
@@ -127,23 +164,23 @@ const related = computed(
           <p>{{ elder.notes || '未提供护理注意事项' }}</p>
         </div>
         <div class="section-title related-heading">
-          <h2>关联任务</h2>
+          <h2>今日安排</h2>
           <span
             v-if="!tasks.isPending.value && !tasks.error.value"
             class="muted"
-            >{{ related.length }} 项</span
+            >{{ todayTasks.length }} 项</span
           >
         </div>
         <QueryFeedback
           :loading="tasks.isPending.value"
           :error="tasks.error.value"
           :empty="
-            !tasks.isPending.value && !tasks.error.value && !related.length
+            !tasks.isPending.value && !tasks.error.value && !todayTasks.length
           "
           @retry="tasks.refetch()"
         /><el-table
-          v-if="!tasks.isPending.value && !tasks.error.value && related.length"
-          :data="related"
+          v-if="!tasks.isPending.value && !tasks.error.value && todayTasks.length"
+          :data="todayTasks"
         >
           <el-table-column
             prop="title"
@@ -153,11 +190,7 @@ const related = computed(
             <template #default="{ row }">
               <StatusLabel :status="row.status" />
             </template> </el-table-column
-          ><el-table-column
-            prop="dueAt"
-            label="截止时间"
-            min-width="160"
-          /><el-table-column label="操作" width="128" fixed="right">
+          ><el-table-column label="截止时间" min-width="160"><template #default="{ row }">{{ time(row.dueAt) }}</template></el-table-column><el-table-column label="操作" width="128" fixed="right">
             <template #default="{ row }">
               <el-button
                 link
@@ -188,11 +221,31 @@ const related = computed(
           </el-table-column>
         </el-table>
       </div>
+      <template v-if="mode === 'demo'">
+        <section class="demo-detail-section" aria-labelledby="demo-records-title"><div class="section-title"><h2 id="demo-records-title">最近记录</h2><el-button link @click="$router.push({ path: '/workflows/records', query: { elder_id: elder.id } })">查看记录</el-button></div><ul><li v-for="record in demoRecords" :key="record.id"><strong>{{ record.title }}</strong><p>{{ record.content }}</p><span>{{ record.category }} · {{ time(record.happenedAt) }}</span></li></ul></section>
+        <section class="demo-detail-section" aria-labelledby="demo-followups-title"><div class="section-title"><h2 id="demo-followups-title">需要跟进</h2><span class="muted">{{ demoFollowups.length }}项</span></div><ul><li v-for="task in demoFollowups" :key="task.id"><strong>{{ task.title }}</strong><p>下一步：{{ task.status === 'in_progress' ? '登记结果' : '开始服务' }} · 截止 {{ task.deadlineAt ? time(task.deadlineAt) : '待补充' }}</p></li><li v-if="!demoFollowups.length">当前没有待跟进事项。</li></ul></section>
+      </template>
     </template>
     <WorkflowPanel
+      v-if="mode === 'api'"
       group="elders"
       title="老人资料修订"
       :context="{ elder_id: String(route.params.id) }"
     />
   </section>
 </template>
+<style scoped>
+.work-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 0 0 16px; }
+.work-summary > div { padding: 12px; background: var(--hl-primary-soft); border-radius: 6px; }
+.work-summary dt { color: var(--hl-muted); font-size: 13px; }
+.work-summary dd { margin: 4px 0 0; font-size: 22px; font-weight: 700; }
+.known-section, .demo-detail-section { padding: 16px 0; border-top: 1px solid var(--hl-border); }
+.known-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.known-grid article { min-width: 0; padding: 12px; background: var(--hl-surface); border: 1px solid var(--hl-border); border-radius: 6px; }
+.known-grid h3 { margin: 0 0 8px; }
+.demo-detail-section ul { padding: 0; list-style: none; }
+.demo-detail-section li { padding: 10px 0; border-bottom: 1px solid var(--hl-border); }
+.demo-detail-section p { margin: 5px 0; color: var(--hl-muted); }
+.demo-detail-section li > span { float: right; color: var(--hl-muted); }
+@media (max-width: 760px) { .known-grid { grid-template-columns: minmax(0, 1fr); } }
+</style>

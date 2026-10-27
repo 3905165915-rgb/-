@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { compactReference } from '@hulao/shared'
+import { compactReference, formatBusinessTime } from '@hulao/shared'
 import { useTasks, useTimeline } from '../../services/data'
 import QueryFeedback from '../../components/QueryFeedback.vue'
 const route = useRoute()
@@ -47,7 +47,7 @@ function select(value: string) {
               v-for="item in items"
               :key="item.id"
               :value="item.id"
-              :label="item.title + ' · ' + compactReference(item.id)"
+              :label="item.title"
             />
           </el-select>
         </el-form-item>
@@ -59,9 +59,7 @@ function select(value: string) {
         v-if="!itemId && !tasks.isPending.value && !tasks.error.value"
         description="请选择有事项编号的任务"
       /><template v-if="itemId">
-        <p class="muted">
-          事项编号：{{ compactReference(itemId) }}
-        </p>
+        <details><summary>事项标识</summary><p>{{ compactReference(itemId) }}</p></details>
         <QueryFeedback
           :loading="timeline.isPending.value"
           :error="timeline.error.value"
@@ -79,9 +77,9 @@ function select(value: string) {
             :key="event.id"
             :timestamp="
               '发生：' +
-                (event.happenedAt || '未提供') +
+                (event.happenedAt ? formatBusinessTime(event.happenedAt, true) : '未提供') +
                 ' · 录入：' +
-                (event.enteredAt || '未提供')
+                (event.enteredAt ? formatBusinessTime(event.enteredAt, true) : '未提供')
             "
           >
             <h3>{{ event.label }}</h3>

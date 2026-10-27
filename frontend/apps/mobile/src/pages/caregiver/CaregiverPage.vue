@@ -18,6 +18,7 @@ import {
 } from '../../composables/useTaskFilters'
 import FeedbackState from '../../components/FeedbackState.vue'
 import { elderWorkbench } from './elder-workbench'
+import { taskPrimaryLabel, taskTime } from '../../composables/task-presentation'
 const tasks = useTasks()
 const elders = useElders()
 const worklist = useCareWorklist()
@@ -253,13 +254,13 @@ watch(filtered, () => {
       >
         <div class="task-bed">
           <span>床位</span><strong>{{
-            elderMap.get(task.elderId)?.bedLabel || '未提供'
+            task.bedSnapshot || elderMap.get(task.elderId)?.bedLabel || '未提供'
           }}</strong>
         </div>
         <div class="task-content">
           <div class="row-person">
             <strong>{{
-              elderMap.get(task.elderId)?.name || '老人信息未提供'
+              task.nameSnapshot || elderMap.get(task.elderId)?.name || '老人信息未提供'
             }}</strong><span
               class="status-label"
               :data-tone="resolveStatus(taskStatusMeta, task.status).tone"
@@ -267,17 +268,21 @@ watch(filtered, () => {
           </div>
           <h2>{{ task.title }}</h2>
           <p class="task-deadline">
+            执行：{{ taskTime(task.executionAt) }}
+          </p>
+          <p class="task-deadline">
             <Clock3
               :size="14"
               aria-hidden="true"
             /><span>{{
-              task.dueAt || '截止时间未提供'
+              '截止：' + taskTime(task.deadlineAt || task.dueAt)
             }}</span>
           </p>
           <p class="task-assignee">
             {{ task.assignee || '责任人未提供'
-            }}<span v-if="task.shift"> · {{ task.shift }}</span>
+            }} · {{ task.shiftName || task.shift || '班次未提供' }}
           </p>
+          <span class="task-primary-action">{{ taskPrimaryLabel(task) }}</span>
         </div>
         <ChevronRight
           :size="18"
@@ -412,6 +417,7 @@ watch(filtered, () => {
   </section>
 </template>
 <style scoped>
+.task-primary-action { display: inline-flex; align-items: center; min-height: 44px; color: var(--hl-primary); font-weight: 600; }
 .task-create-link { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; font-size: 14px; color: #1767cf; white-space: nowrap; }
 .workbench-safety-link { display: flex; align-items: center; gap: 8px; min-height: 44px; color: var(--hl-primary); }
 .workbench-safety-link svg:last-child { margin-left: auto; }

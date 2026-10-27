@@ -101,9 +101,11 @@ function closeEditor() {
 }
 const groups = computed(() => {
   const labels = {
-    current: '当前习惯',
-    temporary: '临时意愿',
-    review: '待核实变化',
+    habits: '生活习惯',
+    activities: '活动喜好',
+    communication: '沟通方式',
+    recentChanges: '近期变化',
+    attention: '需要留意',
     history: '暂停、停用与历史',
   }
   return Object.entries(labels).map(([key, title]) => ({
@@ -111,7 +113,7 @@ const groups = computed(() => {
     title,
     rows: memories.value.filter(
       (m) =>
-        memoryGroup(m) === key &&
+        (memoryGroup(m) === 'history' ? 'history' : m.category === 'communication' ? 'communication' : m.category === 'temporary_wish' ? 'recentChanges' : m.category === 'observation' ? 'attention' : m.scenes.includes('activity') ? 'activities' : 'habits') === key &&
         (!scene.value ||
           m.scenes.includes(scene.value as keyof typeof careScenes)) &&
         (!query.value.trim() ||
@@ -144,7 +146,7 @@ onBeforeUnmount(() => {
 <template>
   <section class="elder-memories" aria-label="已登记照护记忆">
     <header>
-      <h2>照护记忆</h2>
+      <h2>了解老人</h2>
       <button v-if="api" type="button" :disabled="loading" @click="load">
         刷新记忆
       </button>

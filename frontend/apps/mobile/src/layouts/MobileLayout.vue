@@ -1,25 +1,48 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Activity, ArrowLeft, Bell, LogOut, UserRound, X } from 'lucide-vue-next'
+import {
+  Activity,
+  ArrowLeft,
+  Bell,
+  LogOut,
+  UserRound,
+  X,
+} from 'lucide-vue-next'
 import { showToast } from 'vant'
 import { getReducedTransparency, setReducedTransparency } from '@hulao/shared'
 import { useAuthStore, roleLabels } from '../stores/auth'
-import { allowedRoutes, homeForRole } from '../router/access'
+import {
+  allowedBottomRoutes,
+  allowedMenuRoutes,
+  homeForRole,
+} from '../router/access'
 import { mode } from '../services/data'
 import ClearLocalDraftsButton from '../components/ClearLocalDraftsButton.vue'
 import { useMobileViewport } from '../composables/useMobileViewport'
 const auth = useAuthStore()
 const router = useRouter()
 const route = useRoute()
-const menu = computed(() => allowedRoutes(auth.role))
-const focused = computed(() => route.meta.focused === true)
+const menu = computed(() => allowedBottomRoutes(auth.role))
+const otherMenu = computed(() => allowedMenuRoutes(auth.role))
+const navigationOpen = ref(false)
+const focused = computed(
+  () =>
+    route.meta.focused === true &&
+    !menu.value.some((item) => item.path === route.path),
+)
 const activeTab = computed(
   () =>
     menu.value.find(
       (item) =>
         route.path === item.path || route.path.startsWith(item.path + '/'),
-    )?.path,
+    )?.path ||
+    (otherMenu.value.some(
+      (item) =>
+        route.path === item.path || route.path.startsWith(item.path + '/'),
+    )
+      ? 'more'
+      : undefined),
 )
 const accountOpen = ref(false)
 const reducedTransparency = ref(getReducedTransparency())
@@ -75,7 +98,18 @@ function logout() {
         /><span>护老智交</span>
       </RouterLink>
       <div class="header-tools">
-        <RouterLink v-if="auth.role && auth.role !== 'family'" to="/notifications" class="icon-button" title="待我处理" aria-label="待我处理"><Bell :size="20" aria-hidden="true" /></RouterLink>
+        <RouterLink
+          v-if="auth.role && auth.role !== 'family'"
+          to="/notifications"
+          class="icon-button"
+          title="照护跟进"
+          aria-label="照护跟进"
+        >
+          <Bell
+            :size="20"
+            aria-hidden="true"
+          />
+        </RouterLink>
         <span
           v-if="mode === 'demo'"
           class="demo-marker"
@@ -116,7 +150,52 @@ function logout() {
       >
         {{ item.label }}
       </van-tabbar-item>
+      <van-tabbar-item
+        v-if="otherMenu.length"
+        name="more"
+        icon="apps-o"
+        @click="navigationOpen = true"
+      >
+        更多
+      </van-tabbar-item>
     </van-tabbar>
+    <van-popup
+      v-model:show="navigationOpen"
+      position="bottom"
+      class="mobile-sheet hl-glass"
+      aria-label="更多导航"
+      close-on-popstate
+    >
+      <header class="sheet-heading">
+        <h2>更多</h2>
+        <button
+          type="button"
+          class="icon-button"
+          title="关闭更多菜单"
+          aria-label="关闭更多菜单"
+          @click="navigationOpen = false"
+        >
+          <X
+            :size="20"
+            aria-hidden="true"
+          />
+        </button>
+      </header>
+      <nav
+        class="sheet-body"
+        aria-label="老人和账户菜单"
+      >
+        <van-cell
+          v-for="item in otherMenu"
+          :key="item.path"
+          :title="item.label"
+          :icon="item.icon"
+          :to="item.path"
+          is-link
+          @click="navigationOpen = false"
+        />
+      </nav>
+    </van-popup>
     <van-popup
       v-model:show="accountOpen"
       position="bottom"

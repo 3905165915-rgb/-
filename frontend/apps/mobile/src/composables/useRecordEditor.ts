@@ -9,6 +9,7 @@ import {
   writeRecordJournal,
   clearRecordJournal,
   saveDemoManualRecord,
+  saveDemoOriginal,
   loadDemoState,
   claimWriteAttempt,
   finishWriteAttempt,
@@ -152,14 +153,14 @@ export function useRecordEditor() {
       pendingSaves.value -= 1
     }
   }
-  async function initialize(localId?: string) {
+  async function initialize(localId?: string, elderId?: string) {
     deleted.value = false
     try {
       await list()
       const candidate = localId
         ? await loadRecordEditor(mode, accountKey.value, localId)
         : drafts.value.find(
-            (item) => !['submitted', 'discarded_local'].includes(item.phase),
+            (item) => (!elderId || item.elderId === elderId) && !['submitted', 'discarded_local'].includes(item.phase),
           )
       clearTimeout(timer)
       if (candidate)
@@ -168,7 +169,7 @@ export function useRecordEditor() {
             ? { ...candidate, phase: 'uncertain' }
             : candidate
       else {
-        editor.value = createRecordEditor(mode, accountKey.value)
+        editor.value = createRecordEditor(mode, accountKey.value, elderId)
         if (mode === 'demo')
           editor.value.demoEpoch = (await loadDemoState()).epoch
         if (localId) error.value = '未找到本账号的草稿，已新建空白草稿。'
@@ -177,6 +178,20 @@ export function useRecordEditor() {
         baselines.set(editor.value.localId, editor.value.persistedVersion)
       saveError.value = ''
       saved.value = Boolean(candidate)
+      if (mode === 'demo' && candidate && !frozen.value) {
+        const state = await loadDemoState()
+        const original = state.originals?.find(row => row.localId === `${editor.value.localId}:${editor.value.sourceRevision}` && row.text === editor.value.text && row.elderId === editor.value.elderId)
+        const result = state.drafts?.find(row => row.id === original?.draftId)
+        if (original) {
+          editor.value.originalId = original.id
+          editor.value.originalRevision = editor.value.sourceRevision
+        }
+        if (result && !editor.value.ai) {
+          editor.value.ai = { draft: result, localId: editor.value.localId, elderId: editor.value.elderId, sourceText: editor.value.text, sourceRevision: editor.value.sourceRevision }
+          editor.value.review = { ...editor.value.review, ...result.fields }
+          editor.value.phase = 'reviewing'
+        }
+      }
     } catch (failure) {
       saveError.value = '草稿恢复失败：' + errorMessage(failure)
     }
@@ -264,9 +279,19 @@ export function useRecordEditor() {
         notice.value = '原文已变更，请重新提取。'
         return
       }
+      if (mode === 'demo') {
+        const originalId = await saveDemoOriginal(source)
+        if (!matchesSource(source)) { notice.value = '原文已变化，请保存当前版本后重新整理。'; return }
+        editor.value.originalId = originalId
+        editor.value.originalRevision = source.sourceRevision
+        notice.value = '原文已保存到本机。正在整理相关信息。'
+        changed()
+        if (!(await persist())) return
+      }
       const result: unknown = await gateway.extractRecord({
         text: source.text,
         elder_id: source.elderId,
+        ...(mode === 'demo' ? { expectedEpoch: source.demoEpoch, sourceKey: `${source.localId}:${source.sourceRevision}` } : {}),
       })
       await checkDemoEpoch(source)
       const current = editor.value
@@ -293,12 +318,15 @@ export function useRecordEditor() {
       current.phase = 'reviewing'
       changed()
       await persist()
+      notice.value = mode === 'demo' ? '原文已保存到本机，整理结果已就绪。请核对后确认。' : notice.value
     } catch (failure) {
       if (editor.value.localId === source.localId) {
         editor.value.phase = 'editing'
         changed()
       }
-      error.value = errorMessage(failure) + ' 可继续手工录入。'
+      error.value = errorMessage(failure) + ' 可单独重试整理或继续手工录入。'
+      if (mode === 'demo' && editor.value.originalId && editor.value.originalRevision === source.sourceRevision)
+        notice.value = '原文已保存到本机。整理失败不影响已保存的内容。'
     } finally {
       busy.value = false
     }
@@ -403,7 +431,8 @@ export function useRecordEditor() {
               intent.localId,
             )
         : await gateway.confirmRecord(intent.ai!.draft.id, {
-            taskCandidates: intent.ai!.draft.taskCandidates,
+            ...(mode === 'demo' ? { demoEpoch: intent.demoEpoch } : {}),
+            taskCandidates: mode === 'demo' && intent.review.followUp.trim() ? [{ title: intent.review.followUp, assigned_to: intent.review.assigneeId, deadline_at: intent.review.dueAt ? (/(Z|[+-]\d{2}:\d{2})$/.test(intent.review.dueAt) ? intent.review.dueAt : `${intent.review.dueAt}:00+08:00`) : '' }] : intent.ai!.draft.taskCandidates,
             fields: {
               observation: intent.review.observation,
               followUp: intent.review.followUp,
@@ -411,8 +440,9 @@ export function useRecordEditor() {
             },
           })
       editor.value.phase = 'submitted'
+      if (result && typeof result === 'object' && 'record_id' in result && typeof result.record_id === 'string') editor.value.confirmedRecordId = result.record_id
       changed()
-      if (mode === 'demo') notice.value = '演示记录已确认，结果仅保存在本机。'
+      if (mode === 'demo') notice.value = '记录已确认并保存到本机。' + (intent.review.followUp.trim() && result && typeof result === 'object' && 'task_ids' in result && Array.isArray(result.task_ids) && !result.task_ids.length ? '任务未生成，请补充责任人和期限后新建任务。' : '可在历史中查看。')
       else if (
         result &&
         typeof result === 'object' &&

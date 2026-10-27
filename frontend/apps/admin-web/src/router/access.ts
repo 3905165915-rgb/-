@@ -4,7 +4,7 @@ const navigationGroups = [
   '工作台',
   '老人照护',
   '当班工作',
-  '质量跟进',
+  '照护跟进',
   '家属沟通',
   '机构管理',
 ] as const
@@ -14,6 +14,7 @@ export interface NavigationItem {
   roles: readonly Role[]
   group: (typeof navigationGroups)[number]
   icon?: string
+  internalOnly?: boolean
 }
 export const navigation: NavigationItem[] = [
   {
@@ -22,7 +23,6 @@ export const navigation: NavigationItem[] = [
     group: '工作台',
     roles: internalRoles,
   },
-  { path: '/notifications', label: '待我处理', group: '工作台', roles: internalRoles },
   {
     path: '/elders',
     label: '老人档案',
@@ -78,33 +78,44 @@ export const navigation: NavigationItem[] = [
     roles: internalRoles,
   },
   {
+    path: '/notifications',
+    label: '照护跟进',
+    group: '照护跟进',
+    roles: internalRoles,
+  },
+  {
     path: '/quality',
     label: '质检台',
-    group: '质量跟进',
+    group: '照护跟进',
+    internalOnly: true,
     roles: internalRoles,
   },
   {
     path: '/coverage',
     label: '双向核对',
-    group: '质量跟进',
+    group: '照护跟进',
+    internalOnly: true,
     roles: internalRoles,
   },
   {
     path: '/changes',
     label: '变化简报',
-    group: '质量跟进',
+    group: '照护跟进',
+    internalOnly: true,
     roles: internalRoles,
   },
   {
     path: '/workflows/incidents',
     label: '照护安全与事件上报',
-    group: '质量跟进',
+    group: '照护跟进',
+    internalOnly: true,
     roles: internalRoles,
   },
   {
     path: '/timeline',
     label: '过程回放',
-    group: '质量跟进',
+    group: '照护跟进',
+    internalOnly: true,
     roles: internalRoles,
   },
   {
@@ -146,7 +157,7 @@ export function allowedNavigationGroups(
   includeDemo = false,
 ) {
   const items = allowedRoutes(role).filter(
-    (item) => includeDemo || item.path !== '/demo',
+    (item) => !item.internalOnly && (includeDemo || item.path !== '/demo'),
   )
   return navigationGroups
     .map((label) => ({

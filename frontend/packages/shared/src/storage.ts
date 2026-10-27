@@ -449,26 +449,38 @@ export async function finishWriteAttempt(id: string) {
   transaction.objectStore('writeAttempts').delete(id)
   await done
 }
-export function clearDemoJournals() {
-  const names: string[] = []
+export function demoRecoveryEntries(): Array<[string, string]> {
+  const entries: Array<[string, string]> = []
+  try {
   for (let index = 0; index < localStorage.length; index++) {
     const name = localStorage.key(index)
     if (
       name?.startsWith(journalPrefix) ||
-      name?.startsWith('hulao:working-journal:')
+      name?.startsWith('hulao:working-journal:') ||
+      name?.startsWith('hulao:demo-form:') ||
+      (name?.startsWith('hulao:workflow:v2:') && name.includes('care-plan-guide:demo'))
     ) {
       try {
-        if (
-          (JSON.parse(localStorage.getItem(name) ?? 'null') as RecordEditor)
-            ?.mode === 'demo'
-        )
-          names.push(name)
+        const raw = localStorage.getItem(name)
+        const value = JSON.parse(raw || 'null')
+        if (raw && (value?.mode === 'demo' || name.startsWith('hulao:demo-form:') || value?.body?.kind === 'demo')) entries.push([name, raw])
       } catch {
         /* Leave unrelated storage alone. */
       }
     }
   }
-  for (const name of names) localStorage.removeItem(name)
+  } catch { /* IDB batch fencing still rejects stale forms if storage is denied. */ }
+  return entries
+}
+export function clearDemoJournals(entries = demoRecoveryEntries()) {
+  for (const [name, raw] of entries) {
+    try { if (localStorage.getItem(name) === raw) localStorage.removeItem(name) }
+    catch { /* Never turn a committed rebuild into a reported failure. */ }
+  }
+  try {
+    const keys = Object.keys(sessionStorage).filter(name => name.startsWith('hulao:active-handover:') && name.includes('["demo",'))
+    for (const name of keys) sessionStorage.removeItem(name)
+  } catch { /* Stale pointers are harmless: draft loading checks the epoch. */ }
 }
 
 export async function deletedDraftKeys(store: StoreName, epoch?: string) {

@@ -53,6 +53,21 @@ const router = createRouter({
           meta: { roles: internalRoles, focused: true },
         },
         {
+          path: 'records',
+          component: () => import('../pages/records/RecordsHubPage.vue'),
+          meta: { roles: internalRoles },
+        },
+        {
+          path: 'records/drafts',
+          redirect: to => ({ path: '/records', query: { ...to.query, tab: 'drafts' } }),
+          meta: { roles: internalRoles },
+        },
+        {
+          path: 'records/history',
+          redirect: to => ({ path: '/records', query: { ...to.query, tab: 'history' } }),
+          meta: { roles: internalRoles },
+        },
+        {
           path: 'records/new',
           component: () => import('../pages/records/RecordPage.vue'),
           meta: { roles: internalRoles, focused: true },

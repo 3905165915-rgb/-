@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   clearing: { value: false },
   claim: vi.fn(),
   finish: vi.fn(),
+  original: vi.fn(),
 }))
 vi.mock('../services/data', () => ({
   get mode() {
@@ -36,6 +37,7 @@ vi.mock('@hulao/shared', async (importOriginal) => ({
   loadRecordEditor: mocks.load,
   loadDemoState: mocks.epoch,
   saveDemoManualRecord: mocks.manual,
+  saveDemoOriginal: mocks.original,
   claimWriteAttempt: mocks.claim,
   finishWriteAttempt: mocks.finish,
 }))
@@ -67,6 +69,7 @@ beforeEach(() => {
   mocks.clearing.value = false
   mocks.epoch.mockResolvedValue({ epoch: 'epoch-current' })
   mocks.manual.mockResolvedValue({ status: 'confirmed', task_ids: [] })
+  mocks.original.mockResolvedValue('original-test')
   mocks.claim.mockResolvedValue(true)
   mocks.finish.mockResolvedValue(undefined)
   mocks.save.mockResolvedValue(undefined)
