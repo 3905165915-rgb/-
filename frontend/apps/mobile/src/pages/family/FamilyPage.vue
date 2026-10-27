@@ -10,6 +10,7 @@ import demoPhoto from '../../assets/care-field.jpg'
 
 const session = ref(readSession()), demo = computed(() => session.value?.mode === 'demo')
 const members = ref<FamilyMember[]>([]), selected = ref<FamilyMember | null>(null), choice = ref('')
+const demoAllElders = computed(() => members.value.some(member => member.demo_access === true))
 const feed = ref<FamilyFeed | null>(null), insight = ref<FamilyInsight | null>(null), messages = ref<FamilyMessage[]>([])
 const loading = ref(false), choosing = ref(true), insightBusy = ref(false), sending = ref(false)
 const error = ref(''), insightError = ref(''), messageError = ref(''), messageNotice = ref(''), text = ref('')
@@ -238,6 +239,12 @@ onBeforeUnmount(() => {
       class="demo-note"
     >
       这里的家人、故事和留言均为虚构演示，配图不是本人照片。
+    </p>
+    <p
+      v-if="demoAllElders"
+      class="demo-note"
+    >
+      演示账号可选择、切换全部老人，查看各自已发布的生活动态和近况小结。
     </p>
     <div
       v-if="error"

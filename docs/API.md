@@ -19,3 +19,9 @@ All routes are under `/api/v1`. Staff routes must validate the active account, e
 ## Timeline
 
 Timeline filters, ordering, and pagination use server-generated `recorded_at`. Optional `happened_at` is shown separately and never determines event ordering.
+
+## Demo Family Selection
+
+- `GET /family/me/bindings` may return server-marked `demo_access: true` entries when all-elder demo selection is enabled. Such entries can have `admission_id: null`; ordinary entries still require a nonempty admission ID.
+- The family page displays the all-elder demo selection notice, supports selecting and switching elders, and uses the same timeline/insight/photo/feedback endpoints. Published data remains isolated by the selected elder.
+- Only the backend grants the demo scope; a frontend mode or label cannot bypass server authorization.

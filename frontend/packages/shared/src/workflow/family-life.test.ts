@@ -6,6 +6,12 @@ const member: FamilyMember = { id: 'binding-a', elder_id: 'elder-a', elder_name:
 function feed() { return { elder_id: member.elder_id, elder_name: member.elder_name, total: 1, items: [{ id: 'story-a', elder_id: member.elder_id, happened_at: at, period_start: '2026-10-26T08:00:00+08:00', period_end: at, published_at: at, title: '照护近况', text: '午后选择听戏曲。', kind: 'published_summary', photos: [{ id: 'photo-a', caption: '活动照片', occurred_at: at, content_path: '/family/me/bindings/binding-a/photos/photo-a/content' }] }] } }
 
 describe('family living feed contracts', () => {
+  it('accepts server-marked demo choices without fabricating an admission', () => {
+    const demo = { ...member, demo_access: true, admission_id: null }
+    expect(familyMembers([demo])).toEqual([demo])
+    expect(() => familyMembers([{ ...member, admission_id: null }])).toThrow()
+    expect(() => familyMembers([{ ...demo, demo_access: 'true' }])).toThrow()
+  })
   it('accepts published stories and scoped photos without internal records', () => {
     expect(familyMembers([member])).toEqual([member])
     const value = familyFeed(feed(), member)

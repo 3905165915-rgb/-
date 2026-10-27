@@ -4,7 +4,8 @@ export interface FamilyMember {
   id: string
   elder_id: string
   elder_name: string
-  admission_id: string
+  admission_id: string | null
+  demo_access?: boolean
   scopes: string[]
   expires_at: string
 }
@@ -62,7 +63,9 @@ export function familyMembers(value: unknown): FamilyMember[] {
   if (!Array.isArray(value)) fail()
   const rows = value.map(value => {
     const row = object(value)
-    if (![row.id, row.elder_id, row.elder_name, row.admission_id].every(string) || !aware(row.expires_at) ||
+    if (![row.id, row.elder_id, row.elder_name].every(string) ||
+      (row.demo_access !== undefined && typeof row.demo_access !== 'boolean') ||
+      !(string(row.admission_id) || (row.demo_access === true && row.admission_id === null)) || !aware(row.expires_at) ||
       !Array.isArray(row.scopes) || !row.scopes.length || row.scopes.some(scope => !['summary', 'feedback'].includes(String(scope)))) fail()
     return row as unknown as FamilyMember
   })
