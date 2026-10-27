@@ -253,6 +253,39 @@ def test_inline_confirmation_rejects_ambiguous_frequency(api):
              {'suggestion_id': suggestion['id'], 'decision': 'adopt'}]}, expected=422)
 
 
+def test_inline_confirmation_uses_current_observations_not_original_narrative(api):
+    record = post(api, '/records/manual', {
+        'elder_id': 'E1', 'raw_text': '本人说每天午休后愿意听戏，今天也想试试。',
+        'observations': ['本人说每天午休后愿意听戏']}, actor='staff')['record']
+    result = post(api, BASE + f'/records/{record["id"]}/analyze', None,
+                  actor='staff', expected=200)
+    suggestion = result['analysis']['preference_suggestions'][0]
+    confirmed = post(api, BASE + f'/records/{record["id"]}/analysis/{result["analysis"]["id"]}/confirm',
+        {'expected_revision': record['revision'], 'preference_decisions': [
+            {'suggestion_id': suggestion['id'], 'decision': 'adopt'}]}, actor='staff', expected=200)
+    assert len(confirmed['memories']) == 1
+    assert confirmed['record']['raw_text'] == record['raw_text']
+
+
+def test_inline_followup_validates_incoming_assignee_against_selected_shift(api):
+    tomorrow = (datetime.now(timezone(timedelta(hours=8))) + timedelta(days=1)).date()
+    outgoing = shift(api, tomorrow, start='00:00', hours=8, member='staff')
+    incoming = shift(api, tomorrow, start='08:00', hours=8, member='other')
+    result = post(api, BASE + '/record', {'text': '请联系家属反馈情况', 'shift_id': outgoing['id']},
+                  actor='staff', key='next-shift-record')
+    suggestion = result['analysis']['task_suggestions'][0]
+    confirmed = post(api, BASE + f'/records/{result["record"]["id"]}/analysis/{result["analysis"]["id"]}/confirm',
+        {'expected_revision': 1, 'accepted_tasks': [{
+            'suggestion_id': suggestion['id'], 'title': '联系家属反馈情况',
+            'shift_id': incoming['id'], 'assigned_to': 'other',
+            'due_at': f'{tomorrow.isoformat()}T12:00:00+08:00',
+            'completion_criteria': '联系后记录反馈结果'}]}, expected=200)
+    assert confirmed['tasks'][0]['shift_id'] == incoming['id']
+    assert confirmed['tasks'][0]['assigned_to'] == 'other'
+    assert confirmed['record']['shift_id'] == outgoing['id']
+    assert confirmed['tasks'][0]['source_record_id'] == confirmed['record']['id']
+
+
 def test_inline_confirm_creates_only_complete_confirmed_task_once(api):
     tomorrow = (datetime.now(timezone(timedelta(hours=8))) + timedelta(days=1)).date()
     actual_shift = shift(api, tomorrow)

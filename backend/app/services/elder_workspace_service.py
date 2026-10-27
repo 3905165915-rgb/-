@@ -261,7 +261,7 @@ def confirm_record_analysis(store, elder_id, record_id, analysis_id, payload, us
             current_source = '\n'.join(record.get('observations') or [record['raw_text']])
             if analysis.get('source_text') != current_source:
                 raise DomainError('analysis_source_changed')
-            if analysis.get('source_fingerprint') != __import__('hashlib').sha256(record['raw_text'].encode()).hexdigest():
+            if analysis.get('source_fingerprint') != __import__('hashlib').sha256(current_source.encode()).hexdigest():
                 raise DomainError('analysis_source_changed')
             tasks_by_id = {row['id']: row for row in analysis.get('task_suggestions', [])}
             preferences_by_id = {row['id']: row for row in analysis.get('preference_suggestions', [])}
@@ -290,7 +290,10 @@ def confirm_record_analysis(store, elder_id, record_id, analysis_id, payload, us
                 if duplicate:
                     created_tasks.append(copy.deepcopy(duplicate))
                     continue
-                task = record_service.create_tasks(data, CareRecord.model_validate(record), [TaskCandidate(
+                # Assignment belongs to the reviewed follow-up shift; the source
+                # record keeps its original shift and is never rewritten.
+                task_record = CareRecord.model_validate({**record, 'shift_id': accepted.shift_id})
+                task = record_service.create_tasks(data, task_record, [TaskCandidate(
                     title=accepted.title, due_at=due, assigned_to=accepted.assigned_to,
                     condition=suggestion.get('condition'), due_text=suggestion.get('due_text')).model_dump(mode='json')],
                     user_id, role)[0]
