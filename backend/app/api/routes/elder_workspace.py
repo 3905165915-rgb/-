@@ -82,6 +82,20 @@ def understanding(elder_id: str, current: StaffUser, store: Store):
     return service.understanding(store, elder_id, current['sub'], current['role'])
 
 
+@router.post('/elders/{elder_id}/understanding/summarize')
+def summarize_understanding(elder_id: str, current: StaffUser, store: Store):
+    from fastapi import HTTPException
+    from app.services.ai_service import AIProviderError
+    from app.services.personal_profile_service import summarize
+    from app.services.workflow import DomainError
+    try:
+        return summarize(store, elder_id, current['sub'], current['role'])
+    except DomainError:
+        raise
+    except (AIProviderError, ValueError, TypeError, KeyError) as exc:
+        raise HTTPException(503, '个人特性整理暂未完成，已确认资料和原文仍然保留。') from exc
+
+
 @router.post('/elders/{elder_id}/understanding/{report_id}/{point_id}/decision')
 def decide(elder_id: str, report_id: str, point_id: str, payload: UnderstandingDecision,
            current: ManagementUser, store: Store, idempotency_key: IdempotencyKey = None):

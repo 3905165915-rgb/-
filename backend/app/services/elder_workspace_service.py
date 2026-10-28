@@ -242,14 +242,21 @@ def analyze_record(store, record_id, user_id, role, scene=None, claim=None):
     source_field = 'observations'
     quote = (draft.observations[0] if draft.observations else source_text)
     evidence = {'source_field': source_field, 'quote': quote}
-    explicit_frequency = bool(re.search(r'每天|每日|每周|每星期|每月|经常|总是|一直|长期', source_text))
-    one_time = bool(re.search(r'今天|这次|本次|现在|暂时', source_text))
+    from app.services.personal_profile_service import presentation_text
     preference_suggestions = []
-    if any(word in source_text for word in ('喜欢', '愿意', '偏好', '习惯', '不愿', '不喜欢')):
-        preference_suggestions.append({'id': identifier('PREF'), 'content': source_text.strip(),
-            'frequency': 'explicit' if explicit_frequency else ('one_time' if one_time else 'ambiguous'),
-            'attributed_to': 'elder' if any(word in source_text for word in ('老人说', '本人说', '我喜欢', '我愿意')) else 'unknown',
-            'evidence_text': quote})
+    candidates = draft.preference_candidates
+    for candidate in candidates:
+        evidence_text = candidate['evidence_text']
+        if evidence_text not in source_text:
+            raise ValueError('Preference quote is not in the current record')
+        # Keep metadata for older clients; it is never an adoption threshold.
+        explicit = bool(re.search(r'每天|每日|每周|每星期|每月|经常|总是|一直|长期', evidence_text))
+        one_time = bool(re.search(r'今天|这次|本次|现在|暂时', evidence_text))
+        preference_suggestions.append({'id': identifier('PREF'),
+            'content': presentation_text(candidate['content'], elder.get('name')),
+            'group': candidate.get('group', 'preference'),
+            'frequency': 'explicit' if explicit else ('one_time' if one_time else 'ambiguous'),
+            'attributed_to': candidate.get('attributed_to', 'unknown'), 'evidence_text': evidence_text})
     observations = [{'id': identifier('OBS'), 'text': value,
                      'citation': {'source_field': source_field, 'quote': value}}
                     for value in draft.observations]
@@ -389,10 +396,9 @@ def confirm_record_analysis(store, elder_id, record_id, analysis_id, payload, us
                     raise DomainError('analysis_suggestion_source_invalid', 422)
                 if decision.decision != 'adopt':
                     continue
-                if suggestion['frequency'] != 'explicit':
-                    raise DomainError('preference_frequency_not_explicit', 422)
                 request = MemoryCreateRequest(elder_id=elder_id,
-                    content=decision.content or suggestion['content'], category='stable_preference',
+                    content=decision.content or suggestion['content'],
+                    category='communication' if suggestion.get('group') == 'communication' else 'stable_preference',
                     scenes=[analysis.get('scene', {}).get('value') or 'other'],
                     attributed_to=suggestion['attributed_to'], source_record_id=record_id,
                     source_revision=payload.expected_revision, source_field='observations',
@@ -402,7 +408,10 @@ def confirm_record_analysis(store, elder_id, record_id, analysis_id, payload, us
                     'evidence_kind': 'single_person_self_report' if suggestion['attributed_to'] == 'elder' else 'single_record'})
                 before = memory_service._snapshot(memory)
                 memory.update(status='confirmed', confirmed_by=user_id, confirmed_at=now())
-                memory_service._change(data, memory, before, 'memory_confirm', '提交人核对明确重复频率', user_id)
+                memory_service._change(data, memory, before, 'memory_confirm', '提交人核对后加入个人印象', user_id)
+                from app.services.personal_profile_service import set_presentation, presentation_text
+                memory['understanding_group'] = suggestion.get('group', 'preference')
+                set_presentation(memory, presentation_text(memory['content'], elder.get('name')), analysis['provider'], user_id)
                 created_memories.append(memory_service._view(data, memory))
             analysis.update(status='confirmed', confirmed_by=user_id, confirmed_at=now(), updated_at=now())
             audit(data, 'confirm_record_analysis', analysis_id, user_id, elder_id=elder_id,
@@ -433,8 +442,10 @@ def _cited_sources_current(data, report, point):
 
 def understanding(store, elder_id, user_id, role):
     from app.services import memory_service
+    from app.services.personal_profile_service import presentation, presentation_text
     data = store.read()
     access(data, elder_id, user_id, role)
+    elder_name = find(data, 'elders', elder_id, 'elder_not_found').get('name')
     memories = [memory_service._view(data, row) for row in data['care_memories'] if row['elder_id'] == elder_id]
     reports = [r for r in data['elder_impressions'] if r['elder_id'] == elder_id
                and ('admission_id' not in r or r['admission_id'] == find(data, 'elders', elder_id, 'elder_not_found').get('current_admission_id'))]
@@ -450,16 +461,19 @@ def understanding(store, elder_id, user_id, role):
                 continue
             current = _cited_sources_current(data, report, point)
             observations.append({**copy.deepcopy(point), 'report_id': report['id'],
-                'source_current': current, 'can_adopt': current and point['kind'] == 'trend'
+                'display_summary': presentation_text(point['text'], elder_name),
+                'source_current': current, 'can_adopt': current
                 and point['category'] != 'attention' and not memory,
                 'evidence': [{**c, 'happened_at': next(s['happened_at'] for s in report['sources']
                              if s['source_id'] == c['source_id'])} for c in point['citations']],
                 'label': '近期观察，尚待核实' if current else '依据已变化，需要重新核实'})
-    return {'elder_id': elder_id, 'confirmed': [m for m in memories if m['effective']],
+    confirmed = [{**m, 'display_summary': presentation(m, elder_name)} for m in memories if m['effective']]
+    return {'elder_id': elder_id, 'confirmed': confirmed,
+            'profile_summary_needed': any((m.get('presentation') or {}).get('memory_revision') != m['revision'] for m in confirmed),
             'needs_review': [m for m in memories if m['status'] not in {'retired', 'rejected'}
                              and (not m['source_current'] or m['review_state'] == 'pending')],
             'observations': observations, 'as_of': now(),
-            'notice': '近期观察根据正式记录整理，不能替代已确认照护要求；本人当次意愿优先。'}
+            'notice': '个人特性由记录整理、经人工确认；原文可展开核实。'}
 
 
 def decide(store, elder_id, report_id, point_id, payload, user_id, role, key=None):
@@ -484,8 +498,8 @@ def decide(store, elder_id, report_id, point_id, payload, user_id, role, key=Non
                 raise DomainError('stale_revision')
             if payload.decision == 'adopt' and not _cited_sources_current(data, report, point):
                 raise DomainError('impression_sources_changed')
-            if payload.decision == 'adopt' and (point['kind'] != 'trend' or point['category'] == 'attention'):
-                raise DomainError('impression_not_long_term_preference', 422)
+            if payload.decision == 'adopt' and point['category'] == 'attention':
+                raise DomainError('impression_requires_care_review', 422)
             point['reviews'].append({'status': point['status'], 'revision': point['revision'],
                                       'note': point.get('review_note')})
             point.update(status='confirmed' if payload.decision == 'adopt' else 'rejected',
@@ -510,6 +524,8 @@ def decide(store, elder_id, report_id, point_id, payload, user_id, role, key=Non
                 before = memory_service._snapshot(memory)
                 memory.update(status='confirmed', confirmed_by=user_id, confirmed_at=now())
                 memory_service._change(data, memory, before, 'memory_confirm', payload.note, user_id)
+                from app.services.personal_profile_service import set_presentation, presentation_text
+                set_presentation(memory, presentation_text(memory['content']), report['provider'], user_id)
             audit(data, 'understanding_decision', report_id, user_id, elder_id=elder_id,
                   point_id=point_id, decision=payload.decision, detail=payload.note)
             return {'memory': memory_service._view(data, memory) if memory else None, 'decision': payload.decision}

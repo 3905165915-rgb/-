@@ -66,6 +66,7 @@ class AIDraft(BaseModel):
     confirmed_by: str | None = None
     generation_kind: Literal['record', 'context_record'] = 'record'
     memory_candidates: list[dict] = Field(default_factory=list)
+    preference_candidates: list[dict] = Field(default_factory=list)
     context_notes: list[dict] = Field(default_factory=list)
     context_snapshot: dict | None = None
     elder_state_snapshot: dict | None = None

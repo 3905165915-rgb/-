@@ -52,17 +52,18 @@ def test_activation_rejects_stale_or_fabricated_evidence(api, provider, change, 
     assert store.read()['care_memories'] == []
 
 
-@pytest.mark.parametrize('kind,category,status', [
-    ('temporary', 'preference', 'confirmed'), ('conflict', 'preference', 'confirmed'),
-    ('observation', 'habit', 'confirmed'), ('trend', 'attention', 'confirmed'),
-    ('trend', 'preference', 'candidate'),
+@pytest.mark.parametrize('kind,category,status,expected', [
+    ('temporary', 'preference', 'confirmed', 200), ('conflict', 'preference', 'confirmed', 200),
+    ('observation', 'habit', 'confirmed', 200), ('trend', 'attention', 'confirmed', 422),
+    ('trend', 'preference', 'candidate', 422),
 ])
-def test_unsupported_points_cannot_become_long_term_care(api, provider, kind, category, status):
+def test_personal_impressions_need_human_review_but_not_a_frequency_threshold(api, provider, kind, category, status, expected):
     client, store, headers = api
     path, body, _, _ = prepared(api)
     store.mutate(lambda d: d['elder_impressions'][0]['points'][0].update(kind=kind, category=category, status=status))
-    assert client.post(path, headers=headers('manager'), json=body).status_code == 422
     assert not store.read()['care_memories']
+    assert client.post(path, headers=headers('manager'), json=body).status_code == expected
+    assert bool(store.read()['care_memories']) == (expected == 200)
 
 
 def test_any_cited_record_change_stops_linked_memory_and_ai_context(api, provider):

@@ -2,9 +2,9 @@
 
 ## Record and Understand
 
-Staff select an elder, enter or dictate the visit, optionally attach a private reviewed photo, and save once. The formal record is persisted before inline AI analysis. The same page presents the scene, evidence, preference frequency, and follow-up suggestions for one submitter review. Analysis failure leaves the saved record available for retry by its original ID.
+Staff select an elder, enter or dictate the visit, optionally attach a private reviewed photo, and save once. The formal record is persisted before AI analysis. The same page presents observations, personal-impression candidates and follow-up suggestions for one submitter review. Analysis failure leaves the saved record available for retry by its original ID.
 
-Confirmed preferences and recent observations remain distinct. Explicit recurring wording can be confirmed by the submitter as long-term information; ambiguous frequency or a one-time wish remains an observation. A missing observation is never treated as proof that the elder can act independently.
+Personal impressions become effective only after human confirmation. Frequency wording and the number of supporting days are informational, never barriers to adding an impression. Staff do not choose between long-term and temporary categories in this workflow. Summaries retain explicit time, negation and conditions; source evidence, versions and review history remain available. The default understanding view shows concise personal traits instead of quoted narratives; original words appear in expandable evidence verification. A missing observation is never treated as proof that the elder can act independently.
 
 ## Handover
 

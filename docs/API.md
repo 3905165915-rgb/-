@@ -8,7 +8,9 @@ All routes are under `/api/v1`. Staff routes must validate the active account, e
 - Failed analysis optionally includes `analysis_error: {code, message}`. Safe codes distinguish timeout, rate limiting, configuration, invalid output and unavailable service. The message is predefined Chinese text; provider details are never returned. Older clients may ignore this field.
 - `POST /elders/{elder_id}/records/{record_id}/analyze` retries analysis for the same record ID and current revision; it must not create a second record.
 - `POST /elders/{elder_id}/records/{record_id}/analysis/{analysis_id}/confirm` accepts reviewed preference decisions and complete follow-up tasks. Use `Idempotency-Key`; reject stale revisions and evidence not present in the cited source.
-- Explicit recurring wording such as daily, weekly, or often may become a long-term preference after submitter confirmation. Ambiguous frequency and one-time wishes remain recent observations.
+- Human-confirmed personal impressions do not require recurring-frequency wording. The legacy `frequency` field remains for compatibility, not as an adoption threshold. Source revision, access and verbatim evidence checks remain mandatory.
+- `GET /elders/{elder_id}/understanding` adds `display_summary` on personal traits and `profile_summary_needed`. Source text remains under `source`/`evidence`, not in the default presentation.
+- `POST /elders/{elder_id}/understanding/summarize` prepares and caches concise display summaries for previously confirmed items, then returns the understanding view. It never approves new memories or changes memory content, revision or source. Calls run outside the JSON lock and revalidate source/revision/authorization before saving. Family access remains forbidden.
 
 ## Handover
 

@@ -184,17 +184,17 @@ def test_record_first_queue_failure_retry_and_one_step_memory(api, monkeypatch):
 
 
 @pytest.mark.parametrize('kind', ['temporary', 'conflict', 'observation'])
-def test_short_term_observation_never_becomes_long_term_memory(api, monkeypatch, kind):
+def test_any_frequency_personal_impression_requires_human_adoption(api, monkeypatch, kind):
     provider = Organiser()
     provider.kind = kind
     monkeypatch.setattr(ai_service, 'get_ai_provider', lambda: provider)
     records(api, 3)
     service.process_next(api[1], force=True)
     point = get(api, BASE + '/understanding')['observations'][0]
-    assert not point['can_adopt']
+    assert point['can_adopt']
     post(api, BASE + f'/understanding/{point["report_id"]}/{point["id"]}/decision',
-         {'expected_revision': 1, 'decision': 'adopt'}, expected=422)
-    assert not api[1].read()['care_memories']
+         {'expected_revision': 1, 'decision': 'adopt'}, expected=200)
+    assert len(api[1].read()['care_memories']) == 1
 
 
 def test_inline_record_analysis_persists_once_and_retries_same_record(api, monkeypatch):
@@ -276,13 +276,94 @@ def test_inline_analysis_confirm_creates_only_reviewed_explicit_memory_once(api)
     assert len(api[1].read()['care_memories']) == 1 and len(api[1].read()['care_tasks']) == 0
 
 
-def test_inline_confirmation_rejects_ambiguous_frequency(api):
-    result = post(api, BASE + '/record', {'text': '愿意听戏'}, key='ambiguous-record')
+@pytest.mark.parametrize('text,frequency', [('愿意听戏', 'ambiguous'), ('今天喜欢听戏', 'one_time')])
+def test_inline_confirmation_accepts_human_review_at_any_frequency(api, text, frequency):
+    result = post(api, BASE + '/record', {'text': text}, key='ambiguous-record')
     suggestion = result['analysis']['preference_suggestions'][0]
-    assert suggestion['frequency'] == 'ambiguous'
-    post(api, BASE + f'/records/{result["record"]["id"]}/analysis/{result["analysis"]["id"]}/confirm',
+    assert suggestion['frequency'] == frequency
+    assert not api[1].read()['care_memories']
+    receipt = post(api, BASE + f'/records/{result["record"]["id"]}/analysis/{result["analysis"]["id"]}/confirm',
          {'expected_revision': 1, 'preference_decisions': [
-             {'suggestion_id': suggestion['id'], 'decision': 'adopt'}]}, expected=422)
+             {'suggestion_id': suggestion['id'], 'decision': 'adopt'}]}, expected=200)
+    assert receipt['memories'][0]['effective']
+    assert receipt['memories'][0]['source']['quote'] in text
+
+
+def test_model_splits_personal_traits_and_keeps_verbatim_sources(api, monkeypatch):
+    from app.services.ai_outputs import validate_extraction
+    text = '喜欢喝茶，喜欢打太极拳，喜欢和张阿姨散步。'
+    provider = MockAIProvider()
+    original = provider.extract
+    def extract(*args):
+        draft = original(*args)
+        draft.preference_candidates = [
+            {'content': content, 'evidence_text': content, 'group': 'preference', 'attributed_to': 'elder'}
+            for content in ['喜欢喝茶', '喜欢打太极拳', '喜欢和张阿姨散步']]
+        return draft
+    provider.extract = extract
+    monkeypatch.setattr(ai_service, 'get_ai_provider', lambda: provider)
+    result = post(api, BASE+'/record', {'text':text})
+    suggestions = result['analysis']['preference_suggestions']
+    assert len(suggestions)==3
+    receipt = post(api, BASE+f'/records/{result["record"]["id"]}/analysis/{result["analysis"]["id"]}/confirm',
+        {'expected_revision':1,'preference_decisions':[{'suggestion_id':s['id'],'decision':'adopt'} for s in suggestions]},expected=200)
+    assert len(receipt['memories'])==3
+    view=get(api, BASE+'/understanding')
+    assert [row['display_summary'] for row in view['confirmed']]==[s['content'] for s in suggestions]
+    assert view['profile_summary_needed'] is False
+    with pytest.raises(ValueError):
+        validate_extraction({'observations':[text], 'task_candidates':[], 'evidence':[{'text':text,'type':'observation'}],
+            'warnings':[], 'preference_candidates':[{'content':'喜欢游泳','evidence_text':'从未出现的原文'}]}, text)
+
+
+def legacy_profile(api):
+    result=post(api, BASE+'/record', {'text':'王爷爷说：“我喜欢低音量京剧，活动前先问问我。”'})
+    suggestion=result['analysis']['preference_suggestions'][0]
+    post(api, BASE+f'/records/{result["record"]["id"]}/analysis/{result["analysis"]["id"]}/confirm',
+        {'expected_revision':1,'preference_decisions':[{'suggestion_id':suggestion['id'],'decision':'adopt',
+            'content':result['record']['raw_text']}]},expected=200)
+    api[1].mutate(lambda data: data['care_memories'][0].pop('presentation',None))
+    return result
+
+
+def test_profile_summary_preserves_sources_and_is_cached(api, monkeypatch):
+    legacy_profile(api)
+    provider=MockAIProvider()
+    calls=[]
+    def summary(sources):
+        calls.append(sources)
+        return {'points':[{'text':'喜欢低音量京剧；活动前先询问意愿',
+            'citations':[{'source_id':row['source_id'],'quote':row['text']}]} for row in sources]}
+    provider.personal_profile=summary
+    monkeypatch.setattr(ai_service,'get_ai_provider',lambda:provider)
+    before=copy.deepcopy(api[1].read()['care_memories'][0])
+    first=post(api,BASE+'/understanding/summarize',None,actor='staff',expected=200)
+    assert first['confirmed'][0]['display_summary']=='喜欢低音量京剧；活动前先询问意愿'
+    assert not first['profile_summary_needed']
+    post(api,BASE+'/understanding/summarize',None,actor='staff',expected=200)
+    assert len(calls)==1
+    after=api[1].read()['care_memories'][0]
+    assert all(after[key]==value for key,value in before.items())
+    assert before['source']['quote'] in first['confirmed'][0]['source']['snapshot_text']
+    post(api,BASE+'/understanding/summarize',None,actor='family',expected=403)
+
+
+@pytest.mark.parametrize('failure', ['fabricated_quote','source_changed','permission_revoked'])
+def test_profile_summary_never_overwrites_changed_or_unauthorized_sources(api, monkeypatch, failure):
+    legacy_profile(api)
+    provider=MockAIProvider()
+    def summary(sources):
+        if failure=='source_changed':
+            api[1].mutate(lambda data:data['care_records'][0].update(revision=2,observations=['本人已更正记录']))
+        elif failure=='permission_revoked':
+            api[1].mutate(lambda data:data.update(care_assignments=[]))
+        return {'points':[{'text':'简短个人特性','citations':[{'source_id':row['source_id'],
+            'quote':'不存在的内容' if failure=='fabricated_quote' else row['text']}]} for row in sources]}
+    provider.personal_profile=summary
+    monkeypatch.setattr(ai_service,'get_ai_provider',lambda:provider)
+    post(api,BASE+'/understanding/summarize',None,actor='staff',
+         expected={'fabricated_quote':503,'source_changed':409,'permission_revoked':403}[failure])
+    assert not api[1].read()['care_memories'][0].get('presentation')
 
 
 def test_inline_confirmation_uses_current_observations_not_original_narrative(api):

@@ -254,7 +254,7 @@ def activate_memory(store, elder_id, report_id, point_id, payload, user_id, role
                 raise DomainError('impression_sources_changed')
             if point['status'] != 'confirmed':
                 raise DomainError('impression_point_requires_review', 422)
-            if (point['kind'] != 'trend' or point['category'] == 'attention' or
+            if (point['category'] == 'attention' or
                     payload.category not in {'stable_preference', 'communication'}):
                 raise DomainError('impression_not_long_term_preference', 422)
             citation = next((c for c in point['citations'] if c['source_id'] == payload.source_record_id and
