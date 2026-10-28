@@ -60,7 +60,11 @@ def role_view(data, item, user_id, role):
         visible.append(safe)
     visible_ids = {row['source_id'] for row in visible}
     all_items_authorized = bool(full['items']) and len(visible) == len(full['items'])
-    if all_items_authorized:
+    # With no saved shift items, the author must still be able to review their
+    # own freshly typed note. Do not expose that free text to another caregiver
+    # or relax filtering when any source item is outside the reader's scope.
+    own_note_only = not full['items'] and (full.get('ai_summary') or {}).get('created_by') == user_id
+    if all_items_authorized or own_note_only:
         visible_ids.add('handover-text')
     summary = ''
     ai_summary = None

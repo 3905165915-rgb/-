@@ -138,3 +138,46 @@ def test_utc_suffix_and_offset_timestamps_refer_to_same_shift_window(api):
     assert client.post('/api/v1/shifts', json=payload, headers=headers('manager')).status_code == 201
     overlap = {**payload, 'start_at': '2026-10-18T20:00:00+08:00', 'end_at': '2026-10-19T08:00:00+08:00'}
     assert client.post('/api/v1/shifts', json=overlap, headers=headers('manager')).status_code == 409
+
+
+def test_note_only_handover_author_can_review_and_submit_without_saved_shift_items(api):
+    client, store, headers = api
+    source, target = shifts(api)
+    handover = client.post('/api/v1/handovers', json={
+        'source_shift_id': source['id'], 'target_shift_id': target['id'],
+    }, headers=headers()).json()
+    assert handover['items'] == []
+    url = f'/api/v1/handovers/{handover["id"]}'
+    result = client.post(url + '/ai-summary', json={
+        'expected_revision': handover['revision'], 'text': '请联系家属反馈情况',
+    }, headers=headers())
+    assert result.status_code == 200, result.text
+    reviewed = result.json()
+    assert reviewed['ai_summary']['text']
+    assert reviewed['handover_suggestions'] == []
+    # The incoming caregiver has no authorized elder source for this free text.
+    incoming = client.get(url, headers=headers('other')).json()
+    assert incoming['ai_summary']['text'] == ''
+    assert incoming['handover_suggestions'] == []
+    submitted = client.post(url + '/submit', json={
+        'expected_revision': reviewed['revision'], 'summary': reviewed['ai_summary']['text'],
+        'approve_ai_summary': True, 'accepted_tasks': [],
+    }, headers=headers())
+    assert submitted.status_code == 200, submitted.text
+    assert submitted.json()['status'] == 'received'
+    assert store.read()['care_tasks'] == []
+
+
+def test_manual_handover_does_not_require_model_output(api):
+    client, store, headers = api
+    source, target = shifts(api)
+    created = client.post('/api/v1/handovers', json={
+        'source_shift_id': source['id'], 'target_shift_id': target['id'],
+    }, headers=headers()).json()
+    response = client.post(f'/api/v1/handovers/{created["id"]}/submit', json={
+        'expected_revision': created['revision'], 'summary': '已核对本班照护情况，无新增待办。',
+        'approve_ai_summary': False, 'accepted_tasks': [],
+    }, headers=headers())
+    assert response.status_code == 200
+    assert store.read()['handovers'][0]['summary'] == '已核对本班照护情况，无新增待办。'
+    assert store.read()['handovers'][0]['ai_summary'] is None
