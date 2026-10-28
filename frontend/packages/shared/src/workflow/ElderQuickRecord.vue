@@ -313,7 +313,7 @@ function validateConfirmation(value: unknown) {
 }
 function confirmed(row: Row | null) {
   if (!row || !scope.valid()) return
-  notice.value = '本次核对已保存；正式待办和长期偏好以服务器回执为准。'
+  notice.value = '本次核对已保存，已确认的喜好会加入个人印象。'
   result.value!.analysis!.status = 'confirmed'
   if (receipt?.analysis) {
     receipt.analysis_status = 'confirmed'
@@ -660,26 +660,21 @@ onBeforeUnmount(() => {
             <footer>原文依据</footer>
           </blockquote>
         </article>
-        <h5 v-if="preferences.length">长期偏好建议</h5>
+        <h5 v-if="preferences.length">个人印象建议</h5>
         <article
           v-for="(item, index) in preferences"
           :key="item.suggestionId"
           class="record-suggestion"
         >
           <p>{{ item.content }}</p>
-          <blockquote>
-            {{ analysis.preferenceSuggestions[index]?.evidenceText }}
-          </blockquote>
+          <details>
+            <summary>原文核实</summary>
+            <blockquote>
+              {{ analysis.preferenceSuggestions[index]?.evidenceText }}
+            </blockquote>
+          </details>
           <p>
-            频率：{{
-              analysis.preferenceSuggestions[index]?.frequency === 'explicit'
-                ? '原文明确重复规律'
-                : analysis.preferenceSuggestions[index]?.frequency ===
-                    'one_time'
-                  ? '单次意愿'
-                  : '频率不明确'
-            }}
-            · 表达者：{{
+            表达者：{{
               attributionLabels[
                 analysis.preferenceSuggestions[index]?.attributedTo || 'unknown'
               ] || '待核实'
@@ -688,20 +683,12 @@ onBeforeUnmount(() => {
           <label
             >核对决定<select v-model="item.decision" :disabled="confirmLocked">
               <option value="">请选择</option>
-              <option
-                value="adopt"
-                :disabled="
-                  analysis.preferenceSuggestions[index]?.frequency !==
-                  'explicit'
-                "
-              >
-                采纳为长期偏好
-              </option>
-              <option value="reject">不采纳</option>
+              <option value="adopt">加入个人印象</option>
+              <option value="reject">暂不加入</option>
             </select></label
           >
           <label v-if="item.decision === 'adopt'"
-            >核对后的偏好内容<input
+            >确认展示的个人特性<input
               v-model="item.content"
               maxlength="1000"
               :disabled="confirmLocked"

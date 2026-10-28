@@ -7,6 +7,7 @@ import DemoHandovers from '../../../../../packages/shared/src/workflow/DemoHando
 import { mode } from '../../services/data'
 import CareSafety from '@hulao/shared/care-safety'
 import ElderRecordEntry from '../../../../../packages/shared/src/workflow/ElderRecordEntry.vue'
+import ChangeReviewCenter from '../../../../../packages/shared/src/workflow/ChangeReviewCenter.vue'
 const route = useRoute()
 const group = computed(() => String(route.params.group || 'records'))
 const quickRecord = computed(
@@ -42,6 +43,10 @@ const titles: Record<string, string> = {
       :context="route.query"
       record-path="/workflows/records"
       :report="route.query.report === '1'"
+    />
+    <ChangeReviewCenter
+      v-else-if="group === 'changes'"
+      :context="route.query"
     />
     <DemoRecordsHub
       v-else-if="group === 'records' && mode === 'demo'"
