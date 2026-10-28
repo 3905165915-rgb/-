@@ -38,7 +38,7 @@ def real_ai(api, monkeypatch, request):
     configured = replace(config.settings, ai_provider='deepseek', ai_fallback_mock=False,
                          deepseek_api_key=actual.deepseek_api_key, deepseek_model=actual.deepseek_model,
                          deepseek_base_url=actual.deepseek_base_url, deepseek_timeout_seconds=45,
-                         siliconflow_api_key=actual.siliconflow_api_key)
+                         siliconflow_api_key=actual.siliconflow_api_key, speech_model=actual.speech_model)
     monkeypatch.setattr(ai_service, 'settings', configured)
     monkeypatch.setattr(speech_service, 'settings', configured)
     original_post = ai_service.httpx.post
@@ -179,7 +179,7 @@ def test_real_speech_preserves_negation_and_does_not_save(real_ai):
     assert result.status_code == 200, result.text
     body = result.json()
     evidence('speech', body)
-    assert body['provider'] == 'siliconflow' and body['model'] == 'FunAudioLLM/SenseVoiceSmall'
+    assert body['provider'] == 'siliconflow' and body['model'] == speech_service.settings.speech_model
     assert body['requires_confirmation'] is True and body['saved'] is False
     assert '没有外出' in body['text']
     assert hashlib.sha256(store.path.read_bytes()).hexdigest() == before

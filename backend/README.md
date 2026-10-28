@@ -111,8 +111,8 @@ python backend/scripts/backup_json.py --restore /absolute/path/to/backup.json --
 
 恢复仅支持当前schema，会再次备份现有数据并保留当前账号和密码；同时使旧登录失效、清空旧幂等缓存与通知、撤销恢复快照中的有效家属绑定及照护分配。恢复后须重新登录、核实家属授权并由主管重新安排照护范围，不能沿用旧页面中的版本提交。恢复包含文件操作，必须全程停服。每日备份的systemd服务和timer放在 `deploy/`；安装与验证见[deploy/README.md](deploy/README.md)。备份位于数据目录的backups/，没有自动清理，也不等于异地容灾。
 
-## 免费云端语音识别
+## 云端语音识别
 
-设置 `SILICONFLOW_API_KEY` 后使用 `FunAudioLLM/SenseVoiceSmall`，识别计算在厂商侧。独立测试页 `/api/v1/speech/demo`，工作人员登录后可录音并校对/复制文字；不自动保存记录，主前端按钮仍需协作者联调。
+服务器设置 `SILICONFLOW_API_KEY` 和 `SPEECH_MODEL=Qwen/Qwen3-ASR-1.7B`，识别计算在硅基流动侧；默认使用该 Qwen 模型，可显式配置其他兼容的转写模型。现有记录和交班录音按钮继续调用同一接口，无需前端持有密钥。独立测试页 `/api/v1/speech/demo` 可录音并校对/复制文字；识别不自动保存正式记录。
 
-上传接口、格式、错误及客户端示例见 [API.md](API.md)。只接受60秒以内16kHz单声道PCM16 WAV；客户端重采样，服务器只转发。语音Key不能复用DeepSeek密钥，不写入前端或Git。免费标识和账号权限以厂商实际政策为准。
+上传接口、格式、错误及客户端示例见 [API.md](API.md)。只接受60秒以内16kHz单声道PCM16 WAV；客户端重采样，服务器只转发。语音Key不能复用DeepSeek密钥，不写入前端或Git。Qwen模型按厂商价格计费，用户截图为每秒 ¥0.00022；实际价格和账号权限以厂商为准。

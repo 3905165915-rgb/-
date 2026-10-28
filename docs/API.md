@@ -12,7 +12,13 @@ All routes are under `/api/v1`. Staff routes must validate the active account, e
 - `GET /elders/{elder_id}/understanding` adds `display_summary` on personal traits and `profile_summary_needed`. Source text remains under `source`/`evidence`, not in the default presentation.
 - `POST /elders/{elder_id}/understanding/summarize` prepares and caches concise display summaries for previously confirmed items, then returns the understanding view. It never approves new memories or changes memory content, revision or source. Calls run outside the JSON lock and revalidate source/revision/authorization before saving. Family access remains forbidden.
 
-## Handover
+## Hosted Speech Recognition
+
+- `GET /speech/status` returns the configured `SPEECH_MODEL`; default `Qwen/Qwen3-ASR-1.7B` on SiliconFlow.
+- `POST /speech/transcriptions` keeps its raw PCM16 mono 16 kHz WAV request and text response. The returned `model` matches the model sent upstream. Staff authorization, the 60-second limit and separate human confirmation remain unchanged.
+- Server-only `SILICONFLOW_API_KEY` and `SPEECH_MODEL` configure the service. The Qwen model is billed by the provider; it is not advertised as the previous free SenseVoice model. No credentials are sent to the frontend or stored in Git.
+
+## Handover Operations
 
 - `POST /handovers/{handover_id}/ai-summary` accepts `{expected_revision, text}` and returns an editable summary, source evidence, and task suggestions.
 - `POST /handovers/{handover_id}/submit` accepts the reviewed summary and complete `accepted_tasks`. Existing task source IDs continue unchanged; incomplete suggestions do not create tasks.

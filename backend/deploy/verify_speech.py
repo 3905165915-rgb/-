@@ -9,6 +9,7 @@ import httpx
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--base-url', default='https://99211314.xyz/api/v1')
 parser.add_argument('--audio', type=Path, required=True, help='Synthetic PCM16 mono 16kHz WAV; never real care audio')
+parser.add_argument('--expected-model', default='Qwen/Qwen3-ASR-1.7B')
 args = parser.parse_args()
 accounts = {row['username']: row for row in json.loads(Path('/etc/hulaozhijiao/demo-accounts.json').read_text())}
 data_file = Path('/var/lib/hulaozhijiao/store.json')
@@ -23,7 +24,7 @@ with httpx.Client(base_url=args.base_url + '/', timeout=70) as client:
     state = client.get('speech/status', headers=staff)
     state.raise_for_status()
     assert state.json()['configured'] is True
-    assert state.json()['model'] == 'FunAudioLLM/SenseVoiceSmall'
+    assert state.json()['model'] == args.expected_model
     assert client.get('speech/status').status_code == 401
     assert client.get('speech/status', headers=family).status_code == 403
     page = client.get('speech/demo')
@@ -34,6 +35,7 @@ with httpx.Client(base_url=args.base_url + '/', timeout=70) as client:
     transcription = result.json()
     assert transcription['provider'] == 'siliconflow' and transcription['requires_confirmation'] is True
     assert transcription['saved'] is False and transcription['text'].strip()
+    assert transcription['model'] == args.expected_model
     print('SYNTHETIC_TRANSCRIPT', transcription['text'])
     assert '没有外出' in transcription['text']
     assert hashlib.sha256(data_file.read_bytes()).hexdigest() == before

@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from app.core.config import settings
 from app.services.workflow import DomainError
 
-MODEL = 'FunAudioLLM/SenseVoiceSmall'
+MODEL = 'Qwen/Qwen3-ASR-1.7B'
 ENDPOINT = 'https://api.siliconflow.cn/v1/audio/transcriptions'
 MAX_BYTES = 3 * 1024 * 1024
 MAX_SECONDS = 60
@@ -63,7 +63,7 @@ limits = SpeechLimits()
 
 def status():
     configured = bool(settings.siliconflow_api_key)
-    return {'provider': 'siliconflow', 'model': MODEL, 'configured': configured,
+    return {'provider': 'siliconflow', 'model': settings.speech_model, 'configured': configured,
             'reason': None if configured else 'speech_not_configured',
             'max_bytes': MAX_BYTES, 'max_duration_seconds': MAX_SECONDS,
             'input': {'content_type': 'audio/wav', 'encoding': 'PCM_16', 'sample_rate': 16000, 'channels': 1},
@@ -104,7 +104,7 @@ async def transcribe(audio: bytes) -> TranscriptionResponse:
                                      follow_redirects=False, trust_env=False) as client:
             response = await client.post(ENDPOINT,
                 headers={'Authorization': 'Bearer ' + settings.siliconflow_api_key},
-                data={'model': MODEL}, files={'file': ('recording.wav', audio, 'audio/wav')})
+                data={'model': settings.speech_model}, files={'file': ('recording.wav', audio, 'audio/wav')})
         if response.status_code == 429:
             raise DomainError('speech_provider_rate_limited', 429)
         if response.status_code in {400, 413, 415, 422}:
@@ -119,7 +119,7 @@ async def transcribe(audio: bytes) -> TranscriptionResponse:
         text = body['text'].strip()
         if not text:
             raise DomainError('speech_no_text_detected_retry_or_type', 422)
-        return TranscriptionResponse(text=text, duration_seconds=round(duration, 3))
+        return TranscriptionResponse(text=text, model=settings.speech_model, duration_seconds=round(duration, 3))
     except DomainError:
         raise
     except httpx.TimeoutException as exc:

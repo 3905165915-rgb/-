@@ -168,7 +168,7 @@ AI摘要/质检输入最多100条、累计60000字，超限需按老人或班次
 
 ## 云端语音识别（SiliconFlow）
 
-不部署本地语音模型，由硅基流动 `FunAudioLLM/SenseVoiceSmall` 识别；Key只放服务器环境变量 `SILICONFLOW_API_KEY`，前端不得持有。官方价目表目前标为免费，不承诺永久价格、无限频率或任何账号必有权限。
+不部署本地语音模型，由硅基流动云端识别；默认模型为 `Qwen/Qwen3-ASR-1.7B`，服务器可通过 `SPEECH_MODEL` 显式配置。Key只放服务器环境变量 `SILICONFLOW_API_KEY`，前端不得持有。本模型按厂商价格计费；用户提供的价目截图为每秒 ¥0.00022（每分钟约 ¥0.0132），不再沿用旧 SenseVoiceSmall 免费描述，实际以厂商账单为准。
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
@@ -184,7 +184,7 @@ AI摘要/质检输入最多100条、累计60000字，超限需按老人或班次
 {
   "text": "老人今天没有外出，午餐吃了一半。",
   "provider": "siliconflow",
-  "model": "FunAudioLLM/SenseVoiceSmall",
+  "model": "Qwen/Qwen3-ASR-1.7B",
   "duration_seconds": 6.2,
   "requires_confirmation": true,
   "saved": false,

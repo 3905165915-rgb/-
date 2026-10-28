@@ -36,6 +36,7 @@ class Settings:
     vision_timeout_seconds: float = 45
     background_jobs_enabled: bool = True
     demo_family_all_elders: bool = False
+    speech_model: str = 'Qwen/Qwen3-ASR-1.7B'
 
 
 def get_settings() -> Settings:
@@ -59,6 +60,7 @@ def get_settings() -> Settings:
         ),
         siliconflow_api_key=os.getenv('SILICONFLOW_API_KEY', '').strip(),
         speech_timeout_seconds=float(os.getenv('SPEECH_TIMEOUT_SECONDS', '45')),
+        speech_model=os.getenv('SPEECH_MODEL', 'Qwen/Qwen3-ASR-1.7B').strip() or 'Qwen/Qwen3-ASR-1.7B',
         vision_api_key=os.getenv('VISION_API_KEY', '').strip(),
         vision_base_url=os.getenv('VISION_BASE_URL', '').strip().rstrip('/'),
         vision_model=os.getenv('VISION_MODEL', '').strip(),
