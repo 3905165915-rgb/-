@@ -41,7 +41,9 @@ describe('route and menu policy', () => {
       expect(paths).toEqual([
         '/dashboard',
         '/elders',
-        '/followups',
+        '/tasks',
+        '/quality',
+        '/workflows/reports',
         '/settings',
         '/demo',
       ])
@@ -56,7 +58,6 @@ describe('route and menu policy', () => {
     'retains %s legacy tools as authorized internal entries',
     (role) => {
       const tools = [
-        '/quality',
         '/coverage',
         '/changes',
         '/workflows/incidents',

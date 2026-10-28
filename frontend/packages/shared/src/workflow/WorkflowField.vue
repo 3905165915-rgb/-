@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import RecordEvidencePicker from './RecordEvidencePicker.vue'
+import { localTime } from './workspace-time'
 import {
   type Schema,
   type Row,
@@ -29,8 +30,7 @@ const inputValue = computed(() => {
   if (schema.value.format !== 'date-time' || typeof value !== 'string' || !/(Z|[+-]\d\d:\d\d)$/.test(value)) return value ?? ''
   const date = new Date(value)
   if (!Number.isFinite(date.valueOf())) return ''
-  const local = new Date(date.valueOf() - date.getTimezoneOffset() * 60000)
-  return local.toISOString().slice(0, 19)
+  return localTime(date).slice(0, 19)
 })
 const options = computed(
   () => props.optionOverrides?.[props.field] ?? props.catalogs[resourceFor[props.field] || ''] ?? [],
@@ -118,7 +118,7 @@ const primitiveOptions = computed(
     class="wf-fieldset"
     :data-field="fieldPath"
   >
-    <legend>{{ label(field) }}<span v-if="required"> *</span></legend>
+    <legend>{{ schema.properties?.severity && schema.properties?.category ? '事件分级' : label(field) }}<span v-if="required"> *</span></legend>
     <template v-for="(child, key) in schema.properties" :key="key">
     <RecordEvidencePicker
       v-if="memoryEvidence && key === 'source_record_id'"
@@ -176,7 +176,7 @@ const primitiveOptions = computed(
     </button>
   </fieldset>
   <label v-else class="wf-field" :data-field="fieldPath">
-    <span>{{ label(field) }}<b v-if="required"> *</b></span>
+    <span>{{ field === 'category' && primitiveOptions.includes('fall') ? '事件类别' : label(field) }}{{ schema.format === 'date-time' ? '（北京时间）' : '' }}<b v-if="required"> *</b></span>
     <select
       v-if="primitiveOptions.length"
       :value="modelValue ?? ''"

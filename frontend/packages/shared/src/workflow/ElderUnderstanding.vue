@@ -205,6 +205,9 @@ defineExpose({ refresh: load })
         刷新
       </button>
     </header>
+    <p v-if="loading" role="status">正在读取已确认资料与近期观察…</p>
+    <p v-if="error || saveError" role="alert" class="workspace-error">{{ error || saveError }}</p>
+    <p v-if="!loading && !error && !confirmed.length">尚无已确认的个人特性，可展开原文核实近期观察。</p>
     <section
       v-if="confirmed.length"
       class="workspace-panel"
@@ -219,10 +222,6 @@ defineExpose({ refresh: load })
     </section>
     <details>
       <summary>原文核实与个人印象管理</summary>
-      <p v-if="loading" role="status">正在读取已确认资料与近期观察…</p>
-      <p v-if="error || saveError" role="alert" class="workspace-error">
-        {{ error || saveError }}
-      </p>
       <button v-if="pending" type="button" :disabled="busy" @click="retry">
         核实并重试原决定
       </button>

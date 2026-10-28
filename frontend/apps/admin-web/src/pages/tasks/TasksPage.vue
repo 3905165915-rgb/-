@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import WorkflowPanel from '@hulao/shared/workflow'
 import DemoTaskCreate from '../../../../../packages/shared/src/workflow/DemoTaskCreate.vue'
+import BulkTaskTransfer from '../../../../../packages/shared/src/workflow/BulkTaskTransfer.vue'
+import type { Task } from '@hulao/shared'
 import { mode } from '../../services/data'
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -27,28 +29,32 @@ const elderMap = computed(
   () => new Map((elders.data.value ?? []).map((elder) => [elder.id, elder])),
 )
 const counts = computed(() => {
-  const rows = tasks.data.value ?? []
+  const rows = scoped.value
   return [
-    { label: '已载入任务', value: rows.length, tone: '' },
+    { label: '当前范围任务', value: rows.length, tone: '', status: '' },
     {
       label: '待处理',
       value: rows.filter((task) => task.status === 'pending').length,
       tone: 'warning',
+      status: 'pending',
     },
     {
       label: '已逾期',
       value: rows.filter((task) => task.status === 'overdue').length,
       tone: 'danger',
+      status: 'overdue',
     },
     {
       label: '进行中',
       value: rows.filter((task) => task.status === 'in_progress').length,
       tone: 'info',
+      status: 'in_progress',
     },
     {
       label: '已完成',
       value: rows.filter((task) => task.status === 'completed').length,
       tone: 'success',
+      status: 'completed',
     },
   ]
 })
@@ -56,16 +62,18 @@ const statusTabs = [
   { label: '全部', value: '' },
   { label: '待处理', value: 'pending' },
   { label: '进行中', value: 'in_progress' },
+  { label: '已逾期', value: 'overdue' },
   { label: '已完成', value: 'completed' },
 ]
 function selectStatus(value: string) {
   filters.value.status = value
   sync()
 }
-const { filters, filtered, shifts, assignees, sync, reset } = useTaskFilters(
+const { filters, filtered, scoped, shifts, assignees, sync, reset } = useTaskFilters(
   () => tasks.data.value ?? [],
   () => elders.data.value ?? [],
 )
+const moreFilters = ref(false)
 const selectedId = ref<string | null>(null)
 const selected = computed(
   () => tasks.data.value?.find((task) => task.id === selectedId.value) ?? null,
@@ -87,6 +95,8 @@ function closeTask() {
 }
 const page = ref(1)
 const pageSize = ref(25)
+const batchTaskIds = ref<string[]>([])
+function selectBatch(rows:Task[]) {batchTaskIds.value=rows.map(row=>row.id)}
 const paged = computed(() =>
   filtered.value.slice(
     (page.value - 1) * pageSize.value,
@@ -114,6 +124,9 @@ watch(
         @click="router.push({ query: { ...route.query, create: '1' } })"
         ><Plus :size="16" aria-hidden="true" />新建任务</el-button
       >
+      <el-button @click="router.push('/workflows/handovers')">
+        交接班
+      </el-button>
     </div>
     <section v-if="creating" aria-label="新建照护任务">
       <el-button link @click="router.push({ query: {} })"
@@ -151,18 +164,25 @@ watch(
         </el-button>
       </div>
       <div class="task-metrics" aria-label="已载入任务统计">
-        <div
+        <button
           v-for="metric in counts"
           :key="metric.label"
           :class="'metric-' + metric.tone"
+          type="button"
+          :disabled="tasks.isPending.value || !!tasks.error.value"
+          :aria-pressed="filters.status === metric.status"
+          @click="selectStatus(metric.status)"
         >
           <span>{{ metric.label }}</span
           ><strong>{{
             tasks.isPending.value || tasks.error.value ? '未提供' : metric.value
           }}</strong>
-        </div>
+        </button>
       </div>
       <div class="data-section">
+        <details v-if="mode==='api'"><summary>批量转交普通任务（仅本页所选）</summary>
+          <BulkTaskTransfer :task-ids="batchTaskIds" @changed="tasks.refetch()" />
+        </details>
         <div class="section-tabs" role="group" aria-label="任务状态视图">
           <button
             v-for="tab in statusTabs"
@@ -187,7 +207,7 @@ watch(
               </template>
             </el-input>
           </el-form-item>
-          <el-form-item label="排序">
+          <el-form-item v-if="moreFilters" label="排序">
             <el-select v-model="filters.sort" @change="sync">
               <el-option label="原始顺序" value="source" /><el-option
                 label="截止时间从早到晚"
@@ -195,6 +215,7 @@ watch(
               /><el-option label="截止时间从晚到早" value="due_desc" />
             </el-select>
           </el-form-item>
+          <el-form-item><el-button :aria-expanded="moreFilters" @click="moreFilters = !moreFilters">{{ moreFilters ? '收起更多筛选' : '更多筛选' }}</el-button></el-form-item>
           <el-form-item>
             <el-button
               class="icon-button"
@@ -205,7 +226,7 @@ watch(
               <RotateCcw :size="17" aria-hidden="true" />
             </el-button>
           </el-form-item>
-          <el-form-item label="老人">
+          <el-form-item v-if="moreFilters || !!filters.elder" label="老人">
             <el-select
               v-model="filters.elder"
               placeholder="全部老人"
@@ -219,7 +240,7 @@ watch(
                 :value="item.id"
               />
             </el-select> </el-form-item
-          ><el-form-item label="班次">
+          ><el-form-item v-if="moreFilters || !!filters.shift" label="班次">
             <el-select
               v-model="filters.shift"
               placeholder="全部班次"
@@ -233,7 +254,7 @@ watch(
                 :value="item"
               />
             </el-select> </el-form-item
-          ><el-form-item label="责任人">
+          ><el-form-item v-if="moreFilters || !!filters.assignee" label="责任人">
             <el-select
               v-model="filters.assignee"
               placeholder="全部责任人"
@@ -247,7 +268,7 @@ watch(
                 :value="item"
               />
             </el-select> </el-form-item
-          ><el-form-item label="状态">
+          ><el-form-item v-if="moreFilters" label="状态">
             <el-select
               v-model="filters.status"
               placeholder="全部状态"
@@ -277,12 +298,14 @@ watch(
         <el-table
           v-if="!tasks.isPending.value && !tasks.error.value"
           :data="paged"
+          @selection-change="selectBatch"
           :empty-text="
             tasks.data.value?.length
               ? '暂无匹配任务，请调整筛选条件'
               : '暂无任务'
           "
         >
+          <el-table-column v-if="mode==='api'" type="selection" width="48" :selectable="(row:Task)=>['pending','overdue'].includes(row.status)" />
           <el-table-column label="护理任务" min-width="220">
             <template #default="{ row }">
               <div class="table-primary">

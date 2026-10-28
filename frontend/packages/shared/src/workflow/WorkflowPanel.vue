@@ -84,6 +84,7 @@ import {
   WorkflowRequestError,
 } from './model'
 import './workflow.css'
+import { qualityFeedback, qualityModelUnavailable } from './quality-check'
 const props = withDefaults(
   defineProps<{
     group: string
@@ -103,7 +104,7 @@ const props = withDefaults(
     focused: false,
   },
 )
-const emit = defineEmits<{ changed: []; select: [Row] }>()
+const emit = defineEmits<{ changed: [value?: unknown]; select: [Row] }>()
 const role = readSession()?.role
 const allowed = computed(() =>
   operations.filter(
@@ -278,8 +279,12 @@ const ready = ref(false)
 const serverMode = readSession()?.mode === 'api'
 let restoring = false
 let recovery: WorkflowRecovery | undefined
-const frozen = computed(() => phase.value !== 'editing')
+const frozen = computed(() => phase.value !== 'editing' && !(quickQualityScan.value && phase.value === 'succeeded'))
 const readOnly = computed(() => active.value?.method === 'get')
+const quickQualityScan = computed(() =>
+  !!active.value && isQualityScan(active.value),
+)
+const modelUnavailable = ref(false)
 const feedback = computed(() =>
   submissionFeedback(active.value?.path || '', active.value?.method || 'get'),
 )
@@ -439,6 +444,11 @@ const visibleParameters = computed(
     ) || [],
 )
 const visibleBodySchema = computed(() => {
+  if (quickQualityScan.value && bodySchema.value) {
+    const schema = structuredClone(bodySchema.value)
+    delete schema.properties?.include_ai
+    return schema
+  }
   if (props.focused && bodySchema.value) {
     const schema = structuredClone(bodySchema.value)
     for (const key of Object.keys(schema.properties || {})) {
@@ -719,6 +729,8 @@ function reset() {
       ? taskCreationInitial(bodySchema.value)
       : (initial(bodySchema.value) as Row)
     : {}
+  if (isQualityScan(op)) body.value.include_ai = true
+  modelUnavailable.value = false
   for (const key of Object.keys(body.value))
     if (selected.value[key]) body.value[key] = selected.value[key]
   syncVersions()
@@ -1020,10 +1032,15 @@ async function run() {
     busy.value ||
     !active.value ||
     (!readOnly.value && saveIssue.value) ||
-    phase.value === 'succeeded'
+    (phase.value === 'succeeded' && !quickQualityScan.value)
   )
     return
   const op = active.value
+  if (quickQualityScan.value && phase.value === 'succeeded') {
+    phase.value = 'editing'
+    pending.value = undefined
+    if (!persistForm()) return
+  }
   error.value = ''
   message.value = ''
   let path: string, payload: unknown, signature: string
@@ -1106,7 +1123,7 @@ async function run() {
     error.value = (failure as Error).message
     return
   }
-  if (op.method !== 'get' && !confirm.value) {
+  if (op.method !== 'get' && !confirm.value && !quickQualityScan.value) {
     confirm.value = true
     return
   }
@@ -1160,6 +1177,7 @@ async function run() {
             )
     if (props.taskCreation && op.path === '/tasks' && op.method === 'post')
       checkTaskCreationReceipt(data, payload as Row)
+    if (isQualityScan(op)) qualityFeedback(data)
     result.value = data
     if (op.method !== 'get') {
       phase.value = 'succeeded'
@@ -1187,12 +1205,12 @@ async function run() {
     }
     confirm.value = false
     message.value =
-      recordSavedMessage(data) || submissionFeedback(op.path, op.method).success
+      isQualityScan(op) ? qualityFeedback(data) : recordSavedMessage(data) || submissionFeedback(op.path, op.method).success
     if (op.method !== 'get') {
       // The write has already been acknowledged and persisted locally. Directory
       // refresh must never keep the save button stuck in its submitting state.
       void loadCatalogs()
-      emit('changed')
+      emit('changed', data)
     }
     if (
       props.group === 'records' &&
@@ -1204,6 +1222,7 @@ async function run() {
     if (
       failure instanceof WorkflowRequestError &&
       ((failure.status >= 400 && failure.status < 500) ||
+        (isQualityScan(op) && qualityModelUnavailable(failure.status, failure.code)) ||
         (failure.status === 503 &&
           ['/records/extract', '/records/context-extract'].includes(op.path)))
     ) {
@@ -1211,6 +1230,7 @@ async function run() {
       pending.value = undefined
       confirm.value = false
       persistForm()
+      if (isQualityScan(op) && qualityModelUnavailable(failure.status, failure.code)) modelUnavailable.value = true
     }
   } finally {
     busy.value = false
@@ -1368,6 +1388,16 @@ async function loadRecordHistory(recordId: string) {
   }
 }
 function freshForm() {
+  if (quickQualityScan.value && phase.value === 'succeeded' && !busy.value) {
+    phase.value = 'editing'
+    pending.value = undefined
+    result.value = null
+    body.value.include_ai = true
+    modelUnavailable.value = false
+    message.value = '已保留检查范围，可调整后再次检查。历史报告仍保留。'
+    persistForm()
+    return
+  }
   if (
     busy.value ||
     recording.value ||
@@ -1654,6 +1684,9 @@ watch(
   { deep: true, flush: 'sync' },
 )
 function initialOperationId() {
+  if (!props.initialAction && props.autoRead) {
+    return allowed.value.find((op) => op.method === 'get')?.id || ''
+  }
   return (
     allowed.value.find(
       (op) =>
@@ -1957,6 +1990,7 @@ onMounted(async () => {
             <p v-if="isQualityScan(active)" class="wf-muted">
               选择交班单后自动采用其交出班次；更换班次会清除不匹配的交班单。历史已关闭班次也可检查。
             </p>
+            <p v-if="quickQualityScan" class="wf-notice">一键检查规则与模型提示。若模型不可用，会明确提示并提供仅运行规则检查的入口；本次未生成的结果不会显示为已通过。</p>
             <p
               v-if="taskCreation && active.path === '/records/manual'"
               class="wf-notice"
@@ -1964,7 +1998,7 @@ onMounted(async () => {
               这是旧版任务表单的恢复内容，仍按原记录接口处理。完成核实后，开始新操作可使用独立任务创建入口。
             </p>
             <p v-if="taskCreation" class="wf-notice">
-              先选择老人，再核对已有任务，避免重复安排。护理员只能安排给本人；分配他人或调整既有任务由主管办理。截止时间按设备时区输入，请明确核对日期与时刻。执行前提不会因填写此表自动满足。
+              先选择老人，再核对已有任务，避免重复安排。护理员只能安排给本人；分配他人或调整既有任务由主管办理。截止时间按北京时间输入，请明确核对日期与时刻。执行前提不会因填写此表自动满足。
             </p>
             <p
               v-if="
@@ -2192,7 +2226,7 @@ onMounted(async () => {
                   busy ||
                   loading ||
                   (!readOnly && !!saveIssue) ||
-                  phase === 'succeeded' ||
+                  (phase === 'succeeded' && !quickQualityScan) ||
                   (phase === 'pending' && !pending?.retryable) ||
                   recording ||
                   transcribing
@@ -2204,14 +2238,16 @@ onMounted(async () => {
                     : phase === 'pending'
                       ? '使用原请求核实结果'
                       : phase === 'succeeded'
-                        ? '本次操作已完成'
+                        ? quickQualityScan ? '再次检查' : '本次操作已完成'
                         : confirm
                           ? recordTaskReview
                             ? recordTaskCount
                               ? `保存记录并创建${recordTaskCount}项任务`
                               : '仅保存记录'
                             : '确认提交'
-                          : active.method === 'get'
+                          : quickQualityScan
+                            ? '开始检查'
+                            : active.method === 'get'
                             ? '读取当前数据'
                             : '核对并继续'
                 }}</button
@@ -2235,11 +2271,12 @@ onMounted(async () => {
                 "
                 @click="freshForm"
               >
-                {{ recordComposer ? '开始新记录' : '清空表单，开始新操作' }}
+                {{ quickQualityScan && phase === 'succeeded' ? '调整范围，再次检查' : recordComposer ? '开始新记录' : '清空表单，开始新操作' }}
               </button>
             </div>
           </form>
           <p v-if="error" class="wf-error" role="alert">{{ error }}</p>
+          <button v-if="quickQualityScan && modelUnavailable && phase === 'editing'" type="button" class="wf-secondary" :disabled="busy || loading" @click="body.include_ai = false; modelUnavailable = false; run()">模型未运行，仅重新检查规则</button>
           <p v-if="message" class="wf-success" role="status">{{ message }}</p>
           <section
             v-if="focused && result !== null"

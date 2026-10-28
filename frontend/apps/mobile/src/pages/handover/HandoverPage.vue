@@ -1,6 +1,6 @@
 <script setup lang="ts">
 const serverWorkflow = ['api'].includes(import.meta.env.VITE_APP_MODE || 'api')
-import WorkflowPanel from '@hulao/shared/workflow'
+import HandoverWorkspace from '../../../../../packages/shared/src/workflow/HandoverWorkspace.vue'
 import { compactReference } from '@hulao/shared'
 import { ref, watch } from 'vue'
 import {
@@ -71,19 +71,9 @@ onBeforeRouteLeave(() => (mode === 'api' ? true : leave()))
 onBeforeRouteUpdate(() => (mode === 'api' ? true : leave()))
 </script>
 <template>
-  <HandoverQuick v-if="serverWorkflow && readSession()?.role === 'caregiver'" />
-  <WorkflowPanel
-    v-else-if="serverWorkflow"
-    group="handovers"
-    title="交接班"
-    :context="route.query"
-    :initial-action="
-      typeof route.query.handover_id === 'string'
-        ? '/handovers/{handover_id}'
-        : '/handovers'
-    "
-    :auto-read="typeof route.query.handover_id === 'string'"
-  />
+  <HandoverWorkspace v-if="serverWorkflow" mobile :quick-composer="readSession()?.role === 'caregiver'">
+    <template #composer><HandoverQuick /></template>
+  </HandoverWorkspace>
   <section v-else class="handover-page editor-page">
     <h1>交接班</h1>
     <van-field

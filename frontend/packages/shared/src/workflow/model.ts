@@ -2,6 +2,7 @@ import contract from './contract.json'
 import { acceptDemoBatch, demoBatch } from '../demo-batch'
 import { clearSession, readSession, type Role } from '../session'
 import { sameCareSession } from './task-care-context'
+import { date as businessDateInput } from './workspace-time'
 
 export type Row = Record<string, unknown>
 export interface Schema {
@@ -566,6 +567,8 @@ export function clean(
   )
     throw new Error(`请填写有效的${label(field)}`)
   if (s.format === 'date-time') {
+    if (typeof value === 'string' && !/(Z|[+-]\d{2}:\d{2})$/.test(value))
+      return businessDateInput(value)
     const time = new Date(String(value))
     if (!Number.isFinite(time.valueOf()))
       throw new Error(`请填写有效的${label(field)}`)
@@ -708,11 +711,12 @@ export async function request(
           ? errors[detail] ||
             (typeof data?.safe_message === 'string'
               ? data.safe_message
-              : detail)
-          : JSON.stringify(detail || data)
+              : /[\u4e00-\u9fff]/.test(detail) ? detail : '操作未完成，请重试或联系主管核对。')
+          : '服务返回异常，请重试或联系主管核对。'
       throw new WorkflowRequestError(
         res.status,
         `${res.status === 409 && !errors[String(detail)] ? '资料或状态已变化，请刷新后核对。' : res.status === 503 ? 'AI暂不可用，可重试或转人工记录。' : ''}${message}`,
+        typeof detail === 'string' ? detail : undefined,
       )
     }
     if (data === null && res.status !== 204)

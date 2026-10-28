@@ -7,12 +7,12 @@
   font-synthesis: none;
   color-scheme: light;
   --el-color-primary: var(--hl-primary, #1767cf);
-  --el-color-primary-light-3: #968bcf;
-  --el-color-primary-light-5: #b4acdb;
-  --el-color-primary-light-7: #d2cde9;
-  --el-color-primary-light-8: #e1ddef;
-  --el-color-primary-light-9: #eeebfa;
-  --el-color-primary-dark-2: #544792;
+  --el-color-primary-light-3: #5b9f8e;
+  --el-color-primary-light-5: #8abbae;
+  --el-color-primary-light-7: #b9d6cf;
+  --el-color-primary-light-8: #d0e4df;
+  --el-color-primary-light-9: #edf7f2;
+  --el-color-primary-dark-2: #105e4b;
   --el-color-success: var(--hl-success, #14765e);
   --el-color-warning: var(--hl-warning, #94641b);
   --el-color-danger: var(--hl-danger, #ba403b);
@@ -510,7 +510,11 @@ button.icon-button:hover {
   border-top: 1px solid var(--hl-border, #dce3e7);
   border-bottom: 1px solid var(--hl-border, #dce3e7);
 }
-.task-metrics > div {
+.task-metrics > button {
+  min-height: 44px;
+  background: var(--hl-surface);
+  border: 0;
+  text-align: left;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -518,10 +522,10 @@ button.icon-button:hover {
   padding: 0 24px;
   border-right: 1px solid var(--hl-border, #dce3e7);
 }
-.task-metrics > div:first-child {
+.task-metrics > button:first-child {
   padding-left: 0;
 }
-.task-metrics > div:last-child {
+.task-metrics > button:last-child {
   border-right: 0;
   padding-right: 0;
 }
@@ -596,6 +600,21 @@ button.icon-button:hover {
 }
 .elder-table-link:hover .table-primary {
   color: var(--hl-primary, #1767cf);
+}
+.elder-name-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+}
+.elder-name-link:hover,
+.elder-name-link:focus-visible {
+  color: var(--hl-primary, #1767cf);
+  text-decoration: underline;
 }
 .bed-label {
   color: var(--hl-brand, #14765e);
@@ -1165,7 +1184,7 @@ input[type='file']::file-selector-button {
   .admin-main {
     padding: 24px;
   }
-  .task-metrics > div {
+  .task-metrics > button {
     flex-direction: column;
     align-items: flex-start;
     gap: 8px;
@@ -1318,14 +1337,14 @@ input[type='file']::file-selector-button {
     row-gap: 20px;
     padding: 16px 0;
   }
-  .task-metrics > div {
+  .task-metrics > button {
     padding: 0 16px;
   }
-  .task-metrics > div:nth-child(3) {
+  .task-metrics > button:nth-child(3) {
     border-right: 0;
     padding-right: 0;
   }
-  .task-metrics > div:nth-child(4) {
+  .task-metrics > button:nth-child(4) {
     padding-left: 0;
   }
   .task-metrics strong {

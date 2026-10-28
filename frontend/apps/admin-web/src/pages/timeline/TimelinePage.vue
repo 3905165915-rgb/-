@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   compactReference,
@@ -11,6 +11,7 @@ import QueryFeedback from '../../components/QueryFeedback.vue'
 const route = useRoute()
 const router = useRouter()
 const tasks = useTasks()
+const search = ref('')
 const itemId = computed(() =>
   typeof route.params.id === 'string' ? route.params.id : '',
 )
@@ -21,6 +22,8 @@ const items = computed(() => [
       .map((task) => [task.itemId!, { id: task.itemId!, title: task.title }]),
   ).values(),
 ])
+const recentItems = computed(() => items.value.filter(item => !search.value.trim() ||
+  (item.title+' '+item.id).toLowerCase().includes(search.value.trim().toLowerCase())))
 const timeline = useTimeline(() => itemId.value)
 const timelineGroups = computed(() => {
   const events = (timeline.data.value ?? []).map((event) => ({
@@ -51,6 +54,7 @@ function select(value: string) {
           <el-select
             :model-value="itemId"
             clearable
+            filterable
             placeholder="请选择事项"
             @change="select"
           >
@@ -70,10 +74,13 @@ function select(value: string) {
         :loading="tasks.isPending.value"
         :error="tasks.error.value"
         @retry="tasks.refetch()"
-      /><el-empty
-        v-if="!itemId && !tasks.isPending.value && !tasks.error.value"
-        description="请选择有事项编号的任务"
-      /><template v-if="itemId">
+      /><section v-if="!itemId && !tasks.isPending.value && !tasks.error.value" aria-label="可回放事项">
+        <h2>可回放事项</h2><p>从已载入且具有明确事项关联的任务进入；事件顺序以服务器登记时间为准。</p>
+        <el-input v-model="search" placeholder="搜索事项标题或编号" clearable />
+        <p v-if="!recentItems.length">{{items.length ? '没有匹配事项，请调整搜索。' : '尚无可回放的关联事项。'}}</p>
+        <ul><li v-for="item in recentItems.slice(0, 20)" :key="item.id"><RouterLink :to="'/timeline/'+encodeURIComponent(item.id)">{{item.title}}</RouterLink></li></ul>
+        <p v-if="recentItems.length > 20">显示前 20 项，共 {{recentItems.length}} 项；可输入标题缩小范围。</p>
+      </section><template v-if="itemId">
         <details>
           <summary>事项标识</summary>
           <p>{{ compactReference(itemId) }}</p>

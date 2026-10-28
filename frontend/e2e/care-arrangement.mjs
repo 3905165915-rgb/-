@@ -210,10 +210,8 @@ const guidance = (page) =>
   })
 async function arrangement(page) {
   await page.goto(`${base}/admin/care-plan?elder=${elder.id}`)
-  const panel = page.getByRole('region', { name: '三步照护安排', exact: true })
-  await panel
-    .getByRole('button', { name: '下一步：安排服务', exact: true })
-    .click()
+  const panel = page.getByRole('region', { name: '照护安排', exact: true })
+  await panel.getByRole('button', { name: /^日常提示/ }).waitFor()
   return panel
 }
 function mockArrangement({ path, body, respond }) {
@@ -267,10 +265,8 @@ try {
         .getByLabel('照护提示', { exact: true })
         .fill('最后一句刷新后仍保留')
       await page.reload()
-      panel = page.getByRole('region', { name: '三步照护安排', exact: true })
-      await panel
-        .getByRole('button', { name: '下一步：安排服务', exact: true })
-        .click()
+      panel = page.getByRole('region', { name: '照护安排', exact: true })
+      await panel.getByRole('button', { name: /^日常提示/ }).waitFor()
       assert.equal(
         await panel.getByLabel('照护提示', { exact: true }).inputValue(),
         '最后一句刷新后仍保留',

@@ -2,14 +2,27 @@
 import { formatBusinessTime } from '@hulao/shared'
 import WorkflowPanel from '@hulao/shared/workflow'
 import CareAssignments from './CareAssignments.vue'
-import { computed, ref } from 'vue'
-import { ArrowUpRight, RefreshCw, RotateCcw, Search } from 'lucide-vue-next'
+import { computed, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { RefreshCw, RotateCcw, Search } from 'lucide-vue-next'
 import { mode, useElders } from '../../services/data'
 import QueryFeedback from '../../components/QueryFeedback.vue'
 const elders = useElders()
-const keyword = ref('')
+const route = useRoute(), router = useRouter()
+const keyword = ref(typeof route.query.q === 'string' ? route.query.q : '')
 const creating = ref(false)
-const status = ref('')
+const assignmentsOpen = ref(false)
+const status = ref(typeof route.query.status === 'string' ? route.query.status : '')
+watch(() => route.query, query => {
+  keyword.value = typeof query.q === 'string' ? query.q : ''
+  status.value = typeof query.status === 'string' ? query.status : ''
+})
+watch([keyword, status], () => {
+  void router.replace({ query: { ...route.query, q: keyword.value || undefined, status: status.value || undefined } })
+})
+function openElder(id: string) {
+  void router.push({ path: '/elders/' + encodeURIComponent(id), query: { list_q: keyword.value || undefined, list_status: status.value || undefined } })
+}
 function resetFilters() {
   keyword.value = ''
   status.value = ''
@@ -47,11 +60,20 @@ const rows = computed(() =>
       title="新建与维护老人档案"
       @changed="elders.refetch()"
     />
-    <CareAssignments v-if="mode === 'api'" @changed="elders.refetch()" />
+    <el-button
+      v-if="mode === 'api'"
+      class="assignment-toggle"
+      @click="assignmentsOpen = !assignmentsOpen"
+      >{{ assignmentsOpen ? '收起照护分配' : '管理照护分配' }}</el-button
+    >
+    <CareAssignments
+      v-if="mode === 'api' && assignmentsOpen"
+      @changed="elders.refetch()"
+    />
     <div class="data-section">
       <el-form inline class="filter-bar">
         <el-form-item label="搜索">
-          <el-input v-model="keyword" placeholder="姓名、编号或床位" clearable>
+          <el-input v-model="keyword" placeholder="姓名或床位" clearable>
             <template #prefix>
               <Search :size="16" aria-hidden="true" />
             </template>
@@ -88,13 +110,16 @@ const rows = computed(() =>
             : '暂无老人档案'
         "
       >
-        <el-table-column label="姓名 / 编号" min-width="180">
+        <el-table-column label="姓名" min-width="180">
           <template #default="{ row }">
             <div class="table-primary">
-              {{ row.name }}
-            </div>
-            <div class="table-secondary">
-              {{ row.id }}
+              <button
+                type="button"
+                class="elder-name-link"
+                @click="openElder(row.id)"
+              >
+                {{ row.name || '姓名未提供' }}
+              </button>
             </div>
           </template> </el-table-column
         ><el-table-column
@@ -129,12 +154,11 @@ const rows = computed(() =>
             <el-button
               link
               type="primary"
-              class="icon-button"
               title="查看老人档案"
               aria-label="查看老人档案"
-              @click="$router.push('/elders/' + encodeURIComponent(row.id))"
+              @click="openElder(row.id)"
             >
-              <ArrowUpRight :size="18" aria-hidden="true" />
+              查看档案
             </el-button>
           </template>
         </el-table-column>

@@ -10,7 +10,6 @@ import {
 } from './workspace-action'
 import { useWorkspaceScope } from './workspace-scope'
 import { localTime } from './workspace-time'
-import ElderAssessment from './ElderAssessment.vue'
 import './elder-workspace.css'
 import { careScenes } from './task-care-context'
 import {
@@ -31,11 +30,6 @@ import {
 } from './care-arrangement'
 const props = defineProps<{ elderId: string; mobile?: boolean }>()
 const emit = defineEmits<{ changed: [] }>()
-const oneOffPath = computed(() =>
-  !props.mobile
-    ? { path: '/tasks', query: { create: '1', elder: props.elderId } }
-    : { path: '/tasks/new', query: { elder: props.elderId } },
-)
 interface ServiceLine extends Row {
   key: string
   title: string
@@ -48,7 +42,7 @@ interface ServiceLine extends Row {
 const scope = useWorkspaceScope()
 const { active } = scope
 const ctx = ref<Row | null>(null),
-  step = ref(1),
+  step = ref(2),
   error = ref(''),
   loading = ref(false)
 const contentType = ref<CareContentType | ''>('')
@@ -349,11 +343,6 @@ async function confirm() {
 watch(shiftId, () => {
   if (restoring || !ctx.value) return
   if (!staff.value.some((s) => s.id === assignedTo.value)) assignedTo.value = ''
-  serviceDate.value = localTime(new Date()).slice(0, 10)
-  title.value = '日常照护安排'
-  goal.value = '先询问本人当次意愿，尊重生活习惯并记录实际结果。'
-  starts.value = localTime(new Date()).slice(0, 10)
-  ends.value = localTime(new Date(Date.now() + 6 * 86400000)).slice(0, 10)
 })
 watch(
   () => props.elderId,
@@ -364,7 +353,7 @@ watch(
     contentType.value = ''
     shiftId.value = ''
     assignedTo.value = ''
-    step.value = 1
+    step.value = 2
     preview.value = null
     saved.value = null
     restoreDraft()
@@ -374,7 +363,7 @@ watch(
 )
 function arrangeAgain() {
   saved.value = null
-  step.value = 1
+  step.value = 2
   void load()
 }
 function revisePreview() {
@@ -387,11 +376,11 @@ onBeforeUnmount(() => epoch++)
   <section
     v-if="active && scope.management"
     class="workspace-panel"
-    aria-label="三步照护安排"
+    aria-label="照护安排"
   >
     <header>
       <h3>照护安排</h3>
-      <span>了解情况 → 安排服务 → 预览确认</span>
+      <span>安排内容 · 影响预览 · 确认</span>
     </header>
     <p
       v-if="error || saveError || draftError"
@@ -435,31 +424,20 @@ onBeforeUnmount(() => epoch++)
         核实上次安排
       </button>
       <fieldset :disabled="busy || loading || !!pending">
-        <template v-if="step === 1 && ctx">
-          <h4>第一步：了解 {{ (ctx.elder as Row).name }}</h4>
-          <p v-if="ctx.assessment">已带入有效生活能力评估，无需重复填写。</p>
+        <template v-if="step === 2">
+          <h4>安排内容</h4>
+          <p v-if="ctx?.assessment">已带入当前有效评估。</p>
           <p v-if="confirmedMemories.length">
-            已带入有效个性化信息，本人当次意愿优先。
+            已带入已确认的个性化信息；本人当次意愿优先。
           </p>
-          <ul>
+          <ul v-if="confirmedMemories.length">
             <li v-for="memory in confirmedMemories" :key="String(memory.id)">
               {{ memory.content }}
             </li>
           </ul>
-          <template v-if="!ctx.assessment"
-            ><p>还需补充本次观察，未知项目保持待观察。</p>
-            <ElderAssessment :elder-id="elderId" /><button
-              type="button"
-              @click="load"
-            >
-              评估完成，重新核对
-            </button></template
-          >
-          <RouterLink :to="oneOffPath">确需交付和追踪？直接新建任务</RouterLink>
-          <button type="button" @click="step = 2">下一步：安排服务</button>
-        </template>
-        <template v-if="step === 2">
-          <h4>第二步：先确认采用方式</h4>
+          <p v-if="!ctx?.assessment" class="workspace-warning">
+            尚无有效评估。日常提示和本次提醒可继续；需要任务排期时请先补齐有效评估。
+          </p>
           <p>AI 推荐只作为参考，请由工作人员确认；未确认前不会进入任务表单。</p>
           <div class="content-type-grid" aria-label="采用方式">
             <button
@@ -640,14 +618,13 @@ onBeforeUnmount(() => epoch++)
             </p>
           </template>
           <div class="workspace-actions">
-            <button type="button" @click="step = 1">上一步</button>
             <button type="button" :disabled="!contentType" @click="inspect">
               预览安排
             </button>
           </div>
         </template>
         <template v-if="step === 3 && preview">
-          <h4>第三步：预览后确认</h4>
+          <h4>确认本次安排的影响</h4>
           <p v-if="contentType === 'followup_task'">
             本次仅生成今日所选班次的任务。后续日期需继续安排，或由主管另行授权自动排期。
           </p>

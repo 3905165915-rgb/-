@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { listAll, request, type Row } from '../../../../../packages/shared/src/workflow/model'
 import { readSession } from '../../../../../packages/shared/src/session'
 import { sameCareSession } from '../../../../../packages/shared/src/workflow/task-care-context'
+import { date as businessDate } from '../../../../../packages/shared/src/workflow/workspace-time'
 import { useElders } from '../../services/data'
 
 const emit = defineEmits<{ changed: [] }>()
@@ -54,7 +55,7 @@ function restore() {
   } catch { recoveryProblem.value = '本机会话恢复数据异常，已暂停创建和撤销；请核对服务器安排后再操作。' }
 }
 function localInput(time: number) {
-  return new Date(time - new Date(time).getTimezoneOffset() * 60000).toISOString().slice(0, 16)
+  return new Date(time + 8 * 60 * 60 * 1000).toISOString().slice(0, 16)
 }
 function elderLabel(id: string) { const elder = elders.data.value?.find(row => row.id === id); return elder ? `${elder.name} · ${elder.bedLabel || '床位待核对'}` : '老人信息待核对' }
 function caregiverLabel(id: string) { return String(staff.value.find(row => row.id === id)?.display_name || '护理员信息待核对') }
@@ -85,7 +86,9 @@ async function assign() {
   if (!elderId.value || !caregiverId.value || !reason.value.trim() || !startAt.value || !endAt.value) {
     error.value = '请完整填写老人、护理员、有效期和安排原因。'; return
   }
-  const start = new Date(startAt.value), end = new Date(endAt.value)
+  let start: Date, end: Date
+  try { start = new Date(businessDate(startAt.value)); end = new Date(businessDate(endAt.value)) }
+  catch { error.value = '请填写有效的北京时间安排区间。'; return }
   if (!createAttempt.value && (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || start >= end || end <= new Date())) {
     error.value = '有效期必须是未来时间，且结束时间晚于开始时间。'; return
   }

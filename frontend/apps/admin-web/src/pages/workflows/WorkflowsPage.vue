@@ -8,6 +8,7 @@ import { mode } from '../../services/data'
 import CareSafety from '@hulao/shared/care-safety'
 import ElderRecordEntry from '../../../../../packages/shared/src/workflow/ElderRecordEntry.vue'
 import ChangeReviewCenter from '../../../../../packages/shared/src/workflow/ChangeReviewCenter.vue'
+import HandoverWorkspace from '../../../../../packages/shared/src/workflow/HandoverWorkspace.vue'
 const route = useRoute()
 const group = computed(() => String(route.params.group || 'records'))
 const quickRecord = computed(
@@ -51,6 +52,7 @@ const titles: Record<string, string> = {
     <DemoRecordsHub
       v-else-if="group === 'records' && mode === 'demo'"
     /><DemoHandovers v-else-if="group === 'handovers' && mode === 'demo'" />
+    <HandoverWorkspace v-else-if="group === 'handovers' && !route.query.action" />
     <template v-else-if="quickRecord">
       <ElderRecordEntry
         :key="String(route.query.elder || route.query.elder_id || 'choose')"
@@ -72,7 +74,10 @@ const titles: Record<string, string> = {
         :initial-action="
           typeof route.query.action === 'string' ? route.query.action : ''
         "
-        :auto-read="route.query.read === '1'"
+        :auto-read="
+          route.query.read === '1' ||
+          (!route.query.action && ['quality', 'shifts', 'handovers', 'reports', 'staff'].includes(group))
+        "
       />
     </template>
   </section>
