@@ -4,6 +4,7 @@ import TaskExecution from '../../../../../packages/shared/src/workflow/TaskExecu
 import TaskCareContext from '@hulao/shared/task-care-context'
 import DemoServiceHints from '../../../../../packages/shared/src/workflow/DemoServiceHints.vue'
 import { computed, ref, watch } from 'vue'
+const attachmentInput = ref<HTMLInputElement | null>(null)
 const contextRevision = ref(0)
 const taskExecution = ref<{ canClose: () => boolean }>()
 function refreshTaskContext() {
@@ -329,17 +330,30 @@ async function saveAsNew() {
           autosize
           placeholder="补充需要关注的信息"
           @update:model-value="changed"
-        /><label class="file-field"
-          ><span class="field-label-with-icon"
-            ><Paperclip :size="18" aria-hidden="true" />本机附件</span
-          ><span class="muted">最多3个，每个不超过5MB</span
-          ><input
+        />
+        <div class="file-field">
+          <span class="field-label-with-icon">
+            <Paperclip :size="18" aria-hidden="true" />本机附件
+          </span>
+          <span class="muted">最多3个，每个不超过5MB</span>
+          <van-button
+            size="small"
+            native-type="button"
+            :disabled="readonly"
+            @click="attachmentInput?.click()"
+          >
+            选择文件
+          </van-button>
+          <input
+            ref="attachmentInput"
             type="file"
+            class="file-input-hidden"
             multiple
             :disabled="readonly"
             aria-label="选择本机附件"
             @change="addFiles"
-        /></label>
+          />
+        </div>
         <div
           v-for="(file, index) in form.attachments"
           :key="index"
@@ -474,6 +488,22 @@ async function saveAsNew() {
   </section>
 </template>
 <style scoped>
+.file-field {
+  min-width: 0;
+}
+.file-field > .van-button {
+  align-self: flex-start;
+}
+.file-field .file-input-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  clip-path: inset(50%);
+  overflow: hidden;
+  white-space: nowrap;
+}
 .task-result {
   margin-block: 16px;
   padding: 12px;

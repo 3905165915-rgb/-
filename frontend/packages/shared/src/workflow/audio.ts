@@ -1,3 +1,5 @@
+import { SpeechError } from './speech-response'
+
 export function pcmWav(samples: Float32Array, sampleRate = 16000): Blob {
   if (!samples.length || samples.length > sampleRate * 60)
     throw new Error('录音必须在1至60秒内')
@@ -30,15 +32,30 @@ export async function toCloudWav(blob: Blob): Promise<Blob> {
   const context = new AudioContext()
   try {
     const input = await context.decodeAudioData(await blob.arrayBuffer())
-    if (input.duration > 60.2) throw new Error('录音最多60秒，请缩短后重试')
+    if (input.duration > 60.2)
+      throw new SpeechError('录音最多60秒，请缩短后重试。')
+    if (input.duration < 1)
+      throw new SpeechError('录音不足1秒，请说完后再停止录音。')
     const targetLength = Math.min(960000, Math.ceil(input.duration * 16000))
-    if (!targetLength) throw new Error('录音为空，请重试')
+    if (!targetLength) throw new SpeechError('录音为空，请重试。')
     const offline = new OfflineAudioContext(1, targetLength, 16000)
     const source = offline.createBufferSource()
     source.buffer = input
     source.connect(offline.destination)
     source.start()
-    return pcmWav((await offline.startRendering()).getChannelData(0))
+    const samples = (await offline.startRendering()).getChannelData(0)
+    let energy = 0
+    for (const sample of samples) energy += sample * sample
+    if (Math.sqrt(energy / samples.length) < 0.0005)
+      throw new SpeechError(
+        '录音几乎没有声音，本次未识别。请检查麦克风并靠近说话。',
+      )
+    return pcmWav(samples)
+  } catch (error) {
+    if (error instanceof SpeechError) throw error
+    throw new SpeechError(
+      '浏览器无法读取这段录音，请重新录制或导入有效语音文件。',
+    )
   } finally {
     await context.close()
   }

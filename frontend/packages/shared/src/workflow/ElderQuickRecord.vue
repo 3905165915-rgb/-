@@ -1,9 +1,18 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { Mic, RefreshCw, Save, ShieldCheck } from 'lucide-vue-next'
+import {
+  Mic,
+  RefreshCw,
+  Save,
+  ShieldCheck,
+  Square,
+  Upload,
+} from 'lucide-vue-next'
 import { readSession } from '../session'
 import { request, listAll, type Row } from './model'
 import { toCloudWav } from './audio'
+import { useVoiceRecorder } from './voice-recorder'
+import { readSpeechResponse, speechErrorMessage } from './speech-response'
 import {
   object,
   rows,
@@ -48,6 +57,8 @@ const loading = ref(false),
   error = ref(''),
   notice = ref(''),
   transcribing = ref(false)
+const audioInput = ref<HTMLInputElement | null>(null)
+const audioFileName = ref('')
 const action = useWorkspaceAction(() => props.elderId, 'record')
 const confirmation = useWorkspaceAction(
   () => props.elderId,
@@ -74,9 +85,19 @@ const eligible = computed(
 )
 const analysis = computed(() => result.value?.analysis || null)
 let epoch = 0
-let recorder: MediaRecorder | undefined
-let stream: MediaStream | undefined
-let deadline: ReturnType<typeof setTimeout> | undefined
+const voice = useVoiceRecorder({
+  onAudio: transcribe,
+  onError: (message) => {
+    error.value = message
+  },
+})
+const {
+  recording,
+  starting,
+  finishing,
+  seconds,
+  locked: recordingLocked,
+} = voice
 let transcription: AbortController | undefined
 let pollTimer: ReturnType<typeof setTimeout> | undefined
 const analysisKey = computed(() => key.value + ':analysis')
@@ -232,6 +253,7 @@ function saved(value: InlineRecordResponse | null) {
   emit('saved', value.record)
 }
 async function save() {
+  if (recording.value || recordingLocked.value || transcribing.value) return
   if (pending.value) {
     saved(await action.retry(validate))
     return
@@ -358,12 +380,17 @@ async function confirm() {
   }
 }
 async function transcribe(blob: Blob) {
-  if (!scope.valid()) return
+  if (!scope.valid() || transcribing.value) return
+  const ticket = epoch
+  error.value = ''
+  notice.value = ''
   transcribing.value = true
-  transcription = new AbortController()
-  const timeout = setTimeout(() => transcription?.abort(), 90000)
+  const controller = new AbortController()
+  transcription = controller
+  const timeout = setTimeout(() => controller.abort(), 90000)
   try {
     const wav = await toCloudWav(blob)
+    if (!alive(ticket) || controller.signal.aborted) return
     const response = await fetch(
       (import.meta.env.VITE_API_BASE_URL || '/api/v1').replace(/\/$/, '') +
         '/speech/transcriptions',
@@ -374,65 +401,48 @@ async function transcribe(blob: Blob) {
           'Content-Type': 'audio/wav',
         },
         body: wav,
-        signal: transcription.signal,
+        signal: controller.signal,
       },
     )
-    const data = await response.json()
-    if (!response.ok)
-      throw new Error('语音识别失败，可保留当前文字并手工补录。')
-    if (typeof data.text !== 'string' || !data.text.trim())
-      throw new Error('语音转写没有可核对的文字。')
+    const data = await readSpeechResponse(response)
+    if (!alive(ticket)) return
     text.value = [text.value, data.text.trim()].filter(Boolean).join('\n')
     notice.value = '转写文本可编辑；核对后再保存正式记录。'
   } catch (failure) {
-    error.value = (failure as Error).message
+    if (alive(ticket)) error.value = speechErrorMessage(failure)
   } finally {
     clearTimeout(timeout)
-    transcribing.value = false
+    if (alive(ticket)) transcribing.value = false
   }
 }
 async function uploadAudio(event: Event) {
   const input = event.target as HTMLInputElement,
     file = input.files?.[0]
   try {
-    if (file) await transcribe(file)
+    if (file) {
+      audioFileName.value = file.name
+      await transcribe(file)
+    }
   } finally {
     input.value = ''
   }
 }
-async function toggleRecording() {
-  if (recorder?.state === 'recording') {
-    recorder.stop()
-    return
-  }
+function toggleRecording() {
   error.value = ''
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-    recorder = new MediaRecorder(stream)
-    const chunks: Blob[] = []
-    recorder.ondataavailable = (event) => {
-      if (event.data.size) chunks.push(event.data)
-    }
-    recorder.onstop = async () => {
-      clearTimeout(deadline)
-      stream?.getTracks().forEach((track) => track.stop())
-      await transcribe(
-        new Blob(chunks, { type: recorder?.mimeType || 'audio/webm' }),
-      )
-    }
-    recorder.start()
-    deadline = setTimeout(() => {
-      if (recorder?.state === 'recording') recorder.stop()
-    }, 60000)
-  } catch {
-    stream?.getTracks().forEach((track) => track.stop())
-    error.value = '无法使用麦克风，可继续文字录入。'
-  }
+  notice.value = ''
+  void voice.toggle()
+}
+function cancelAudio() {
+  voice.cancel()
+  transcription?.abort()
+  transcribing.value = false
+  audioFileName.value = ''
 }
 watch(
   () => props.elderId,
   () => {
     epoch++
+    cancelAudio()
     clearTimeout(pollTimer)
     result.value = null
     receipt = null
@@ -477,6 +487,7 @@ watch(
 watch(active, (value) => {
   if (!value) {
     epoch++
+    cancelAudio()
     result.value = null
     text.value = ''
     attachmentIds.value = []
@@ -485,10 +496,7 @@ watch(active, (value) => {
 onBeforeUnmount(() => {
   epoch++
   clearTimeout(pollTimer)
-  transcription?.abort()
-  clearTimeout(deadline)
-  if (recorder?.state === 'recording') recorder.stop()
-  stream?.getTracks().forEach((track) => track.stop())
+  cancelAudio()
 })
 </script>
 
@@ -565,24 +573,57 @@ onBeforeUnmount(() => {
       <div class="workspace-actions record-input-actions">
         <button
           type="button"
-          :disabled="busy || !!pending || transcribing"
+          :disabled="busy || !!pending || transcribing || recordingLocked"
           @click="toggleRecording"
         >
-          <Mic :size="16" aria-hidden="true" />{{
-            transcribing ? '正在转写…' : '录音（最长60秒）'
+          <Square v-if="recording" :size="16" aria-hidden="true" />
+          <Mic v-else :size="16" aria-hidden="true" />{{
+            starting
+              ? '正在打开麦克风…'
+              : transcribing || finishing
+                ? '正在转写…'
+                : recording
+                  ? `停止录音（${seconds}秒）`
+                  : '开始录音（最长60秒）'
           }}
         </button>
-        <label class="audio-upload"
-          >导入语音文件<input
+        <div class="audio-upload">
+          <button
+            type="button"
+            :disabled="
+              busy || !!pending || transcribing || recording || recordingLocked
+            "
+            @click="audioInput?.click()"
+          >
+            <Upload :size="16" aria-hidden="true" />导入语音文件
+          </button>
+          <input
+            ref="audioInput"
             type="file"
+            class="audio-file-input"
+            aria-label="导入语音文件"
             accept="audio/wav,.wav"
-            :disabled="busy || !!pending || transcribing"
+            :disabled="
+              busy || !!pending || transcribing || recording || recordingLocked
+            "
             @change="uploadAudio"
-        /></label>
+          />
+          <span
+            v-if="audioFileName"
+            class="audio-file-name"
+            :title="audioFileName"
+            >{{ audioFileName }}</span
+          >
+        </div>
         <button
           type="submit"
           :disabled="
-            busy || loading || (!pending && (!text.trim() || !eligible))
+            busy ||
+            loading ||
+            transcribing ||
+            recording ||
+            recordingLocked ||
+            (!pending && (!text.trim() || !eligible))
           "
         >
           <Save :size="16" aria-hidden="true" />{{
@@ -590,6 +631,9 @@ onBeforeUnmount(() => {
           }}
         </button>
       </div>
+      <p v-if="recording" role="status">
+        正在录音 {{ seconds }} 秒，请说完后点击“停止录音”。
+      </p>
       <span v-if="pending" class="muted"
         >原提交已锁定；重试会复用原请求编号和内容。</span
       >
@@ -864,18 +908,46 @@ onBeforeUnmount(() => {
   font: inherit;
 }
 .record-input-actions {
-  align-items: center;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
+}
+.record-input-actions > * {
+  min-width: 0;
+  max-width: 100%;
+}
+.record-input-actions button {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  white-space: normal;
 }
 .audio-upload {
-  display: inline-flex;
-  align-items: center;
-  min-height: 44px;
-  padding: 8px 12px;
-  border: 1px solid var(--hl-border, #cbd9cf);
-  border-radius: 6px;
+  position: relative;
+  display: grid;
+  min-width: 0;
+  gap: 5px;
 }
-.audio-upload input {
-  width: min(155px, 45vw);
+.audio-upload .audio-file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  clip-path: inset(50%);
+  overflow: hidden;
+  white-space: nowrap;
+}
+.audio-file-name {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--hl-muted, #65736b);
 }
 .record-analysis {
   border-top: 1px solid var(--hl-border, #dce6de);
@@ -892,6 +964,10 @@ onBeforeUnmount(() => {
   color: var(--hl-muted, #65736b);
 }
 @media (max-width: 560px) {
+  .record-input-actions {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
   .record-context {
     grid-template-columns: minmax(0, 1fr);
   }

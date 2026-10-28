@@ -13,6 +13,11 @@ import {
   type Row,
 } from '../../../../packages/shared/src/workflow/model'
 import { toCloudWav } from '../../../../packages/shared/src/workflow/audio'
+import { useVoiceRecorder } from '../../../../packages/shared/src/workflow/voice-recorder'
+import {
+  readSpeechResponse,
+  speechErrorMessage,
+} from '../../../../packages/shared/src/workflow/speech-response'
 import {
   object,
   rows,
@@ -55,7 +60,19 @@ const submitting = ref(false)
 const transcribing = ref(false)
 const error = ref('')
 const notice = ref('')
-const recording = ref(false)
+const voice = useVoiceRecorder({
+  onAudio: transcribe,
+  onError: (message) => {
+    error.value = message
+  },
+})
+const {
+  recording,
+  starting,
+  finishing,
+  seconds,
+  locked: recordingLocked,
+} = voice
 const reviewMode = ref<'ai' | 'manual' | ''>('')
 const reviewedNote = ref('')
 const reviewChanged = computed(
@@ -68,9 +85,9 @@ const draftKey = computed(() => {
     JSON.stringify([current?.accountKey, current?.userId, current?.role])
   )
 })
-let recorder: MediaRecorder | undefined
-let stream: MediaStream | undefined
-let deadline: ReturnType<typeof setTimeout> | undefined
+let transcription: AbortController | undefined
+let disposed = false
+let speechEpoch = 0
 const sourceOptions = computed(() =>
   sourceShiftOptions(
     shifts.value,
@@ -351,13 +368,19 @@ async function manualReview() {
   }
 }
 async function transcribe(blob: Blob) {
+  if (disposed || transcribing.value) return
+  const ticket = speechEpoch
+  const controller = new AbortController()
+  transcription = controller
+  const timeout = setTimeout(() => controller.abort(), 90000)
   transcribing.value = true
   error.value = ''
   try {
     const wav = await toCloudWav(blob)
+    if (disposed || ticket !== speechEpoch || controller.signal.aborted) return
     const session = readSession()
     const response = await fetch(
-      (import.meta.env.VITE_API_BASE_URL || '/api/v1') +
+      (import.meta.env.VITE_API_BASE_URL || '/api/v1').replace(/\/$/, '') +
         '/speech/transcriptions',
       {
         method: 'POST',
@@ -366,51 +389,33 @@ async function transcribe(blob: Blob) {
           'Content-Type': 'audio/wav',
         },
         body: wav,
+        signal: controller.signal,
       },
     )
-    const body = await response.json()
-    if (!response.ok || typeof body.text !== 'string' || !body.text.trim())
-      throw new Error('语音转写不可用，请继续手工编辑交班内容。')
+    const body = await readSpeechResponse(response)
+    if (disposed || ticket !== speechEpoch) return
     note.value = [note.value, body.text].filter(Boolean).join('\n')
     notice.value = '转写已填入交班内容，请核对并编辑后再分析。'
   } catch (failure) {
-    error.value = failure instanceof Error ? failure.message : '语音转写失败。'
+    if (!disposed && ticket === speechEpoch)
+      error.value = speechErrorMessage(failure)
   } finally {
-    transcribing.value = false
+    clearTimeout(timeout)
+    if (ticket === speechEpoch) transcribing.value = false
   }
 }
-async function toggleRecording() {
+function toggleRecording() {
   error.value = ''
-  if (recording.value) {
-    recorder?.stop()
-    recording.value = false
-    return
-  }
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-    recorder = new MediaRecorder(stream)
-    const chunks: Blob[] = []
-    recorder.ondataavailable = (event) => {
-      if (event.data.size) chunks.push(event.data)
-    }
-    recorder.onstop = async () => {
-      clearTimeout(deadline)
-      stream?.getTracks().forEach((track) => track.stop())
-      stream = undefined
-      await transcribe(
-        new Blob(chunks, { type: recorder?.mimeType || 'audio/webm' }),
-      )
-    }
-    recorder.start()
-    recording.value = true
-    deadline = setTimeout(() => recorder?.stop(), 60000)
-  } catch {
-    stream?.getTracks().forEach((track) => track.stop())
-    stream = undefined
-    error.value = '无法使用麦克风，可继续键入交班内容。'
-  }
+  void voice.toggle()
+}
+function cancelAudio() {
+  speechEpoch++
+  voice.cancel()
+  transcription?.abort()
+  transcribing.value = false
 }
 async function analyze() {
+  if (recording.value || recordingLocked.value || transcribing.value) return
   if (
     !!shiftIssue.value ||
     busy.value ||
@@ -470,6 +475,7 @@ function canAccept(id: string) {
   )
 }
 async function submit() {
+  if (recording.value || recordingLocked.value || transcribing.value) return
   if (
     !handover.value ||
     handover.value.status !== 'draft' ||
@@ -532,9 +538,10 @@ watch([sourceShiftId, targetShiftId, note], persistDraft)
 onMounted(() => {
   void load()
 })
+watch([sourceShiftId, targetShiftId], cancelAudio)
 onBeforeUnmount(() => {
-  clearTimeout(deadline)
-  stream?.getTracks().forEach((track) => track.stop())
+  disposed = true
+  cancelAudio()
 })
 </script>
 
@@ -631,13 +638,22 @@ onBeforeUnmount(() => {
           analyzing ||
           submitting ||
           transcribing ||
+          recordingLocked ||
           (!!handover && handover.status !== 'draft')
         "
         @click="toggleRecording"
       >
         <Square v-if="recording" :size="17" aria-hidden="true" />
         <Mic v-else :size="17" aria-hidden="true" />
-        {{ recording ? '停止录音' : transcribing ? '正在转写…' : '语音转写' }}
+        {{
+          starting
+            ? '正在打开麦克风…'
+            : recording
+              ? `停止录音（${seconds}秒）`
+              : transcribing || finishing
+                ? '正在转写…'
+                : '开始录音'
+        }}
       </button>
       <button
         type="button"
@@ -646,6 +662,7 @@ onBeforeUnmount(() => {
           analyzing ||
           submitting ||
           transcribing ||
+          recordingLocked ||
           recording ||
           !note.trim() ||
           !!shiftIssue ||
@@ -662,6 +679,7 @@ onBeforeUnmount(() => {
           analyzing ||
           submitting ||
           transcribing ||
+          recordingLocked ||
           recording ||
           !note.trim() ||
           !!shiftIssue ||

@@ -11,6 +11,8 @@ import {
   type PendingWrite,
 } from './recovery'
 import { toCloudWav } from './audio'
+import { useVoiceRecorder } from './voice-recorder'
+import { readSpeechResponse, speechErrorMessage } from './speech-response'
 import { validateCatalog } from './catalogs'
 import {
   manualFallback,
@@ -298,7 +300,13 @@ function formKey() {
   )
 }
 function restoreForm(preferredArea?: string) {
-  if (busy.value || recording.value || transcribing.value) return
+  if (
+    busy.value ||
+    recording.value ||
+    recordingLocked.value ||
+    transcribing.value
+  )
+    return
   restoring = true
   try {
     const saved = recovery?.restore()
@@ -375,13 +383,25 @@ function checkOtherWindow(event: StorageEvent) {
   }
 }
 function beforeUnload(event: BeforeUnloadEvent) {
-  if (busy.value || recording.value || transcribing.value || !persistForm()) {
+  if (
+    busy.value ||
+    recording.value ||
+    recordingLocked.value ||
+    transcribing.value ||
+    !persistForm()
+  ) {
     event.preventDefault()
     event.returnValue = ''
   }
 }
 function canLeave() {
-  return !busy.value && !recording.value && !transcribing.value && persistForm()
+  return (
+    !busy.value &&
+    !recording.value &&
+    !recordingLocked.value &&
+    !transcribing.value &&
+    persistForm()
+  )
 }
 onBeforeRouteLeave(canLeave)
 onBeforeRouteUpdate(canLeave)
@@ -727,7 +747,13 @@ function reset() {
   message.value = ''
 }
 function acceptCurrentVersions() {
-  if (frozen.value || busy.value || recording.value || transcribing.value)
+  if (
+    frozen.value ||
+    busy.value ||
+    recording.value ||
+    recordingLocked.value ||
+    transcribing.value
+  )
     return
   for (const field of Object.keys(body.value))
     if (/^(expected_.*(?:revision|fingerprint)|source_revision)$/.test(field))
@@ -1220,6 +1246,7 @@ function choose(op: Operation, resumeSaved = true) {
   if (
     busy.value ||
     recording.value ||
+    recordingLocked.value ||
     transcribing.value ||
     phase.value === 'pending' ||
     op.id === active.value?.id
@@ -1290,6 +1317,7 @@ function switchRecordMode(mode: 'manual' | 'assisted') {
   if (
     busy.value ||
     recording.value ||
+    recordingLocked.value ||
     transcribing.value ||
     phase.value === 'pending'
   )
@@ -1371,6 +1399,7 @@ function freshForm() {
   if (
     busy.value ||
     recording.value ||
+    recordingLocked.value ||
     transcribing.value ||
     phase.value === 'pending' ||
     !window.confirm('确认开始新操作？本机编辑内容将清空，服务器历史不会删除。')
@@ -1384,6 +1413,7 @@ function freshForm() {
   recordHistory.value = null
   historyError.value = ''
   if (props.taskCreation) {
+    cancelAudio()
     activeId.value = initialOperationId()
     selected.value = { ...props.context }
   }
@@ -1499,22 +1529,38 @@ function exportJSON(value: unknown, filename: string) {
 function download() {
   exportJSON(result.value, '照护证据链.json')
 }
-let recorder: MediaRecorder | undefined
-let stream: MediaStream | undefined
-let recordingDeadline: ReturnType<typeof setTimeout> | undefined
-const recording = ref(false)
+const voice = useVoiceRecorder({
+  onAudio: transcribeAudio,
+  onError: (message) => {
+    error.value = message
+  },
+})
+const {
+  recording,
+  starting,
+  finishing,
+  seconds,
+  locked: recordingLocked,
+} = voice
 const transcribing = ref(false)
+const audioInput = ref<HTMLInputElement | null>(null)
+const audioFileName = ref('')
+let speechEpoch = 0
 let transcription: AbortController | undefined
 let disposed = false
 async function transcribeAudio(blob: Blob) {
+  if (disposed || transcribing.value) return
+  const ticket = speechEpoch
   error.value = ''
   transcribing.value = true
-  transcription = new AbortController()
-  const timeout = setTimeout(() => transcription?.abort(), 90000)
+  const controller = new AbortController()
+  transcription = controller
+  const timeout = setTimeout(() => controller.abort(), 90000)
   try {
     const audio = await toCloudWav(blob)
+    if (disposed || ticket !== speechEpoch || controller.signal.aborted) return
     const response = await fetch(
-      (import.meta.env.VITE_API_BASE_URL || '/api/v1') +
+      (import.meta.env.VITE_API_BASE_URL || '/api/v1').replace(/\/$/, '') +
         '/speech/transcriptions',
       {
         method: 'POST',
@@ -1523,84 +1569,57 @@ async function transcribeAudio(blob: Blob) {
           'Content-Type': 'audio/wav',
         },
         body: audio,
-        signal: transcription.signal,
+        signal: controller.signal,
       },
     )
-    const data = await response.json()
-    if (disposed) return
-    if (!response.ok) {
-      if (response.status === 401) {
-        clearSession()
-        window.dispatchEvent(new Event('hulao:unauthorized'))
-      }
-      throw new Error(
-        '语音识别失败，可重试或手工录入：' + JSON.stringify(data.detail),
-      )
+    if (response.status === 401) {
+      clearSession()
+      window.dispatchEvent(new Event('hulao:unauthorized'))
     }
-    if (typeof data.text !== 'string' || !data.text.trim())
-      throw new Error('转写响应缺少有效原文，请保留录音并手工录入。')
+    const data = await readSpeechResponse(response)
+    if (disposed || ticket !== speechEpoch) return
     const target = 'text' in body.value ? 'text' : 'raw_text'
     body.value[target] = [body.value[target], data.text]
       .filter(Boolean)
       .join('\n')
     message.value = '云端转写完成，请核对原文；尚未提取或保存正式记录。'
   } catch (failure) {
-    error.value = (failure as Error).message
+    if (!disposed && ticket === speechEpoch)
+      error.value = speechErrorMessage(failure)
   } finally {
     clearTimeout(timeout)
-    transcribing.value = false
+    if (ticket === speechEpoch) transcribing.value = false
   }
 }
 async function uploadAudio(event: Event) {
-  const file = (event.target as HTMLInputElement).files?.[0]
-  if (file) await transcribeAudio(file)
-  ;(event.target as HTMLInputElement).value = ''
-}
-async function toggleRecording() {
-  error.value = ''
-  if (recording.value) {
-    recorder?.stop()
-    recording.value = false
-    return
-  }
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
   try {
-    stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-    recorder = new MediaRecorder(stream)
-    const chunks: Blob[] = []
-    recorder.ondataavailable = (event) => {
-      if (event.data.size) chunks.push(event.data)
+    if (file) {
+      audioFileName.value = file.name
+      await transcribeAudio(file)
     }
-    recorder.onstop = async () => {
-      clearTimeout(recordingDeadline)
-      recording.value = false
-      stream?.getTracks().forEach((track) => track.stop())
-      await transcribeAudio(
-        new Blob(chunks, { type: recorder?.mimeType || 'audio/webm' }),
-      )
-    }
-    recorder.start()
-    recording.value = true
-    recordingDeadline = setTimeout(() => {
-      if (recorder?.state === 'recording') recorder.stop()
-    }, 60000)
-  } catch (failure) {
-    stream?.getTracks().forEach((track) => track.stop())
-    error.value =
-      '无法使用麦克风，可继续文字录入：' + (failure as Error).message
+  } finally {
+    input.value = ''
   }
+}
+function toggleRecording() {
+  error.value = ''
+  void voice.toggle()
+}
+function cancelAudio() {
+  speechEpoch++
+  voice.cancel()
+  transcription?.abort()
+  transcribing.value = false
+  audioFileName.value = ''
 }
 onBeforeUnmount(() => {
   disposed = true
-  transcription?.abort()
+  cancelAudio()
   persistForm()
   window.removeEventListener('beforeunload', beforeUnload)
   window.removeEventListener('storage', checkOtherWindow)
-  clearTimeout(recordingDeadline)
-  if (recorder?.state === 'recording') {
-    recorder.onstop = null
-    recorder.stop()
-  }
-  stream?.getTracks().forEach((track) => track.stop())
 })
 async function initializeRecovery() {
   if (!serverMode) return
@@ -1637,6 +1656,7 @@ watch(
     props.autoRead,
   ],
   async () => {
+    cancelAudio()
     activeId.value = initialOperationId()
     result.value = null
     await initializeRecovery()
@@ -1725,7 +1745,13 @@ onMounted(async () => {
             :active-area="activeArea"
             :active-id="active.id"
             :records="group === 'records'"
-            :disabled="busy || recording || transcribing || phase === 'pending'"
+            :disabled="
+              busy ||
+              recording ||
+              recordingLocked ||
+              transcribing ||
+              phase === 'pending'
+            "
             @choose="selectMenu"
           />
         </aside>
@@ -1753,7 +1779,13 @@ onMounted(async () => {
             :active-area="activeArea"
             :active-id="active.id"
             :records="group === 'records'"
-            :disabled="busy || recording || transcribing || phase === 'pending'"
+            :disabled="
+              busy ||
+              recording ||
+              recordingLocked ||
+              transcribing ||
+              phase === 'pending'
+            "
             @choose="selectMenu"
           />
         </dialog>
@@ -1917,7 +1949,9 @@ onMounted(async () => {
                   { selected: active.path !== '/records/manual' },
                 ]"
                 :aria-pressed="active.path !== '/records/manual'"
-                :disabled="busy || frozen || recording || transcribing"
+                :disabled="
+                  busy || frozen || recording || recordingLocked || transcribing
+                "
                 @click="switchRecordMode('assisted')"
               >
                 整理后核对
@@ -1929,7 +1963,9 @@ onMounted(async () => {
                   { selected: active.path === '/records/manual' },
                 ]"
                 :aria-pressed="active.path === '/records/manual'"
-                :disabled="busy || frozen || recording || transcribing"
+                :disabled="
+                  busy || frozen || recording || recordingLocked || transcribing
+                "
                 @click="switchRecordMode('manual')"
               >
                 直接填写
@@ -2001,7 +2037,9 @@ onMounted(async () => {
               整理结果仅供核对，原文证据会保留。未经人工确认，不会生成正式记录、执行任务或发布交班。
             </p>
             <fieldset
-              :disabled="busy || frozen || recording || transcribing"
+              :disabled="
+                busy || frozen || recording || recordingLocked || transcribing
+              "
               class="wf-inputs"
             >
               <WorkflowField
@@ -2137,31 +2175,51 @@ onMounted(async () => {
                 active.method !== 'get' &&
                 ('text' in body || 'raw_text' in body)
               "
-              class="wf-toolbar"
+              class="wf-toolbar wf-audio-actions"
             >
               <button
                 type="button"
                 class="wf-secondary"
-                :disabled="busy || frozen || transcribing"
+                :disabled="busy || frozen || transcribing || recordingLocked"
                 @click="toggleRecording"
               >
                 {{
-                  recording
-                    ? '结束录音并转写'
-                    : transcribing
-                      ? '云端转写中…'
-                      : '语音录入'
+                  starting
+                    ? '正在打开麦克风…'
+                    : recording
+                      ? `停止录音（${seconds}秒）`
+                      : transcribing || finishing
+                        ? '云端转写中…'
+                        : '开始录音'
                 }}</button
-              ><label class="wf-secondary"
-                >上传录音<input
-                  aria-label="上传录音"
-                  type="file"
-                  accept="audio/*"
-                  :disabled="busy || frozen || recording || transcribing"
-                  @change="uploadAudio" /></label
-              ><span class="wf-muted"
-                >最多60秒，转写后可编辑，不自动保存。</span
+              ><button
+                type="button"
+                class="wf-secondary"
+                :disabled="
+                  busy || frozen || recording || recordingLocked || transcribing
+                "
+                @click="audioInput?.click()"
               >
+                上传录音
+              </button>
+              <input
+                ref="audioInput"
+                class="wf-audio-file-input"
+                aria-label="上传录音"
+                type="file"
+                accept="audio/*"
+                :disabled="
+                  busy || frozen || recording || recordingLocked || transcribing
+                "
+                @change="uploadAudio"
+              />
+              <span
+                v-if="audioFileName"
+                class="wf-audio-file-name"
+                :title="audioFileName"
+                >{{ audioFileName }}</span
+              >
+              <span class="wf-muted">最多60秒，转写后可编辑，不自动保存。</span>
             </div>
             <p v-if="confirm" class="wf-notice">
               {{
@@ -2335,6 +2393,41 @@ onMounted(async () => {
   </section>
 </template>
 <style scoped>
+.wf-audio-actions {
+  position: relative;
+}
+.wf-audio-actions > * {
+  min-width: 0;
+  max-width: 100%;
+}
+@media (max-width: 560px) {
+  .wf-audio-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .wf-audio-actions button {
+    width: 100%;
+    box-sizing: border-box;
+  }
+}
+.wf-audio-file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  clip-path: inset(50%);
+  overflow: hidden;
+  white-space: nowrap;
+}
+.wf-audio-file-name {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
 .wf-source-text {
   margin: 8px 0;
   padding: 12px;

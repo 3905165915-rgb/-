@@ -57,6 +57,7 @@ const locked = computed(
 )
 let epoch = 0
 const fileName = computed(() => file.value?.name || '')
+const photoInput = ref<HTMLInputElement | null>(null)
 const stateLabels: Record<string, string> = {
   processing: '识别中',
   pending_review: '待人工核对',
@@ -709,14 +710,26 @@ onBeforeUnmount(() => {
     <p v-if="!elderId" class="muted">选择老人后可添加照片。</p>
     <template v-else>
       <div v-if="!readOnly" class="photo-form">
-        <label
-          >拍照或选择照片<input
+        <div class="photo-picker">
+          <button
+            type="button"
+            class="secondary"
+            :disabled="busy || recoveryBlocked"
+            @click="photoInput?.click()"
+          >
+            <ImagePlus :size="18" aria-hidden="true" />拍照或选择照片
+          </button>
+          <input
+            ref="photoInput"
+            class="photo-file-input"
+            aria-label="拍照或选择照片"
             type="file"
             accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
             capture="environment"
             :disabled="busy || recoveryBlocked"
             @change="chooseFile"
-        /></label>
+          />
+        </div>
         <p class="muted">
           支持JPEG、PNG、WebP，单张不超过4MB；系统按实际图片内容识别格式。
         </p>
@@ -740,7 +753,7 @@ onBeforeUnmount(() => {
           alt="待上传照片本机预览"
           class="preview"
         />
-        <p v-if="fileName" class="muted">
+        <p v-if="fileName" class="muted photo-file-name" :title="fileName">
           {{ fileName }} · {{ Math.ceil((file?.size || 0) / 1024) }} KB
         </p>
         <button
@@ -1062,6 +1075,7 @@ label {
 }
 input,
 textarea {
+  box-sizing: border-box;
   width: 100%;
   min-width: 0;
   min-height: 42px;
@@ -1071,8 +1085,27 @@ textarea {
   border: 1px solid var(--hl-border, #dce3e7);
   border-radius: 6px;
 }
-input[type='file'] {
-  padding: 6px;
+.photo-picker {
+  position: relative;
+  display: grid;
+  min-width: 0;
+}
+.photo-picker .photo-file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  clip-path: inset(50%);
+  overflow: hidden;
+}
+.photo-file-name {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 textarea {
   resize: vertical;
