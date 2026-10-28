@@ -170,6 +170,15 @@ async function setup(role = 'caregiver') {
         }
         return json(state.handover)
       }
+      if (path === '/handovers/HO-inline-test/refresh') {
+        state.handover = {
+          ...state.handover,
+          revision: state.handover.revision + 1,
+          ai_summary: null,
+          handover_suggestions: [],
+        }
+        return json(state.handover)
+      }
       if (path === '/handovers/HO-inline-test/submit') {
         state.handover = {
           ...state.handover,
@@ -618,7 +627,7 @@ try {
             title: '询问活动意愿',
             shift_id: 'SHIFT-next',
             assigned_to: staff.id,
-            due_at: '2099-10-28T06:00:00.000Z',
+            due_at: '2099-10-28T14:00:00+08:00',
             completion_criteria: '询问本人并记录选择',
           },
         ],

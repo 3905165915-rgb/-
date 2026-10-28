@@ -1,7 +1,12 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Mic, RefreshCw, Send, Square } from 'lucide-vue-next'
-import { readSession } from '@hulao/shared'
+import { readSession, taskStatusLabels } from '@hulao/shared'
+import {
+  incomingShiftOptions,
+  selectHandoverShifts,
+  sourceShiftOptions,
+} from './handover-shifts'
 import { useTasks, useElders } from '../services/data'
 import {
   request,
@@ -34,6 +39,7 @@ type AcceptedTask = {
 const tasks = useTasks()
 const elders = useElders()
 const shifts = ref<Row[]>([])
+const rawTasks = ref<Row[]>([])
 const staff = ref<Row[]>([])
 const sourceShiftId = ref('')
 const targetShiftId = ref('')
@@ -50,6 +56,11 @@ const transcribing = ref(false)
 const error = ref('')
 const notice = ref('')
 const recording = ref(false)
+const reviewMode = ref<'ai' | 'manual' | ''>('')
+const reviewedNote = ref('')
+const reviewChanged = computed(
+  () => !!reviewMode.value && reviewedNote.value !== note.value.trim(),
+)
 const draftKey = computed(() => {
   const current = readSession()
   return (
@@ -60,27 +71,62 @@ const draftKey = computed(() => {
 let recorder: MediaRecorder | undefined
 let stream: MediaStream | undefined
 let deadline: ReturnType<typeof setTimeout> | undefined
-const selectedSource = computed(() =>
-  shifts.value.find((row) => row.id === sourceShiftId.value),
-)
-const targetOptions = computed(() =>
-  shifts.value.filter(
-    (row) =>
-      row.status === 'open' &&
-      row.id !== sourceShiftId.value &&
-      selectedSource.value &&
-      Date.parse(String(row.start_at)) >
-        Date.parse(String(selectedSource.value.start_at)),
+const sourceOptions = computed(() =>
+  sourceShiftOptions(
+    shifts.value,
+    readSession()?.userId || '',
+    readSession()?.role || '',
   ),
 )
+const targetOptions = computed(() =>
+  incomingShiftOptions(shifts.value, sourceShiftId.value),
+)
+const displayedSources = computed(() =>
+  handover.value && handover.value.status !== 'draft'
+    ? shifts.value.filter((row) => row.id === handover.value?.source_shift_id)
+    : sourceOptions.value,
+)
+const displayedTargets = computed(() =>
+  handover.value && handover.value.status !== 'draft'
+    ? shifts.value.filter((row) => row.id === handover.value?.target_shift_id)
+    : targetOptions.value,
+)
+const shiftIssue = computed(() => {
+  if (busy.value) return '正在载入班次…'
+  if (!sourceOptions.value.some((row) => row.id === sourceShiftId.value))
+    return '请先选择要交出的班次；没有可选班次时，请联系主管安排。'
+  if (!targetOptions.value.length)
+    return '尚未安排后续接班班次，请联系主管先安排下一班。'
+  if (!targetOptions.value.some((row) => row.id === targetShiftId.value))
+    return '请选择晚于交出班次的接班班次。'
+  return ''
+})
 const sourceTasks = computed(() =>
-  (tasks.data.value || []).filter(
+  rawTasks.value.filter(
     (task) =>
       task.status !== 'completed' &&
       task.status !== 'cancelled' &&
-      (task.shift === selectedSource.value?.name || task.itemId),
+      task.shift_id === sourceShiftId.value,
   ),
 )
+function taskElder(task: Row) {
+  return (
+    task.elder_name ||
+    elders.data.value?.find((row) => row.id === task.elder_id)?.name ||
+    '老人资料待核实'
+  )
+}
+function taskOwner(task: Row) {
+  return (
+    task.assignee_name ||
+    task.assigned_name ||
+    staff.value.find((row) => row.id === task.assigned_to)?.display_name ||
+    '待安排责任人'
+  )
+}
+function taskStatus(task: Row) {
+  return taskStatusLabels[String(task.status)] || '状态待核实'
+}
 function staffOptions(shiftId: string) {
   const shift = shifts.value.find((row) => row.id === shiftId)
   const ids = Array.isArray(shift?.caregiver_ids) ? shift.caregiver_ids : []
@@ -128,6 +174,8 @@ function applyHandover(value: unknown) {
   const row = object(value) as Handover
   handover.value = row
   summary.value = String(object(row.ai_summary || {}).text || '')
+  reviewMode.value = row.ai_summary ? 'ai' : ''
+  reviewedNote.value = String(object(row.ai_summary || {}).input_text || '')
   suggestions.value = Array.isArray(row.handover_suggestions)
     ? row.handover_suggestions.map((item) => object(item) as Suggestion)
     : []
@@ -158,8 +206,17 @@ async function recoverHandover(savedId: string) {
         row.status === 'draft',
     )
   }
+  if (
+    existing &&
+    (existing.source_shift_id !== sourceShiftId.value ||
+      existing.target_shift_id !== targetShiftId.value)
+  )
+    existing = undefined
   if (existing && existing.status === 'draft') applyHandover(existing)
-  else if (existing?.status === 'submitted') {
+  else if (
+    existing &&
+    ['submitted', 'received'].includes(String(existing.status))
+  ) {
     applyHandover(existing)
     notice.value = '交班已提交；已从服务器核实结果。'
     sessionStorage.removeItem(draftKey.value)
@@ -184,48 +241,113 @@ function initializeAccepted() {
     ]),
   )
 }
-async function load() {
+async function load(recover = true) {
   busy.value = true
   error.value = ''
   const savedId = restoreDraft()
   try {
-    const [shiftRows, staffRows] = await Promise.all([
+    const [shiftRows, staffRows, taskRows] = await Promise.all([
       request('/shifts?limit=200&offset=0'),
-      request('/staff/directory'),
+      request('/staff?limit=200&offset=0'),
+      request('/tasks'),
     ])
     shifts.value = rows(shiftRows)
     staff.value = rows(staffRows)
-    if (!sourceShiftId.value) {
-      const currentUser = readSession()?.userId
-      const source = shifts.value.find(
-        (row) =>
-          row.status === 'open' &&
-          Array.isArray(row.caregiver_ids) &&
-          row.caregiver_ids.includes(currentUser),
-      )
-      if (source) sourceShiftId.value = String(source.id)
+    rawTasks.value = rows(taskRows)
+    if (handover.value && handover.value.status !== 'draft') return
+    const previousPair = [sourceShiftId.value, targetShiftId.value].join('|')
+    const session = readSession()
+    const pair = selectHandoverShifts(
+      shifts.value,
+      session?.userId || '',
+      session?.role || '',
+      sourceShiftId.value,
+      targetShiftId.value,
+    )
+    sourceShiftId.value = pair.sourceId
+    targetShiftId.value = pair.targetId
+    if (previousPair !== [pair.sourceId, pair.targetId].join('|')) {
+      handover.value = null
+      reviewMode.value = ''
+      if (note.value.trim())
+        notice.value =
+          '交班文字已保留，已为你修正交出和接入班次，请核对后继续。'
     }
-    if (!targetShiftId.value) {
-      const next = shifts.value
-        .filter(
-          (row) =>
-            row.status === 'open' &&
-            row.id !== sourceShiftId.value &&
-            Date.parse(String(row.start_at)) > Date.now(),
-        )
-        .sort(
-          (a, b) =>
-            Date.parse(String(a.start_at)) - Date.parse(String(b.start_at)),
-        )[0]
-      targetShiftId.value = next ? String(next.id) : ''
-    }
-    if (sourceShiftId.value && targetShiftId.value)
+    if (recover && sourceShiftId.value && targetShiftId.value)
       await recoverHandover(savedId)
   } catch (failure) {
     error.value =
       failure instanceof Error ? failure.message : '交班资料载入失败。'
   } finally {
     busy.value = false
+  }
+}
+function sourceChanged() {
+  targetShiftId.value = String(targetOptions.value[0]?.id || '')
+  handover.value = null
+  reviewMode.value = ''
+  persistDraft()
+}
+function changeShifts() {
+  const wasSubmitted = handover.value && handover.value.status !== 'draft'
+  handover.value = null
+  reviewMode.value = ''
+  summary.value = ''
+  suggestions.value = []
+  if (wasSubmitted) {
+    note.value = ''
+    sourceShiftId.value = ''
+    targetShiftId.value = ''
+  }
+  persistDraft()
+  void load(false)
+}
+async function prepareHandover() {
+  if (shiftIssue.value) throw new Error(shiftIssue.value)
+  if (!handover.value) await recoverHandover('')
+  if (!handover.value)
+    applyHandover(
+      await request('/handovers', 'post', {
+        source_shift_id: sourceShiftId.value,
+        target_shift_id: targetShiftId.value,
+      }),
+    )
+  if (!handover.value || handover.value.status !== 'draft')
+    throw new Error('本次交班已提交，请点击“开始下一次交班”。')
+  // Refresh sources before either review path; never submit an out-of-date snapshot.
+  applyHandover(
+    await request(
+      '/handovers/' +
+        encodeURIComponent(String(handover.value.id)) +
+        '/refresh',
+      'post',
+    ),
+  )
+  return handover.value!
+}
+async function manualReview() {
+  if (
+    busy.value ||
+    analyzing.value ||
+    submitting.value ||
+    shiftIssue.value ||
+    !note.value.trim()
+  )
+    return
+  analyzing.value = true
+  error.value = ''
+  try {
+    await prepareHandover()
+    summary.value = note.value.trim()
+    suggestions.value = []
+    reviewMode.value = 'manual'
+    reviewedNote.value = note.value.trim()
+    notice.value = '请核对交班内容和待接续事项，再提交交班。'
+  } catch (failure) {
+    error.value =
+      failure instanceof Error ? failure.message : '交班准备失败，文字已保留。'
+  } finally {
+    analyzing.value = false
   }
 }
 async function transcribe(blob: Blob) {
@@ -290,8 +412,9 @@ async function toggleRecording() {
 }
 async function analyze() {
   if (
-    !sourceShiftId.value ||
-    !targetShiftId.value ||
+    !!shiftIssue.value ||
+    busy.value ||
+    submitting.value ||
     analyzing.value ||
     !note.value.trim()
   )
@@ -300,18 +423,7 @@ async function analyze() {
   error.value = ''
   notice.value = ''
   try {
-    if (!handover.value) {
-      await recoverHandover('')
-    }
-    if (!handover.value) {
-      applyHandover(
-        await request('/handovers', 'post', {
-          source_shift_id: sourceShiftId.value,
-          target_shift_id: targetShiftId.value,
-        }),
-      )
-    }
-    const currentHandover = handover.value
+    const currentHandover = await prepareHandover()
     if (!currentHandover) throw new Error('交班单尚未创建，请重试。')
     const result = object(
       await request(
@@ -327,6 +439,7 @@ async function analyze() {
       ),
     )
     applyHandover(result)
+    reviewedNote.value = note.value.trim()
     notice.value = '分析已完成；请核对摘要和新待办，再提交交班。'
   } catch (failure) {
     error.value =
@@ -361,7 +474,13 @@ async function submit() {
     !handover.value ||
     handover.value.status !== 'draft' ||
     submitting.value ||
-    !summary.value.trim()
+    !summary.value.trim() ||
+    reviewChanged.value ||
+    !reviewMode.value ||
+    analyzing.value ||
+    suggestions.value.some(
+      (item) => selectedSuggestions.value[item.id] && !canAccept(item.id),
+    )
   )
     return
   submitting.value = true
@@ -371,7 +490,7 @@ async function submit() {
       .filter((item) => canAccept(item.id))
       .map((item) => ({
         ...accepted.value[item.id],
-        due_at: new Date(accepted.value[item.id].due_at).toISOString(),
+        due_at: accepted.value[item.id].due_at + ':00+08:00',
       }))
     const result = object(
       await request(
@@ -382,7 +501,7 @@ async function submit() {
         {
           expected_revision: Number(handover.value.revision),
           summary: summary.value.trim(),
-          approve_ai_summary: true,
+          approve_ai_summary: reviewMode.value === 'ai',
           accepted_tasks: acceptedTasks,
         },
         crypto.randomUUID(),
@@ -427,7 +546,7 @@ onBeforeUnmount(() => {
         type="button"
         :disabled="busy"
         aria-label="刷新班次"
-        @click="load"
+        @click="load()"
       >
         <RefreshCw :size="18" aria-hidden="true" />刷新
       </button>
@@ -436,10 +555,14 @@ onBeforeUnmount(() => {
     <p v-if="notice" role="status">{{ notice }}</p>
     <div class="handover-shifts">
       <label
-        >交出班次<select v-model="sourceShiftId" :disabled="busy || !!handover">
+        >交出班次<select
+          v-model="sourceShiftId"
+          :disabled="busy || analyzing || submitting || !!handover"
+          @change="sourceChanged"
+        >
           <option value="">选择当前班次</option>
           <option
-            v-for="row in shifts.filter((item) => item.status === 'open')"
+            v-for="row in displayedSources"
             :key="String(row.id)"
             :value="String(row.id)"
           >
@@ -448,10 +571,13 @@ onBeforeUnmount(() => {
         </select></label
       >
       <label
-        >接入班次<select v-model="targetShiftId" :disabled="busy || !!handover">
+        >接入班次<select
+          v-model="targetShiftId"
+          :disabled="busy || analyzing || submitting || !!handover"
+        >
           <option value="">选择接班班次</option>
           <option
-            v-for="row in targetOptions"
+            v-for="row in displayedTargets"
             :key="String(row.id)"
             :value="String(row.id)"
           >
@@ -460,21 +586,29 @@ onBeforeUnmount(() => {
         </select></label
       >
     </div>
+    <p v-if="shiftIssue && !handover" role="status">{{ shiftIssue }}</p>
+    <button
+      v-if="handover"
+      type="button"
+      :disabled="busy || analyzing || submitting"
+      @click="changeShifts"
+    >
+      {{
+        handover.status === 'draft' ? '更换班次（保留文字）' : '开始下一次交班'
+      }}
+    </button>
     <section class="handover-tasks" aria-label="待接续任务">
       <h2>待接续任务</h2>
       <p v-if="tasks.isPending.value" role="status">正在载入未完成任务…</p>
       <p v-else-if="!sourceTasks.length">当前班次没有已载入的未完成任务。</p>
       <ul v-else>
-        <li v-for="task in sourceTasks" :key="task.id">
+        <li v-for="task in sourceTasks" :key="String(task.id)">
           <strong>{{ task.title }}</strong>
           <span
-            >{{ task.elderId }} · {{ task.assignee || '责任人未提供' }} ·
-            {{ task.status }}</span
+            >{{ taskElder(task) }} · {{ taskOwner(task) }} ·
+            {{ taskStatus(task) }}</span
           >
-          <small
-            >任务编号
-            {{ task.itemId || task.id }}，提交后沿用原任务，不重复建单。</small
-          >
+          <small>交班后继续跟进本项，无需重复新建。</small>
         </li>
       </ul>
     </section>
@@ -483,14 +617,22 @@ onBeforeUnmount(() => {
         v-model="note"
         rows="5"
         maxlength="5000"
-        :disabled="analyzing || submitting"
+        :disabled="
+          analyzing || submitting || (!!handover && handover.status !== 'draft')
+        "
         placeholder="记录需要接班人员了解的情况和未完成事项。"
       />
     </label>
     <div class="handover-actions">
       <button
         type="button"
-        :disabled="busy || analyzing || transcribing"
+        :disabled="
+          busy ||
+          analyzing ||
+          submitting ||
+          transcribing ||
+          (!!handover && handover.status !== 'draft')
+        "
         @click="toggleRecording"
       >
         <Square v-if="recording" :size="17" aria-hidden="true" />
@@ -500,19 +642,45 @@ onBeforeUnmount(() => {
       <button
         type="button"
         :disabled="
-          analyzing || !note.trim() || !sourceShiftId || !targetShiftId
+          busy ||
+          analyzing ||
+          submitting ||
+          transcribing ||
+          recording ||
+          !note.trim() ||
+          !!shiftIssue ||
+          (!!handover && handover.status !== 'draft')
         "
         @click="analyze"
       >
         {{ analyzing ? '正在分析…' : '分析并核对' }}
       </button>
+      <button
+        type="button"
+        :disabled="
+          busy ||
+          analyzing ||
+          submitting ||
+          transcribing ||
+          recording ||
+          !note.trim() ||
+          !!shiftIssue ||
+          (!!handover && handover.status !== 'draft')
+        "
+        @click="manualReview"
+      >
+        人工核对交班
+      </button>
     </div>
     <section
-      v-if="handover?.ai_summary"
+      v-if="handover && reviewMode"
       class="handover-analysis"
       aria-label="交班分析结果"
     >
       <h2>交班总结</h2>
+      <p v-if="reviewChanged" role="status">
+        交班文字已修改，请重新分析或点击“人工核对交班”后再提交。
+      </p>
       <label
         >摘要<textarea
           v-model="summary"
@@ -522,7 +690,9 @@ onBeforeUnmount(() => {
         />
       </label>
       <details
-        v-for="(point, index) in object(handover.ai_summary).points as Row[]"
+        v-for="(point, index) in rows(
+          object(handover.ai_summary || {}).points || [],
+        )"
         :key="index"
       >
         <summary>查看原文依据</summary>
@@ -617,7 +787,16 @@ onBeforeUnmount(() => {
       <button
         class="handover-submit"
         type="button"
-        :disabled="submitting || handover.status !== 'draft' || !summary.trim()"
+        :disabled="
+          analyzing ||
+          submitting ||
+          handover.status !== 'draft' ||
+          !summary.trim() ||
+          reviewChanged ||
+          suggestions.some(
+            (item) => selectedSuggestions[item.id] && !canAccept(item.id),
+          )
+        "
         @click="submit"
       >
         <Send :size="17" aria-hidden="true" />{{
@@ -700,6 +879,10 @@ onBeforeUnmount(() => {
   color: #fff;
   background: var(--hl-primary, #1767cf);
   border-color: var(--hl-primary, #1767cf);
+}
+.handover-quick button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 .handover-tasks,
 .handover-analysis {
