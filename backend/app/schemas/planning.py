@@ -10,12 +10,38 @@ from app.schemas.memory import MemoryScene
 class AssessmentCreate(StrictRequest):
     elder_id: ObjectId
     template_id: Literal['barthel_basic_v1'] = 'barthel_basic_v1'
-    scores: dict[str, StrictInt]
+    scores: dict[str, StrictInt | None] = Field(default_factory=dict)
     assessed_at: AwareDatetime
     review_due_at: AwareDatetime
     note: Text
-    evidence: list[ReviewEvidence] = Field(min_length=1, max_length=5)
+    evidence: list[ReviewEvidence] = Field(default_factory=list, max_length=50)
+    item_sources: dict[str, list[ReviewEvidence]] = Field(default_factory=dict)
+    direct_observations: dict[str, Text] = Field(default_factory=dict)
     supersedes_id: ObjectId | None = None
+
+
+class AssessmentPrefillRequest(StrictRequest):
+    elder_id: ObjectId
+    lookback_days: int = Field(default=90, ge=1, le=180, strict=True)
+
+
+class AssessmentAnswers(StrictRequest):
+    expected_revision: int = Field(ge=1)
+    scores: dict[str, StrictInt | None] = Field(default_factory=dict)
+    item_sources: dict[str, list[ReviewEvidence]] = Field(default_factory=dict)
+    direct_observations: dict[str, Text] = Field(default_factory=dict)
+
+
+class AssessmentPrefillItem(StrictRequest):
+    item_key: Annotated[str, Field(min_length=1, max_length=50)]
+    score: StrictInt | None = None
+    conflict: bool = False
+    citations: list[ReviewEvidence] = Field(default_factory=list, max_length=5)
+    question: Annotated[str, Field(min_length=1, max_length=500)]
+
+
+class AssessmentPrefillOutput(StrictRequest):
+    items: list[AssessmentPrefillItem] = Field(max_length=10)
 
 
 class AssessmentReview(StrictRequest):

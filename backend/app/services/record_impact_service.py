@@ -27,6 +27,20 @@ def dependencies(data, record, through_revision=None):
     memory_ids = {r['id'] for r in memories}
     for row in memories:
         add('memory', row, 'memory_source', source=copy.deepcopy(row['source']), content=row['content'])
+    advice_ids = set()
+    for row in data['care_advice']:
+        if row['elder_id'] != elder_id:
+            continue
+        sources = [s for s in row['evidence_sources'] if
+                   (s['kind'] == 'record' and s['object_id'] == record_id and old(s['revision'])) or
+                   (s['kind'] == 'memory' and (s['object_id'] in memory_ids or
+                    (s.get('source_record_id') == record_id and old(s.get('source_record_revision')))))]
+        feedback = [f for f in row['feedback'] if f['record_id'] == record_id and old(f['record_revision'])]
+        if sources or feedback:
+            advice_ids.add(row['id'])
+            add('care_advice', row, 'advice_evidence' if sources else 'advice_feedback',
+                evidence_sources=copy.deepcopy(sources), feedback=copy.deepcopy(feedback),
+                task_id=row.get('task_id'), reviews=copy.deepcopy(row['reviews']))
     task_ids = set()
     for row in data['care_tasks']:
         if row['elder_id'] != elder_id:
@@ -35,9 +49,10 @@ def dependencies(data, record, through_revision=None):
         refs = [r for r in row.get('memory_references', []) if
                 r['memory_id'] in memory_ids or
                 (r.get('snapshot') or {}).get('source', {}).get('record_id') == record_id]
-        if direct or refs:
+        advice_reference = row.get('source_advice_id') in advice_ids
+        if direct or refs or advice_reference:
             task_ids.add(row['id'])
-            add('task', row, 'record_source' if direct else 'adopted_memory_source',
+            add('task', row, 'record_source' if direct else ('advice_source' if advice_reference else 'adopted_memory_source'),
                 title=row['title'], assigned_to=row.get('assigned_to'), shift_id=row.get('shift_id'),
                 source_revision=row.get('source_revision'), memory_references=copy.deepcopy(refs),
                 due_at=row.get('due_at'), condition=row.get('condition'),

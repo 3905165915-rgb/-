@@ -14,7 +14,7 @@ from app.storage.json_store import JsonStore
 def api(tmp_path, monkeypatch):
     settings = replace(config.settings, data_dir=tmp_path / 'data', ai_provider='mock', ai_fallback_mock=False,
                        deepseek_api_key='', siliconflow_api_key='',
-                       vision_api_key='', vision_base_url='', vision_model='')
+                       vision_api_key='', vision_base_url='', vision_model='', background_jobs_enabled=False)
     for module in (config, security, main, store_service, ai_service, speech_service):
         monkeypatch.setattr(module, 'settings', settings)
     store = JsonStore(settings.data_dir)
@@ -22,7 +22,8 @@ def api(tmp_path, monkeypatch):
     def seed(data):
         data['users'] = [
             {'id': name, 'username': name, 'display_name': name, 'role': role,
-             'password_hash': hash_password('test-password'), 'active': True}
+             'password_hash': hash_password('test-password'), 'active': True,
+             'demo_login_enabled': name in {'staff', 'manager', 'family'}}
             for name, role in [('staff', 'caregiver'), ('other', 'caregiver'), ('manager', 'supervisor'), ('family', 'family')]
         ]
         data['elders'] = [{'id': 'E1', 'name': '虚构老人', 'status': 'active'}]

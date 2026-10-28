@@ -20,7 +20,7 @@ async def enforce(data, request, user_id, role):
             elder_ids.add(body['elder_id'])
     collections = {'record_id': 'care_records', 'draft_id': 'ai_drafts', 'task_id': 'care_tasks',
                    'memory_id': 'care_memories', 'report_id': 'elder_impressions',
-                   'assessment_id': 'assessments', 'plan_id': 'care_plans'}
+                   'assessment_id': 'assessments', 'plan_id': 'care_plans', 'advice_id': 'care_advice'}
     for parameter, collection in collections.items():
         object_id = request.path_params.get(parameter)
         row = next((r for r in data[collection] if r['id'] == object_id), None)

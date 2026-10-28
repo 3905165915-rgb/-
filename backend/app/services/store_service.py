@@ -23,7 +23,9 @@ def authenticate(store: JsonStore, username: str, password: str) -> User | None:
 
 
 def list_elders(store: JsonStore) -> list[Elder]:
-    return [Elder.model_validate(item) for item in store.read()["elders"]]
+    from app.services.presentation_service import bed_label
+    data = store.read()
+    return [Elder.model_validate({**item, 'bed_label': bed_label(data, item.get('bed_id'))}) for item in data['elders']]
 
 
 def get_elder(store: JsonStore, elder_id: str) -> Elder | None:

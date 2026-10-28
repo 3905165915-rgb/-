@@ -226,25 +226,45 @@ def update_draft(store, draft_id, payload, user_id, role, key=None):
     return AIDraft.model_validate(store.mutate(mutate))
 
 
-def manual(store: JsonStore, payload: ManualRecordRequest, user_id: str, role: str, key=None) -> dict:
+def manual(store: JsonStore, payload: ManualRecordRequest, user_id: str, role: str, key=None,
+           queue_analysis: bool = True) -> dict:
     def mutate(data):
         current_staff(data, user_id, role)
         _scope(data, payload.elder_id, user_id, role)
         def operation():
             elder = care_eligible(data, payload.elder_id)
             open_shift(data, payload.shift_id, user_id, role)
+            attachments = []
+            if len(set(payload.attachment_ids)) != len(payload.attachment_ids):
+                raise DomainError('attachment_ids_must_be_unique', 422)
+            for attachment_id in payload.attachment_ids:
+                attachment = find(data, 'attachments', attachment_id, 'attachment_not_found')
+                from app.services.attachment_service import access as attachment_access
+                attachment_access(data, attachment, user_id, role)
+                if attachment['elder_id'] != payload.elder_id or attachment.get('admission_id') != elder.get('current_admission_id'):
+                    raise DomainError('attachment_target_elder_or_admission_mismatch', 422)
+                attachments.append(attachment)
             values = payload.observations if payload.observations is not None else [payload.raw_text]
             if not values:
                 raise DomainError('observations_required', 422)
+            stamp = now()
             record = CareRecord(id=identifier('REC'), elder_id=payload.elder_id, shift_id=payload.shift_id,
                                 admission_id=elder.get('current_admission_id'),
                                 raw_text=payload.raw_text, observations=values, created_by=user_id,
-                                created_at=now(), updated_at=now(),
-                                happened_at=payload.happened_at.isoformat() if payload.happened_at else None)
+                                created_at=stamp, recorded_at=stamp, updated_at=stamp,
+                                happened_at=payload.happened_at.isoformat() if payload.happened_at else None,
+                                source_attachment_ids=list(payload.attachment_ids))
             tasks = create_tasks(data, record, [item.model_dump(mode='json') for item in payload.task_candidates], user_id, role)
             data['care_records'].append(record.model_dump())
+            for attachment in attachments:
+                attachment.setdefault('links', []).append({'target_type': 'record', 'target_id': record.id,
+                    'by': user_id, 'at': now()})
+                attachment['revision'] = attachment.get('revision', 1) + 1
+                audit(data, 'link_attachment', attachment['id'], user_id, elder_id=payload.elder_id,
+                      target_id=record.id, queue_record_job=False)
             audit(data, 'create_manual_record', record.id, user_id, elder_id=record.elder_id,
-                  record_id=record.id, shift_id=record.shift_id, detail='人工录入正式记录')
+                  record_id=record.id, shift_id=record.shift_id, detail='人工录入正式记录',
+                  queue_record_job=queue_analysis)
             return {'record': record.model_dump(), 'tasks': [item.model_dump() for item in tasks]}
         return replayable(data, user_id, 'create_manual_record', key, payload.model_dump(mode='json'), operation)
     return store.mutate(mutate)

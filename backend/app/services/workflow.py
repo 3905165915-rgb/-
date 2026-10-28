@@ -34,7 +34,7 @@ def find(data: dict, collection: str, object_id: str, code: str) -> dict:
     return item
 
 
-def audit(data: dict, action: str, object_id: str, user_id: str, **details: Any) -> None:
+def audit(data: dict, action: str, object_id: str, user_id: str, *, queue_record_job: bool = True, **details: Any) -> None:
     actor = next((row for row in data['users'] if row['id'] == user_id), None)
     details.setdefault('actor_role', actor.get('role') if actor else 'system')
     event = {
@@ -44,6 +44,10 @@ def audit(data: dict, action: str, object_id: str, user_id: str, **details: Any)
     data['audit_logs'].append(event)
     from app.services.notification_service import project
     project(data, event)
+    if queue_record_job and action in {'create_manual_record', 'confirm_ai_draft', 'correct_record'}:
+        from app.services.elder_workspace_service import enqueue_record
+        record_id = details.get('record_id', object_id)
+        enqueue_record(data, record_id, user_id)
 
 
 def active_staff(data: dict, user_id: str | None) -> None:

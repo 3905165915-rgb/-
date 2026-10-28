@@ -150,6 +150,23 @@ def test_timeline_rejects_naive_dates_and_reports_pagination(api):
     assert [event['id'] for event in result['events']] == ['1']
 
 
+def test_timeline_orders_and_pages_by_server_recorded_at(api):
+    client, store, headers = api
+    store.mutate(lambda data: data['audit_logs'].extend([
+        {'id': 'NEW-REG', 'object_id': 'E1', 'user_id': 'manager', 'action': 'create_elder',
+         'created_at': '2099-10-27T09:00:00Z'},
+        {'id': 'OLD-REG', 'object_id': 'E1', 'user_id': 'manager', 'action': 'create_elder',
+         'created_at': '1999-10-27T09:00:00Z'},
+    ]))
+    endpoint = '/api/v1/elders/E1/timeline'
+    page1 = client.get(endpoint, params={'event_type': 'other', 'limit': 1, 'offset': 0}, headers=headers('manager')).json()
+    page2 = client.get(endpoint, params={'event_type': 'other', 'limit': 1, 'offset': 1}, headers=headers('manager')).json()
+    assert page1['events'][0]['id'] == 'NEW-REG'
+    assert page2['events'][0]['id'] == 'OLD-REG'
+    assert page1['events'][0]['recorded_at'] == '2099-10-27T09:00:00Z'
+    assert page1['events'][0]['happened_at'] is None
+
+
 def test_schema_five_migration_is_explicit_backed_up_and_preserves_old_data(tmp_path):
     import copy
     store = JsonStore(tmp_path)

@@ -19,7 +19,7 @@ def wav(seconds=0.1, channels=1, rate=16000, width=2):
 
 @pytest.fixture
 def speech(monkeypatch):
-    monkeypatch.setattr(service, 'settings', replace(service.settings, siliconflow_api_key='fake-test-speech-key'))
+    monkeypatch.setattr(service, 'settings', replace(service.settings, siliconflow_api_key='fake-test-speech-key', speech_model=service.MODEL))
     monkeypatch.setattr(service, 'limits', service.SpeechLimits())
 
 
@@ -83,6 +83,32 @@ def test_success_preserves_text_and_requires_separate_confirmation(api, speech, 
     assert result.json()['requires_confirmation'] is True and result.json()['saved'] is False
     assert result.json()['duration_seconds'] == 0.1
     assert store.path.read_bytes() == before
+
+
+@pytest.mark.parametrize('model', ['Qwen/Qwen3-ASR-1.7B', 'FunAudioLLM/SenseVoiceSmall'])
+def test_configured_model_matches_status_provider_request_and_response(api, speech, monkeypatch, model):
+    client, store, headers = api
+    monkeypatch.setattr(service, 'settings', replace(service.settings, speech_model=model))
+    def handle(request):
+        assert model.encode() in request.content
+        return httpx.Response(200, json={'text': '没有外出，饮水200毫升。'})
+    provider_mock(monkeypatch, handle)
+    before = store.path.read_bytes()
+    assert client.get('/api/v1/speech/status', headers=headers()).json()['model'] == model
+    result = upload(client, headers, wav())
+    assert result.status_code == 200
+    assert result.json()['model'] == model
+    assert result.json()['text'] == '没有外出，饮水200毫升。'
+    assert result.json()['saved'] is False and result.json()['requires_confirmation'] is True
+    assert store.path.read_bytes() == before
+
+
+def test_speech_model_setting_defaults_and_override(monkeypatch):
+    from app.core.config import get_settings
+    monkeypatch.setenv('SPEECH_MODEL', '')
+    assert get_settings().speech_model == 'Qwen/Qwen3-ASR-1.7B'
+    monkeypatch.setenv('SPEECH_MODEL', '  FunAudioLLM/SenseVoiceSmall  ')
+    assert get_settings().speech_model == 'FunAudioLLM/SenseVoiceSmall'
 
 
 @pytest.mark.parametrize('audio,code', [

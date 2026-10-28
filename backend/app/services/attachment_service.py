@@ -34,14 +34,16 @@ def view(item):
 def normalize(content, mime):
     if not content or len(content) > MAX_BYTES:
         raise DomainError('attachment_size_invalid', 413)
-    if mime not in {'image/jpeg', 'image/png'}:
+    if mime not in {'image/jpeg', 'image/jpg', 'image/png', 'image/webp'}:
         raise DomainError('attachment_format_invalid', 415)
     try:
         with warnings.catch_warnings():
             warnings.simplefilter('error', Image.DecompressionBombWarning)
             with Image.open(io.BytesIO(content)) as source:
-                if source.format not in {'JPEG', 'PNG'} or ('image/jpeg' if source.format == 'JPEG' else 'image/png') != mime:
-                    raise DomainError('attachment_format_mismatch', 415)
+                # Browser MIME and downloaded filename extensions are only hints.
+                # Trust a decoded, allowlisted raster format, then re-encode it.
+                if source.format not in {'JPEG', 'PNG', 'WEBP'}:
+                    raise DomainError('attachment_format_invalid', 415)
                 if source.width * source.height > MAX_PIXELS or getattr(source, 'n_frames', 1) != 1:
                     raise DomainError('attachment_dimensions_invalid', 422)
                 source.load()
@@ -155,10 +157,34 @@ def review(store, item_id, payload, user_id, role, key=None):
             if item['status'] != 'pending_review':
                 raise DomainError('attachment_already_reviewed')
             item['reviews'].append({**payload.model_dump(), 'by': user_id, 'at': now()})
-            item.update(status='approved' if payload.decision == 'approve' else 'rejected', revision=item['revision'] + 1)
+            item.update(status='approved' if payload.decision == 'approve' else 'rejected',
+                        family_visible=payload.decision == 'approve' and payload.share_with_family,
+                        revision=item['revision'] + 1)
             audit(data, 'review_attachment', item_id, user_id, elder_id=item['elder_id'], decision=payload.decision)
             return view(item)
         return replayable(data, user_id, 'review_attachment', key, {'id': item_id, **payload.model_dump()}, operation)
+    return store.mutate(mutate)
+
+
+def family_sharing(store, item_id, payload, user_id, role, key=None):
+    """Independent publication choice, including withdrawal after approval."""
+    def mutate(data):
+        current_staff(data, user_id, role, management=True)
+        item = find(data, 'attachments', item_id, 'attachment_not_found')
+        def operation():
+            version(item, payload.expected_revision)
+            if payload.share_with_family and item['status'] != 'approved':
+                raise DomainError('family_photo_must_be_approved', 422)
+            if payload.share_with_family and not any(link['target_type'] == 'record' for link in item['links']):
+                raise DomainError('family_photo_requires_record_link', 422)
+            item['family_visible'] = payload.share_with_family
+            item['revision'] += 1
+            item.setdefault('family_sharing_reviews', []).append({**payload.model_dump(), 'by': user_id, 'at': now()})
+            audit(data, 'update_photo_family_sharing', item_id, user_id, elder_id=item['elder_id'],
+                  shared=payload.share_with_family)
+            return view(item)
+        return replayable(data, user_id, 'update_photo_family_sharing', key,
+                          {'id': item_id, **payload.model_dump()}, operation)
     return store.mutate(mutate)
 
 

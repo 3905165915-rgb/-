@@ -6,6 +6,7 @@ import os
 import tempfile
 import shutil
 import hashlib
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, TypeVar
@@ -14,7 +15,7 @@ from filelock import FileLock
 
 
 T = TypeVar("T")
-CURRENT_SCHEMA_VERSION = 6
+CURRENT_SCHEMA_VERSION = 9
 
 
 EMPTY_STORE: dict[str, Any] = {
@@ -46,6 +47,11 @@ EMPTY_STORE: dict[str, Any] = {
     "image_analyses": [],
     "ai_evaluations": [],
     "care_assignments": [],
+    "care_advice": [],
+    "care_advice_batches": [],
+    "care_jobs": [],
+    "automation_rules": [],
+    "record_analyses": [],
 }
 
 
@@ -102,6 +108,13 @@ class JsonStore:
                                 reason='恢复备份后须重新核实授权')
             restored['idempotency_keys'] = []
             restored['notifications'] = []
+            # A backup must never resurrect a revoked automation authorization.
+            for rule in restored['automation_rules']:
+                rule.update(enabled=False, revision=rule.get('revision', 1) + 1,
+                            error_code='authorization_required_after_restore')
+            for job in restored['care_jobs']:
+                if job['status'] in {'queued', 'processing'}:
+                    job.update(status='failed', updated_at=_utc_now(), error_code='interrupted_by_restore')
             for assignment in restored['care_assignments']:
                 if assignment.get('status') == 'active':
                     assignment.update(status='revoked', revision=assignment.get('revision', 1) + 1,
@@ -173,9 +186,11 @@ class JsonStore:
             if version == CURRENT_SCHEMA_VERSION:
                 self._validate(data)
                 return None
-            if version not in {1, 2, 3, 4, 5}:
+            if version not in {1, 2, 3, 4, 5, 6, 7, 8}:
                 raise RuntimeError(f'Unsupported migration source: {version}')
-            added = set()
+            added = {"care_jobs", "automation_rules", "record_analyses"}
+            if version <= 6:
+                added.update({"care_advice", "care_advice_batches"})
             if version <= 4:
                 added.add('elder_impressions')
             if version in {1, 2, 3, 4, 5}:
@@ -194,6 +209,11 @@ class JsonStore:
             upgraded = copy.deepcopy(data)
             for name in added:
                 upgraded.setdefault(name, [])
+            if version <= 8:
+                for job in upgraded['care_jobs']:
+                    if job.get('status') in {'queued', 'processing'}:
+                        job.update(status='failed', error_code='requires_inline_reanalysis',
+                                   updated_at=job.get('updated_at') or _utc_now())
             upgraded['schema_version'] = CURRENT_SCHEMA_VERSION
             self._validate(upgraded)
             backup = self._backup_locked()
@@ -214,7 +234,15 @@ class JsonStore:
             with self.path.open("r", encoding="utf-8") as stream:
                 data = json.load(stream)
             self._validate(data)
+            previous_task_ids = {row['id'] for row in data['care_tasks']}
+            from app.storage.request_context import expected_demo_batch
+            expected = expected_demo_batch.get()
+            if expected is not None and data.get('demo_batch_id', '') != expected:
+                from app.services.workflow import DomainError
+                raise DomainError('demo_batch_changed', 409)
             result = callback(data)
+            from app.services.presentation_service import capture_new_tasks
+            capture_new_tasks(data, previous_task_ids)
             # Reject malformed callback output before it can replace the valid live file.
             self._validate(data)
             data["updated_at"] = _utc_now()
@@ -236,7 +264,17 @@ class JsonStore:
                 stream.write("\n")
                 stream.flush()
                 os.fsync(stream.fileno())
-            os.replace(temporary_name, self.path)
+            # Windows indexers/virus scanners may briefly hold a just-closed
+            # destination handle. Retain the transaction lock and retry only
+            # these OS errors; never truncate/delete the live file to recover.
+            for attempt in range(6):
+                try:
+                    os.replace(temporary_name, self.path)
+                    break
+                except PermissionError as exc:
+                    if getattr(exc, 'winerror', None) not in {5, 32, 33} or attempt == 5:
+                        raise
+                    time.sleep(0.01 * (2 ** attempt))
         finally:
             if os.path.exists(temporary_name):
                 os.unlink(temporary_name)

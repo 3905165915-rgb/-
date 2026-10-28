@@ -24,6 +24,13 @@ class ExtractedTask(StrictOutput):
     due_text: ShortText | None = None
 
 
+class ProfileCandidate(StrictOutput):
+    content: Annotated[str, Field(min_length=1, max_length=1000)]
+    evidence_text: ShortText
+    group: Literal['preference', 'habit', 'communication'] = 'preference'
+    attributed_to: Literal['elder', 'family', 'staff', 'unknown'] = 'unknown'
+
+
 class Extraction(StrictOutput):
     observations: list[ShortText] = Field(min_length=1, max_length=50)
     task_candidates: list[ExtractedTask] = Field(max_length=50)
@@ -33,6 +40,7 @@ class Extraction(StrictOutput):
     ambiguity: list[ShortText] = Field(default_factory=list, max_length=50)
     suggestion: list[ShortText] = Field(default_factory=list, max_length=50)
     model_status: Literal['available', 'demo'] = 'available'
+    preference_candidates: list[ProfileCandidate] = Field(default_factory=list, max_length=10)
 
 
 class Citation(StrictOutput):
@@ -105,6 +113,8 @@ def validate_extraction(parsed: dict, text: str) -> dict:
     for task in output.task_candidates:
         quotes.append(task.evidence_text)
         quotes.extend(value for value in (task.condition, task.due_text) if value)
+    for preference in output.preference_candidates:
+        quotes.append(preference.evidence_text)
     if any(quote not in text for quote in quotes):
         raise ValueError('Evidence must be a verbatim substring of input')
     return output.model_dump()

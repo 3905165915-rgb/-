@@ -4,6 +4,9 @@ from datetime import datetime
 from app.services.workflow import DomainError
 
 LABELS = {
+    'generate_care_advice': '整理照护建议', 'adopt_care_advice': '采纳并安排照护建议',
+    'reject_care_advice': '暂不采用照护建议', 'feedback_care_advice': '登记照护执行反馈',
+    'review_care_advice': '主管复核照护建议',
     'edit_ai_draft': '人工核对草稿', 'save_failed_ai_draft': '保留待人工整理的原文',
     'memory_keep': '复核后保留个性化信息', 'memory_suspend': '暂停个性化信息',
     'memory_resume': '恢复个性化信息', 'report_memory_refusal': '登记本次拒绝供复核',
@@ -53,6 +56,8 @@ LABELS = {
 
 
 def event_type(action):
+    if 'care_advice' in action:
+        return 'task'
     if 'impression' in action:
         return 'memory'
     if 'attachment' in action or 'image_analysis' in action or action in {'analyze_image', 'create_photo_record'}:
@@ -87,7 +92,7 @@ def timeline(store, item_id, limit=200, offset=0, user_id=None, role='supervisor
     if start is not None and end is not None and start >= end:
         raise DomainError('timeline_time_range_invalid', 422)
     data = _data if _data is not None else store.read()
-    collections = ['elders', 'admissions', 'assessments', 'care_plans', 'ai_drafts', 'care_records', 'care_tasks', 'handovers', 'quality_checks', 'care_memories', 'change_reviews', 'incidents', 'rectifications', 'family_cases']
+    collections = ['elders', 'admissions', 'assessments', 'care_plans', 'ai_drafts', 'care_records', 'care_tasks', 'handovers', 'quality_checks', 'care_memories', 'change_reviews', 'incidents', 'rectifications', 'family_cases', 'care_advice']
     root = next(((name, row) for name in collections for row in data[name] if row['id'] == item_id), None)
     if root is None:
         raise DomainError('timeline_subject_not_found', 404)
@@ -129,10 +134,18 @@ def timeline(store, item_id, limit=200, offset=0, user_id=None, role='supervisor
             ids.update(row['id'] for row in data['admissions'] if row.get('elder_id') == item_id)
             ids.update(row['id'] for row in data['family_cases'] if row.get('elder_id') == item_id)
         ids.update(row['id'] for row in data['incidents'] if row.get('elder_id') == item_id)
-        for name in ('rectifications', 'elder_impressions', 'attachments', 'image_analyses', 'care_assignments'):
+        for name in ('rectifications', 'elder_impressions', 'attachments', 'image_analyses', 'care_assignments', 'care_advice'):
             ids.update(row['id'] for row in data[name] if row.get('elder_id') == item_id)
     if kind == 'rectifications':
         ids.add(item['incident_id'])
+    if kind == 'care_advice':
+        ids.update(source['object_id'] for source in item['evidence_sources'])
+        ids.update(row['record_id'] for row in item['feedback'])
+        ids.update(row['followup_task_id'] for row in item['feedback'] if row.get('followup_task_id'))
+        if item.get('task_id'):
+            ids.add(item['task_id'])
+    if kind == 'care_tasks' and item.get('source_advice_id'):
+        ids.add(item['source_advice_id'])
     if kind == 'care_tasks' and item.get('source_record_id'):
         ids.add(item['source_record_id'])
     if kind == 'care_tasks' and item.get('source_plan_id'):
@@ -224,8 +237,15 @@ def timeline(store, item_id, limit=200, offset=0, user_id=None, role='supervisor
             'id': row['id'], 'label': LABELS.get(row['action'], '业务操作'),
             'action': row['action'], 'event_type': event_type(row['action']), 'detail': row.get('detail', ''),
             'actor': users.get(row['user_id'], row['user_id']), 'actor_id': row['user_id'],
-            'source_id': row['object_id'], 'happened_at': row['created_at'], 'entered_at': row['created_at'],
+            'source_id': row['object_id'], 'recorded_at': row['created_at'], 'happened_at': None,
         }
+        try:
+            from app.services.workflow import parse_time
+            parse_time(event['recorded_at'])
+            event['recorded_at_status'] = 'verified'
+        except (TypeError, ValueError):
+            event['recorded_at'] = None
+            event['recorded_at_status'] = 'unverified'
         if row['action'] == 'create_ai_draft' and row['object_id'] in drafts:
             draft = drafts[row['object_id']]
             event.update(raw_text=draft['raw_text'], evidence=draft.get('evidence', []), provider=draft['provider'])
@@ -242,13 +262,14 @@ def timeline(store, item_id, limit=200, offset=0, user_id=None, role='supervisor
             if field in row:
                 event[field] = row[field]
         record = next((record for record in data['care_records'] if record['id'] == row['object_id']), None)
-        if row['action'] == 'create_manual_record' and record and record.get('happened_at'):
+        if row['action'] in {'create_manual_record', 'confirm_ai_draft'} and record:
             event['happened_at'] = record['happened_at']
         if kind == 'elders' and row['object_id'] in {h['id'] for h in data['handovers']}:
             # A shared handover may contain other elders. Return navigation and
             # action metadata, never a whole-hand-over summary/snapshot here.
             event = {key: value for key, value in event.items() if key in {
-                'id', 'label', 'action', 'event_type', 'actor', 'actor_id', 'source_id', 'happened_at', 'entered_at'}}
+                'id', 'label', 'action', 'event_type', 'actor', 'actor_id', 'source_id',
+                'recorded_at', 'recorded_at_status', 'happened_at'}}
             event['detail'] = '关联交班操作，请在授权交班详情中查看相关事项'
         events.append(event)
     if event_types:
@@ -258,13 +279,16 @@ def timeline(store, item_id, limit=200, offset=0, user_id=None, role='supervisor
             raise DomainError('timeline_event_type_invalid', 422)
         events = [event for event in events if event['event_type'] in requested]
     def in_window(event):
-        instant = event.get('happened_at') or event['entered_at']
         from app.services.workflow import parse_time
-        value = parse_time(instant)
+        if event['recorded_at'] is None:
+            return start is None and end is None
+        value = parse_time(event['recorded_at'])
         return (start is None or value >= start) and (end is None or value < end)
     events = [event for event in events if in_window(event)]
     from app.services.workflow import parse_time
-    return sorted(events, key=lambda row: (parse_time(row['happened_at']), parse_time(row['entered_at']), row['id']))[offset:offset+limit]
+    return sorted(events, key=lambda row: (row['recorded_at'] is None,
+        -parse_time(row['recorded_at']).timestamp() if row['recorded_at'] is not None else 0,
+        row['id']))[offset:offset+limit]
 
 
 def elder_timeline(store, elder_id, user_id, role, limit=200, offset=0,

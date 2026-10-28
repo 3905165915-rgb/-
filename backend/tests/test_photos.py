@@ -49,17 +49,52 @@ def test_private_upload_review_scope_and_file_limits(api):
     assert response.status_code == 200 and response.headers['content-type'] == 'image/jpeg'
     assert response.headers['cache-control'] == 'no-store'
     reviewed = post(api, '/attachments/' + image['id'] + '/review',
-                    {'expected_revision': 1, 'decision': 'approve', 'note': '核对照片适用范围'}, expected=200)
+                    {'expected_revision': 1, 'decision': 'approve', 'note': '核对照片适用范围',
+                     'share_with_family': True}, expected=200)
     assert reviewed['status'] == 'approved' and reviewed['reviews'][0]['by'] == 'manager'
+    assert reviewed['family_visible'] is True
     assert client.get(endpoint, headers=headers('other')).status_code == 200
     assignment = next(a for a in store.read()['care_assignments'] if a['caregiver_id'] == 'other')
     post(api, '/elders/work-assignments/' + assignment['id'] + '/revoke',
          {'expected_revision': 1, 'reason': '结束照护'}, expected=200)
     assert client.get(endpoint, headers=headers('other')).status_code == 403
     upload(api, content=b'fake png', expected=422)
-    upload(api, mime='image/jpeg', expected=415)
+    # Declared type is a hint: PNG bytes downloaded under a .jpg filename work.
+    assert upload(api, mime='image/jpeg', key='photo') == image
     upload(api, content=b'x' * (4 * 1024 * 1024 + 1), expected=413)
     assert len(store.read()['attachments']) == 1
+
+
+def test_webp_bytes_with_jpeg_label_are_normalized_and_retry_is_idempotent(api):
+    scope(api)
+    buf = io.BytesIO()
+    Image.new('RGB', (90, 50), 'green').save(buf, format='WEBP')
+    row = upload(api, content=buf.getvalue(), mime='image/jpeg', key='renamed-webp')
+    assert upload(api, content=buf.getvalue(), mime='image/webp', key='renamed-webp') == row
+    client, store, headers = api
+    content = client.get('/api/v1/attachments/' + row['id'] + '/content', headers=headers()).content
+    with Image.open(io.BytesIO(content)) as decoded:
+        assert decoded.format == 'JPEG' and decoded.size == (90, 50)
+        assert not decoded.getexif()
+    assert len(store.read()['attachments']) == 1
+    assert len(list((store.data_dir / 'attachments').glob('*.jpg'))) == 1
+
+
+def test_rejected_uploads_do_not_lock_key_or_create_photos(api):
+    scope(api)
+    client, store, _ = api
+    gif = io.BytesIO()
+    Image.new('RGB', (10, 10), 'blue').save(gif, format='GIF')
+    upload(api, content=gif.getvalue(), mime='image/jpeg', key='correctable', expected=415)
+    upload(api, content=b'<svg></svg>', mime='image/jpeg', key='correctable', expected=422)
+    animated = io.BytesIO()
+    Image.new('RGB', (10, 10), 'red').save(animated, format='WEBP', save_all=True,
+        append_images=[Image.new('RGB', (10, 10), 'blue')], duration=100, loop=0)
+    upload(api, content=animated.getvalue(), mime='image/webp', key='correctable', expected=422)
+    assert store.read()['attachments'] == []
+    assert not list((store.data_dir / 'attachments').glob('*.jpg'))
+    row = upload(api, key='correctable')
+    assert row['id'] and len(store.read()['attachments']) == 1
 
 
 def test_upload_rollback_and_retry_conflict_do_not_leave_files(api, monkeypatch):

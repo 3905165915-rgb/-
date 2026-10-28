@@ -77,6 +77,51 @@ def test_clarification_is_kept_until_receiver_confirms(api, manual_payload):
     assert len(response.json()['items'][0]['clarifications']) == 2
 
 
+def test_caregiver_handover_view_filters_shared_elders_and_internal_fields(api, manual_payload):
+    client, store, headers = api
+    _, _, _, handover = prepare(api, manual_payload)
+    first_item = handover['items'][0]
+    def seed(data):
+        data['elders'].append({'id': 'E2', 'name': '未授权老人', 'status': 'active'})
+        data['handover_items'].append({'id': 'HI-E2', 'handover_id': handover['id'], 'kind': 'record',
+            'elder_id': 'E2', 'source_id': 'R-E2', 'source_revision': 1,
+            'detail': '其他老人的私密记录', 'status': 'pending', 'clarifications': [],
+            'submitted_by': 'staff', 'received_by': 'other'})
+        data['handovers'][0]['ai_summary'] = {'status': 'pending_review', 'provider': 'mock',
+            'created_at': '2026-10-27T00:00:00Z', 'points': [
+                {'text': '授权老人事项', 'citations': [{'source_id': first_item['source_id'], 'quote': first_item['detail']}]},
+                {'text': '未授权老人事项', 'citations': [{'source_id': 'R-E2', 'quote': '其他老人的私密记录'}]}]}
+    store.mutate(seed)
+    response = client.get(f'/api/v1/handovers/{handover["id"]}', headers=headers('staff'))
+    assert response.status_code == 200
+    body = response.json()
+    assert all(item['elder_id'] == 'E1' for item in body['items'])
+    assert 'clarifications' in body['items'][0]
+    assert all('received_by' not in item and 'submitted_by' not in item for item in body['items'])
+    assert '未授权老人' not in body['ai_summary']['text']
+    manager = client.get(f'/api/v1/handovers/{handover["id"]}', headers=headers('manager')).json()
+    assert any(item['elder_id'] == 'E2' for item in manager['items'])
+
+
+def test_handover_inline_analysis_keeps_existing_task_and_only_suggests_new_task(api, manual_payload):
+    client, store, headers = api
+    _, _, _, handover = prepare(api, manual_payload)
+    existing = {row['id'] for row in store.read()['care_tasks']}
+    response = client.post(f'/api/v1/handovers/{handover["id"]}/ai-summary',
+        json={'expected_revision': handover['revision'], 'text': '请联系家属反馈情况'}, headers=headers())
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result['ai_summary']['status'] == 'pending_review'
+    assert result['handover_suggestions'][0]['evidence_text'] == '请联系家属反馈情况'
+    assert {row['id'] for row in store.read()['care_tasks']} == existing
+    assert {row['source_id'] for row in result['items'] if row['kind'] == 'task'} <= existing
+    submitted = client.post(f'/api/v1/handovers/{handover["id"]}/submit',
+        json={'expected_revision': result['revision'], 'summary': '人工核对摘要',
+              'approve_ai_summary': True, 'accepted_tasks': []}, headers=headers())
+    assert submitted.status_code == 200
+    assert {row['id'] for row in store.read()['care_tasks']} == existing
+
+
 def test_shift_conflicts_and_nonmembers_are_rejected(api, manual_payload):
     client, _, headers = api
     source, target = shifts(api)
@@ -93,3 +138,46 @@ def test_utc_suffix_and_offset_timestamps_refer_to_same_shift_window(api):
     assert client.post('/api/v1/shifts', json=payload, headers=headers('manager')).status_code == 201
     overlap = {**payload, 'start_at': '2026-10-18T20:00:00+08:00', 'end_at': '2026-10-19T08:00:00+08:00'}
     assert client.post('/api/v1/shifts', json=overlap, headers=headers('manager')).status_code == 409
+
+
+def test_note_only_handover_author_can_review_and_submit_without_saved_shift_items(api):
+    client, store, headers = api
+    source, target = shifts(api)
+    handover = client.post('/api/v1/handovers', json={
+        'source_shift_id': source['id'], 'target_shift_id': target['id'],
+    }, headers=headers()).json()
+    assert handover['items'] == []
+    url = f'/api/v1/handovers/{handover["id"]}'
+    result = client.post(url + '/ai-summary', json={
+        'expected_revision': handover['revision'], 'text': '请联系家属反馈情况',
+    }, headers=headers())
+    assert result.status_code == 200, result.text
+    reviewed = result.json()
+    assert reviewed['ai_summary']['text']
+    assert reviewed['handover_suggestions'] == []
+    # The incoming caregiver has no authorized elder source for this free text.
+    incoming = client.get(url, headers=headers('other')).json()
+    assert incoming['ai_summary']['text'] == ''
+    assert incoming['handover_suggestions'] == []
+    submitted = client.post(url + '/submit', json={
+        'expected_revision': reviewed['revision'], 'summary': reviewed['ai_summary']['text'],
+        'approve_ai_summary': True, 'accepted_tasks': [],
+    }, headers=headers())
+    assert submitted.status_code == 200, submitted.text
+    assert submitted.json()['status'] == 'received'
+    assert store.read()['care_tasks'] == []
+
+
+def test_manual_handover_does_not_require_model_output(api):
+    client, store, headers = api
+    source, target = shifts(api)
+    created = client.post('/api/v1/handovers', json={
+        'source_shift_id': source['id'], 'target_shift_id': target['id'],
+    }, headers=headers()).json()
+    response = client.post(f'/api/v1/handovers/{created["id"]}/submit', json={
+        'expected_revision': created['revision'], 'summary': '已核对本班照护情况，无新增待办。',
+        'approve_ai_summary': False, 'accepted_tasks': [],
+    }, headers=headers())
+    assert response.status_code == 200
+    assert store.read()['handovers'][0]['summary'] == '已核对本班照护情况，无新增待办。'
+    assert store.read()['handovers'][0]['ai_summary'] is None

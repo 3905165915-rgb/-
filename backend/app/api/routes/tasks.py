@@ -27,8 +27,11 @@ def tasks(current: StaffUser, store: Store, elder_id: str | None = None, shift_i
 
 
 @router.get('/{task_id}', response_model=CareTask)
-def detail(task_id: str, _: StaffUser, store: Store):
-    return task_service.task_view(find(store.read(), 'care_tasks', task_id, 'task_not_found'))
+def detail(task_id: str, current: StaffUser, store: Store):
+    from app.services.presentation_service import task_context
+    data = store.read()
+    return task_context(data, task_service.task_view(find(data, 'care_tasks', task_id, 'task_not_found')),
+                        current['sub'], current['role'])
 
 
 @router.patch('/{task_id}', response_model=CareTask)

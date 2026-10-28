@@ -48,10 +48,15 @@ def test_only_reviewed_safe_summary_and_private_feedback(api):
     record, summary = draft(api, state)
     path = f'/family/me/bindings/{grant["id"]}'
     assert get(api, path + '/summaries') == []
+    assert get(api, path + '/handovers') == []
     published = publish(api, summary)
     visible = get(api, path + '/summaries')
     assert len(visible) == 1 and visible[0]['id'] == published['id']
     assert set(visible[0]) == {'id', 'elder_id', 'text', 'period_start', 'period_end', 'revision', 'reviewed_at'}
+    family_handover = get(api, path + '/handovers')[0]
+    assert family_handover['summary'] == published['text']
+    assert family_handover['tasks'] == []
+    assert set(family_handover) == {'id', 'elder_id', 'summary', 'tasks', 'period_start', 'period_end'}
     my = get(api, '/family/me/bindings')[0]
     assert 'consent_reference' not in my and 'family_id' not in my
     note = post(api, '/family/me/feedback', {'binding_id': grant['id'], 'text': '希望晚饭前再提醒饮水。'}, actor='family', key='feedback')

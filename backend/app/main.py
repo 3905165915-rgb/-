@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+import threading
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -13,7 +14,7 @@ from app.schemas.api import HealthResponse
 from app.storage.json_store import CURRENT_SCHEMA_VERSION, JsonStore
 from app.services.workflow import DomainError
 from app.api.routes import family, incidents, reports, insights, impressions
-from app.api.routes import notifications, photos, governance
+from app.api.routes import notifications, photos, governance, care_advice, elder_workspace
 
 
 @asynccontextmanager
@@ -25,19 +26,59 @@ async def lifespan(_: FastAPI):
             raise RuntimeError('Production requires a unique SECRET_KEY of at least 32 characters')
         if settings.ai_provider.lower() == 'mock' or settings.ai_fallback_mock:
             raise RuntimeError('Production must not silently use Mock AI; use APP_ENV=demo for synthetic demos')
-    JsonStore(settings.data_dir).read()  # Fail startup on an unmigrated/corrupt store.
-    yield
+    store = JsonStore(settings.data_dir)
+    store.read()  # Fail startup on an unmigrated/corrupt store.
+    from app.services.elder_workspace_service import recover_jobs, run_plan_rules, process_next
+    from app.services.record_job_service import process_inline_next
+    recover_jobs(store)
+    stop = threading.Event()
+    def organise():
+        while not stop.wait(5):
+            try:
+                run_plan_rules(store)
+                process_inline_next(store)
+                process_next(store)
+            except Exception:
+                # Jobs retain a persistent failure state; never echo record text
+                # or credentials into process logs.
+                pass
+    worker = threading.Thread(target=organise, name='elder-organising', daemon=True)
+    # Isolated synthetic tests invoke process_next explicitly for deterministic
+    # fault/concurrency checks. Live providers run the durable worker by default.
+    if settings.background_jobs_enabled:
+        worker.start()
+    try:
+        yield
+    finally:
+        stop.set()
+        if worker.is_alive():
+            worker.join(timeout=1)
 
 
-app = FastAPI(title="护老智交 Backend", version="0.4.2", lifespan=lifespan)
+app = FastAPI(title="护老智交 Backend", version="0.6.0", lifespan=lifespan)
 
 
 @app.middleware('http')
 async def private_api_responses(request: Request, call_next):
-    response = await call_next(request)
+    from app.storage.request_context import expected_demo_batch
+    token = None
+    if request.url.path.startswith('/api/'):
+        batch = JsonStore(settings.data_dir).read().get('demo_batch_id')
+        supplied = request.headers.get('X-Demo-Batch')
+        if batch and supplied and supplied != batch:
+            return JSONResponse(status_code=409, content={'detail': 'demo_batch_changed',
+                'safe_message': '演示资料已重建，请刷新页面后继续。'}, headers={'X-Demo-Batch': batch})
+        token = expected_demo_batch.set(batch or '')
+    try:
+        response = await call_next(request)
+    finally:
+        if token is not None:
+            expected_demo_batch.reset(token)
     if request.url.path.startswith('/api/'):
         response.headers['Cache-Control'] = 'no-store'
         response.headers['X-Content-Type-Options'] = 'nosniff'
+        if batch:
+            response.headers['X-Demo-Batch'] = batch
     return response
 
 
@@ -53,11 +94,19 @@ async def validation_error_handler(request: Request, exc: RequestValidationError
 @app.exception_handler(DomainError)
 async def domain_error_handler(_, exc: DomainError):
     messages = {
+        'task_time_change_reason_required': '最终时间与原文建议不同，请补充调整原因后重试',
+        'task_service_time_invalid': '执行时间需在班次内且不晚于截止时间',
+        'demo_batch_changed': '演示资料已重建，请刷新页面后继续。',
+        'arrangement_context_changed': '相关资料或任务已变化，请重新预览安排后确认。',
+        'arrangement_no_service_in_shift': '所选日期与班次没有待安排服务，请核对服务日期、时间和班次。',
+        'job_claim_changed': '整理任务已恢复或重新领取，请等待最新结果。',
         'elder_not_in_current_work_scope': '该老人不在你的当前照护范围，请主管安排照护分配或临时支援',
         'elder_not_in_care': '该老人当前不在可提供在院照护的状态，请先核对入住或离院信息',
         'attachment_size_invalid': '照片不能为空且不能超过4MB，请压缩后重试',
-        'attachment_format_invalid': '仅支持JPEG和PNG照片',
-        'attachment_format_mismatch': '照片内容与所选文件类型不一致，请重新选择',
+        'attachment_format_invalid': '仅支持JPEG、PNG和WebP照片，请将其他格式转换后上传',
+        'attachment_format_mismatch': '照片格式无法确认，请转换为JPEG、PNG或WebP后上传',
+        'attachment_dimensions_invalid': '照片不能超过1600万像素，且不支持动态图片，请缩小或选择静态照片',
+        'attachment_normalized_too_large': '转换后的照片超过4MB，请压缩后重试',
         'attachment_pending_review_private': '照片尚未审核，仅上传人和主管可以查看',
         'attachment_image_invalid': '无法读取这张照片，请重新拍摄或选择其他照片',
         'image_analysis_requires_management_review': '此项照片观察需要主管审核，请提交审核',
@@ -68,6 +117,23 @@ async def domain_error_handler(_, exc: DomainError):
         'record_impact_changed_refresh': '影响范围已变化，请重新预览并核对',
         'not_a_shift_member': '当前账号未加入该班次，请选择正确班次或联系主管',
         'assistant_context_changed': '相关照护资料已更新，请重新整理并核对',
+        'advice_insufficient_sources': '暂无足够的正式记录或有效偏好，请先记录实际照护情况',
+        'advice_scope_too_large': '本次照护资料过多，请缩短回顾日期后重试',
+        'advice_context_changed': '整理期间照护资料已更新，请重新获取建议',
+        'advice_requires_refresh': '建议已处理、过期或依据已变化，请刷新后核对',
+        'advice_source_changed': '建议引用的资料已变化，请核实依据后重新安排',
+        'advice_trial_paused': '主管已要求停止或调整本次尝试，请先核对新的安排',
+        'advice_task_object_mismatch': '建议与任务的老人或来源不一致，请核对',
+        'advice_condition_must_be_preserved': '请保留建议的前提条件，核实满足后才能执行',
+        'advice_not_proposed': '这条建议已处理，请刷新查看',
+        'advice_not_adopted': '请先人工采纳并安排任务，再登记执行反馈',
+        'advice_feedback_needs_task_result': '请先登记任务完成或未执行结果，再填写反馈',
+        'advice_feedback_already_saved': '本次执行已有有效反馈，请查看原记录',
+        'advice_feedback_time_invalid': '反馈发生时间应在任务创建之后且不晚于当前时间',
+        'advice_followup_needs_assignment': '后续跟进还需明确负责人和期限',
+        'advice_followup_not_requested': '未选择后续跟进，请清除跟进负责人和期限',
+        'advice_review_needs_feedback': '暂无执行反馈，不能复核本次尝试结果',
+        'advice_feedback_changed': '反馈或任务结果已变化，请刷新核对，必要时重新登记反馈',
         'idempotency_key_payload_mismatch': '本次提交标识已用于其他内容，请核对提交状态',
         'impression_no_records': '这位老人还没有已确认记录，请先登记日常照护情况',
         'impression_sources_changed': '历史记录已新增或更正，请重新整理印象后核对',
@@ -78,6 +144,13 @@ async def domain_error_handler(_, exc: DomainError):
         'impression_not_long_term_preference': '仅多日支持的生活偏好可加入长期记忆；临时意愿、分歧和专业照护关注请另行核实',
         'impression_memory_evidence_mismatch': '所选原文或版本与印象依据不一致，请刷新后重新选择',
         'impression_memory_already_created': '这条印象已加入照护记忆，请在记忆管理中查看或修订，不要重复创建',
+        'assessment_incomplete': '评估仍有待观察项目，补充并核对后才能确认',
+        'assessment_item_evidence_required': '已选择的评估结果需要关联原文依据或填写本次现场观察',
+        'invalid_assessment_item': '评估项目不正确，请刷新后重试',
+        'assessment_prefill_context_changed': '预填期间资料或入住情况已变化，请重新获取并核对',
+        'assessment_prefill_scope_too_large': '近期评估资料过多，请缩短回顾范围或直接补充现场观察',
+        'assessment_evidence_admission_changed': '原文不属于本次入住，请补充本次观察依据',
+        'assessment_not_editable': '当前评估状态不可修改，请刷新查看最新版本',
     }
     return JSONResponse(status_code=exc.status_code, content={
         'detail': exc.code, 'error_code': exc.code, 'retryable': False,
@@ -89,6 +162,7 @@ app.add_middleware(
     allow_origins=list(settings.cors_origins),
     allow_credentials=True,
     allow_methods=["*"],
+    expose_headers=['X-Demo-Batch'],
     allow_headers=["*"],
 )
 
@@ -120,3 +194,6 @@ app.include_router(impressions.router, prefix="/api/v1")
 app.include_router(notifications.router, prefix="/api/v1")
 app.include_router(photos.router, prefix="/api/v1")
 app.include_router(governance.router, prefix="/api/v1")
+
+app.include_router(care_advice.router, prefix="/api/v1")
+app.include_router(elder_workspace.router, prefix="/api/v1")

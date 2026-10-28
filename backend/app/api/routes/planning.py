@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 
 from app.api.deps import ManagementUser, StaffUser, Store
 from app.api.routes.records import IdempotencyKey
-from app.schemas.planning import AssessmentCreate, AssessmentReview, PlanCreate, PlanReview, PlanGenerate, PlanReissue
+from app.schemas.planning import (AssessmentAnswers, AssessmentCreate, AssessmentPrefillRequest,
+                                  AssessmentReview, PlanCreate, PlanReview, PlanGenerate, PlanReissue)
 from app.services import assessment_service as assessments, plan_service as plans
 from app.services.workflow import find
 
@@ -12,6 +13,15 @@ router = APIRouter(tags=['planning'])
 @router.get('/assessments/templates')
 def templates(_: StaffUser):
     return assessments.templates()
+
+
+@router.post('/assessments/prefill')
+def prefill_assessment(payload: AssessmentPrefillRequest, current: StaffUser, store: Store):
+    from app.services.ai_service import AIProviderError
+    try:
+        return assessments.prefill(store, payload, current['sub'], current['role'])
+    except AIProviderError as exc:
+        raise HTTPException(503, '评估预填暂时不可用，请直接补充现场观察；已有记录不受影响') from exc
 
 
 @router.get('/assessments')
@@ -28,6 +38,12 @@ def get_assessment(assessment_id: str, current: StaffUser, store: Store):
 @router.post('/assessments', status_code=201)
 def create_assessment(payload: AssessmentCreate, current: StaffUser, store: Store, idempotency_key: IdempotencyKey = None):
     return assessments.create(store, payload, current['sub'], current['role'], idempotency_key)
+
+
+@router.post('/assessments/{assessment_id}/answers')
+def update_assessment_answers(assessment_id: str, payload: AssessmentAnswers, current: StaffUser, store: Store,
+                              idempotency_key: IdempotencyKey = None):
+    return assessments.update_answers(store, assessment_id, payload, current['sub'], current['role'], idempotency_key)
 
 
 @router.post('/assessments/{assessment_id}/review')

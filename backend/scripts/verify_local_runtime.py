@@ -106,6 +106,16 @@ def main():
                           any(row['elder']['id'] == eid for row in worklist['items']))
                     record = post('/records/manual', {'elder_id': eid, 'raw_text': '本人说喜欢安静进餐，已协助饮水。'}, actor='worker', expected=201)['record']
                     check('record_has_admission_provenance', record['admission_id'] == aid)
+                    advice_path = f'/elders/{eid}/care-advice'
+                    advice = post(advice_path + '/generate', {'scene': 'dining'}, actor='worker')
+                    check('mock_advice_never_fabricates', advice['model_status'] == 'demo' and advice['items'] == [])
+                    repeat_advice = post(advice_path + '/generate', {'scene': 'dining'}, actor='worker')
+                    check('advice_batch_reused', repeat_advice['batch_id'] == advice['batch_id'])
+                    check('empty_advice_listing', get(advice_path, actor='worker')['total'] == 0)
+                    get(advice_path, actor='family', expected=403)
+                    operations = get('/ai-governance/operations')
+                    check('advice_run_measured_not_accuracy', any(row['feature'] == 'care_advice'
+                          and row['is_demo'] and row['calls'] == 1 for row in operations['models']))
                     evidence = [{'record_id': record['id'], 'revision': 1, 'quote': '喜欢安静进餐'}]
                     template = get('/assessments/templates')[0]
                     scores = {r['key']: r['options'][-1]['score'] for r in template['items']}
@@ -201,7 +211,7 @@ def main():
                     process.wait(timeout=5)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     result = {'status': 'passed', 'transport': 'real_uvicorn_tcp_http', 'python': sys.version.split()[0],
-              'platform': sys.platform, 'api_version': '0.4.2', 'schema_version': CURRENT_SCHEMA_VERSION,
+              'platform': sys.platform, 'api_version': '0.4.3', 'schema_version': CURRENT_SCHEMA_VERSION,
               'data': 'temporary_synthetic_only', 'vendor_calls': 0, 'production_mutations': 0, 'checks': checks}
     args.output.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding='utf-8')
     print(f'PASS: {len(checks)} runtime assertions over real HTTP; temporary server stopped; report written.')

@@ -10,7 +10,7 @@ def _managers(data):
 
 def _target(data, object_id):
     for collection in ('care_tasks', 'incidents', 'care_memories', 'change_reviews', 'family_cases',
-                       'handovers', 'handover_items', 'attachments', 'image_analyses', 'elder_impressions'):
+                       'handovers', 'handover_items', 'attachments', 'image_analyses', 'elder_impressions', 'care_advice'):
         row = next((r for r in data[collection] if r['id'] == object_id), None)
         if row:
             if collection == 'handover_items':
@@ -23,6 +23,10 @@ def _pending(data, kind, row):
     """Return recipients, stage and Chinese label from current authoritative state."""
     managers = _managers(data)
     status = row.get('status')
+    if kind == 'care_advice' and status == 'adopted':
+        from app.services.care_advice_service import _view
+        if row.get('feedback') and _view(data, row)['needs_review']:
+            return managers, 'advice_review', '照护建议待复核'
     if kind == 'care_tasks' and status not in {'completed', 'not_done', 'cancelled'}:
         return ({row['assigned_to']} if row.get('assigned_to') else managers), 'task', '待执行任务'
     if kind == 'incidents':
@@ -129,7 +133,7 @@ def listing(store, user_id, role, unread=False, pending=False, limit=100, offset
         known = {n['object_id'] for n in snapshot['notifications']}
         result = []
         for kind in ('care_tasks', 'incidents', 'care_memories', 'change_reviews', 'family_cases',
-                     'handovers', 'attachments', 'image_analyses', 'elder_impressions'):
+                     'handovers', 'attachments', 'image_analyses', 'elder_impressions', 'care_advice'):
             for row in snapshot[kind]:
                 if row['id'] in known:
                     continue
@@ -153,6 +157,19 @@ def listing(store, user_id, role, unread=False, pending=False, limit=100, offset
             if event_id not in events:
                 result.append({'id': event_id, 'action': 'memory_review_reminder', 'object_id': memory['id'],
                                'elder_id': memory['elder_id'], 'user_id': 'system', 'created_at': now()})
+        from app.services.care_advice_service import _view as advice_view
+        for advice in snapshot['care_advice']:
+            if advice['status'] != 'adopted' or not advice['feedback']:
+                continue
+            view = advice_view(snapshot, advice)
+            if not view['needs_review']:
+                continue
+            token = hashlib.sha256(str((advice['id'], advice['revision'], view['feedback_fingerprint'],
+                                      view['source_issues'])).encode()).hexdigest()[:24]
+            event_id = 'ADVICE-REMINDER-' + token
+            if event_id not in events:
+                result.append({'id': event_id, 'action': 'care_advice_review_reminder', 'object_id': advice['id'],
+                               'elder_id': advice['elder_id'], 'user_id': 'system', 'created_at': now()})
         return result
     if missing_notifications(data) or pending_reminders(data):
         def refresh(fresh):
