@@ -9,12 +9,14 @@ import {
 } from './workspace-action'
 import { useWorkspaceScope } from './workspace-scope'
 import ElderMemories from './ElderMemories.vue'
+import { personalFeature, personalFeatures } from './personal-profile'
 const props = defineProps<{ elderId: string; recordPath: string }>()
 const scope = useWorkspaceScope()
 const { active, management } = scope
 const confirmed = ref<Row[]>([])
 const observations = ref<Row[]>([])
 const needsReview = ref<Row[]>([])
+const features = computed(() => personalFeatures(confirmed.value))
 const content = ref<Record<string, string>>({})
 const editing = ref('')
 const reviewing = ref(false)
@@ -33,10 +35,7 @@ const groups = [
 let epoch = 0
 function group(row: Row) {
   const value = String(row.understanding_group || row.category)
-  if (
-    ['recent_changes', 'recentChanges'].includes(value) ||
-    ['temporary', 'temporary_wish', 'conflict'].includes(String(row.kind))
-  )
+  if (['recent_changes', 'recentChanges'].includes(value))
     return 'recent_changes'
   if (['communication'].includes(value)) return 'communication'
   if (['habit', 'routine'].includes(value)) return 'habit'
@@ -79,7 +78,7 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    const result = object(
+    let result = object(
       await request(
         '/elders/' + encodeURIComponent(props.elderId) + '/understanding',
       ),
@@ -93,9 +92,21 @@ async function load() {
     confirmed.value = nextConfirmed
     observations.value = nextObservations
     needsReview.value = nextReview
-    notice.value = String(
-      result.notice || '本人当次意愿优先。近期观察不替代已确认照护要求。',
-    )
+    notice.value = String(result.notice || '人工确认个人特性，原文可展开核实。')
+    if (result.profile_summary_needed === true) {
+      result = object(
+        await request(
+          '/elders/' +
+            encodeURIComponent(props.elderId) +
+            '/understanding/summarize',
+          'post',
+        ),
+      )
+      if (ticket !== epoch || !scope.valid()) return
+      if (result.elder_id !== props.elderId)
+        throw new Error('个人特性与当前老人不匹配。')
+      confirmed.value = rows(result.confirmed)
+    }
   } catch (failure) {
     if (ticket === epoch && scope.valid())
       error.value = (failure as Error).message
@@ -154,7 +165,7 @@ async function retry() {
 }
 function editObservation(row: Row) {
   editing.value = String(row.id)
-  content.value[String(row.id)] = String(row.text)
+  content.value[String(row.id)] = personalFeature(row)
 }
 watch(
   () => props.elderId,
@@ -199,15 +210,15 @@ defineExpose({ refresh: load })
       class="workspace-panel"
       aria-label="照护要点"
     >
-      <h4>先了解这几件事</h4>
+      <h4>个人特性</h4>
       <ul>
-        <li v-for="row in confirmed.slice(0, 5)" :key="String(row.id)">
-          {{ row.content }}
+        <li v-for="feature in features" :key="feature">
+          {{ feature }}
         </li>
       </ul>
     </section>
     <details>
-      <summary>查看分类资料、原文与逐项核对</summary>
+      <summary>原文核实与个人印象管理</summary>
       <p v-if="loading" role="status">正在读取已确认资料与近期观察…</p>
       <p v-if="error || saveError" role="alert" class="workspace-error">
         {{ error || saveError }}
@@ -229,10 +240,10 @@ defineExpose({ refresh: load })
             :key="String(row.id)"
             class="understanding-card confirmed"
           >
-            <strong>{{ row.content }}</strong
+            <strong>{{ personalFeature(row) }}</strong
             ><span class="workspace-badge">已人工确认</span>
             <details>
-              <summary>查看原文依据</summary>
+              <summary>原文核实</summary>
               <blockquote v-for="(source, i) in citations(row)" :key="i">
                 {{ source.quote }}
                 <footer>
@@ -241,26 +252,23 @@ defineExpose({ refresh: load })
               </blockquote>
             </details>
           </article>
-          <h5>近期观察 · 尚待核实</h5>
-          <p v-if="!item.observations.length" class="muted">暂无近期观察</p>
+          <h5>待确认的个人印象</h5>
+          <p v-if="!item.observations.length" class="muted">暂无待确认内容</p>
           <article
             v-for="row in item.observations"
             :key="String(row.id)"
             class="understanding-card"
           >
-            <p>{{ row.text }}</p>
+            <p>{{ personalFeature(row) }}</p>
             <p class="workspace-warning">
-              {{ row.label
-              }}{{
-                row.kind === 'conflict'
-                  ? '；不同记录存在差异，请询问本人并补充观察'
-                  : row.kind === 'temporary' || row.kind === 'temporary_wish'
-                    ? '；临时意愿，只适用于当次情况'
-                    : ''
+              {{
+                row.source_current === false
+                  ? '依据已变化，请重新核实'
+                  : '核对后决定是否加入个人印象'
               }}
             </p>
             <details>
-              <summary>查看原文依据（{{ citations(row).length }} 条）</summary>
+              <summary>原文核实（{{ citations(row).length }} 条）</summary>
               <blockquote v-for="(source, i) in citations(row)" :key="i">
                 {{ source.quote }}
                 <footer>
@@ -285,7 +293,7 @@ defineExpose({ refresh: load })
                   @click="decide(row, 'adopt')"
                 >
                   {{
-                    editing === row.id ? '确认修改并采用' : '采用为已确认资料'
+                    editing === row.id ? '确认修改并加入' : '加入个人印象'
                   }}</button
                 ><button
                   v-if="row.can_adopt === true && editing !== row.id"
@@ -293,17 +301,17 @@ defineExpose({ refresh: load })
                   :disabled="busy || !!pending"
                   @click="editObservation(row)"
                 >
-                  修改后采用</button
+                  修改后加入</button
                 ><button
                   type="button"
                   :disabled="busy || !!pending"
                   @click="decide(row, 'reject')"
                 >
-                  不采用
+                  暂不加入
                 </button>
               </div>
               <p v-if="row.can_adopt !== true" class="muted">
-                临时意愿、冲突、照护关注或已变化依据不能直接采用为长期偏好。
+                请先核实来源或照护关注事项，再决定后续处理。
               </p>
             </template>
           </article>
