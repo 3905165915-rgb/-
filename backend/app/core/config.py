@@ -37,6 +37,7 @@ class Settings:
     background_jobs_enabled: bool = True
     demo_family_all_elders: bool = False
     speech_model: str = 'Qwen/Qwen3-ASR-1.7B'
+    quality_ai_enabled: bool = False
 
 
 def get_settings() -> Settings:
@@ -50,6 +51,7 @@ def get_settings() -> Settings:
         access_token_minutes=int(os.getenv("ACCESS_TOKEN_MINUTES", "720")),
         data_dir=data_dir,
         ai_provider=os.getenv("AI_PROVIDER", "mock"),
+        quality_ai_enabled=os.getenv('QUALITY_AI_ENABLED', 'false').lower() in {'1', 'true', 'yes'},
         deepseek_api_key=os.getenv("DEEPSEEK_API_KEY", ""),
         deepseek_base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1").rstrip("/"),
         deepseek_model=os.getenv("DEEPSEEK_MODEL", "deepseek-flash"),

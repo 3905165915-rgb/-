@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -19,7 +20,7 @@ router = APIRouter(prefix="/elders", tags=["elders"])
 @router.get("", response_model=list[Elder])
 def elders(current: StaffUser, store: Store) -> list[Elder]:
     data = store.read()
-    scope = care_scope_service.elder_ids(data, current['sub'], current['role']) if current['role'] == 'caregiver' else None
+    scope = care_scope_service.elder_ids(data, current['sub'], current['role']) if current['role'] in {'caregiver', 'nurse'} else None
     from app.services.presentation_service import bed_label
     return [Elder.model_validate({**row, 'bed_label': bed_label(data, row.get('bed_id'))})
             for row in data['elders'] if scope is None or row['id'] in scope]
@@ -43,6 +44,20 @@ def elder_timeline(elder_id: str, current: StaffUser, store: Store,
 @router.post('/work-assignments', status_code=201)
 def assign_care(payload: CareAssignment, current: ManagementUser, store: Store, idempotency_key: IdempotencyKey = None):
     return care_scope_service.assign(store, payload, current['sub'], current['role'], idempotency_key)
+
+
+@router.get('/work-assignments')
+def care_assignments(current: ManagementUser, store: Store, elder_id: str | None = None,
+                     caregiver_id: str | None = None,
+                     status: Literal['active', 'scheduled', 'expired', 'revoked'] | None = None,
+                     limit: int = Query(100, ge=1, le=200), offset: int = Query(0, ge=0)):
+    return care_scope_service.assignments(store, current['sub'], current['role'], elder_id,
+                                          caregiver_id, status, limit, offset)
+
+
+@router.get('/work-assignments/{assignment_id}')
+def care_assignment(assignment_id: str, current: ManagementUser, store: Store):
+    return care_scope_service.assignment_detail(store, assignment_id, current['sub'], current['role'])
 
 
 @router.post('/work-assignments/{assignment_id}/revoke')

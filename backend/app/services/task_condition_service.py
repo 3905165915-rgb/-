@@ -62,8 +62,8 @@ def state_from_data(data, task, at=None):
     checker = verification.get('checker_id') if verification else None
     staff = next((row for row in data['users'] if row['id'] == checker), None) if checker else None
     shift = next((row for row in data['shifts'] if row['id'] == task.get('shift_id')), None)
-    checker_available = bool(staff and staff.get('active', True) and staff.get('role') in {'admin', 'supervisor', 'caregiver'}
-                             and (staff['role'] != 'caregiver' or not task.get('shift_id') or
+    checker_available = bool(staff and staff.get('active', True) and staff.get('role') in {'admin', 'supervisor', 'caregiver', 'nurse'}
+                             and (staff['role'] not in {'caregiver', 'nurse'} or not task.get('shift_id') or
                                   (shift and checker in shift['caregiver_ids'])))
     if required:
         if verification is None:
@@ -169,7 +169,7 @@ def configure(store, task_id, payload, user_id, role, key=None):
     def operation(data, task, at):
         active_staff(data, payload.checker_id)
         checker = find(data, 'users', payload.checker_id, 'assignee_not_found')
-        if checker['role'] == 'caregiver' and task.get('shift_id'):
+        if checker['role'] in {'caregiver', 'nurse'} and task.get('shift_id'):
             shift = find(data, 'shifts', task['shift_id'], 'shift_not_found')
             if payload.checker_id not in shift['caregiver_ids']:
                 raise DomainError('condition_checker_not_in_shift', 422)

@@ -11,7 +11,7 @@ def listing(_: StaffUser, store: Store, limit: int = Query(100, ge=1, le=200), o
     """Minimal safe lookup for shift members and task assignees; no credentials."""
     return [{'id': row['id'], 'display_name': row['display_name'], 'role': row['role']}
             for row in store.read()['users']
-            if row.get('active', True) and row['role'] in {'admin', 'supervisor', 'caregiver'}][offset:offset+limit]
+            if row.get('active', True) and row['role'] in {'admin', 'supervisor', 'caregiver', 'nurse'}][offset:offset+limit]
 
 
 @router.get('/directory')

@@ -13,7 +13,7 @@ TERMINAL = {'rejected', 'retired'}
 
 
 def _staff(role):
-    if role not in {'admin', 'supervisor', 'caregiver'}:
+    if role not in {'admin', 'supervisor', 'caregiver', 'nurse'}:
         raise DomainError('staff_required', 403)
 
 
@@ -316,7 +316,7 @@ def report_refusal(store, memory_id, payload: MemoryRefusalRequest, user_id, rol
             if item['status'] != 'confirmed':
                 raise DomainError('memory_not_confirmed')
             record = find(data, 'care_records', payload.record_id, 'record_not_found')
-            if role == 'caregiver' and record.get('created_by') != user_id:
+            if role in {'caregiver', 'nurse'} and record.get('created_by') != user_id:
                 if not record.get('shift_id'):
                     raise DomainError('refusal_evidence_not_accessible', 403)
                 shift = find(data, 'shifts', record['shift_id'], 'shift_not_found')

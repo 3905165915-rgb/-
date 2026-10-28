@@ -71,6 +71,8 @@ def get(store, item_id, user_id, role):
 def create(store, payload, user_id, role, key=None):
     def mutate(data):
         current_staff(data, user_id, role)
+        if role not in {'caregiver', 'nurse'}:
+            raise DomainError('incident_reporting_requires_frontline_staff', 403)
         from app.services.care_scope_service import require_elder_access
         require_elder_access(data, payload.elder_id, user_id, role)
         def operation():
@@ -93,6 +95,9 @@ def prepare(store, payload, user_id, role):
     from app.services.ai_service import AIProviderError, get_ai_provider
     from app.services.ai_outputs import validate_citations
     data = store.read()
+    current_staff(data, user_id, role)
+    if role not in {'caregiver', 'nurse'}:
+        raise DomainError('incident_reporting_requires_frontline_staff', 403)
     require_elder_access(data, payload.elder_id, user_id, role)
     sources = [{'source_id': 'description', 'text': payload.description}]
     if payload.immediate_action:

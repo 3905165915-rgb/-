@@ -187,7 +187,7 @@ def detail(store, analysis_id, user_id, role):
     row = find(data, 'image_analyses', analysis_id, 'image_analysis_not_found')
     photo = find(data, 'attachments', row['attachment_id'], 'attachment_not_found')
     photos.access(data, photo, user_id, role)
-    if role == 'caregiver' and row['created_by'] != user_id:
+    if role in {'caregiver', 'nurse'} and row['created_by'] != user_id:
         raise DomainError('image_analysis_author_or_management_required', 403)
     if row['status'] == 'processing' and (parse_time(now()) - parse_time(row.get('started_at') or row['created_at'])).total_seconds() > 180:
         store.mutate(_recover_interrupted)
@@ -201,14 +201,14 @@ def review(store, analysis_id, payload, user_id, role, key=None):
         row = find(data, 'image_analyses', analysis_id, 'image_analysis_not_found')
         photo = find(data, 'attachments', row['attachment_id'], 'attachment_not_found')
         photos.access(data, photo, user_id, role)
-        if role == 'caregiver' and row['created_by'] != user_id:
+        if role in {'caregiver', 'nurse'} and row['created_by'] != user_id:
             raise DomainError('image_analysis_author_or_management_required', 403)
         def operation():
             version(row, payload.expected_revision)
             if row['status'] not in {'pending_review', 'pending_management'}:
                 raise DomainError('image_analysis_not_pending_review')
             professional = bool((row['output'] or {}).get('requires_professional_review'))
-            if payload.decision == 'confirm' and role == 'caregiver' and (professional or row['status'] == 'pending_management'):
+            if payload.decision == 'confirm' and role in {'caregiver', 'nurse'} and (professional or row['status'] == 'pending_management'):
                 raise DomainError('image_analysis_requires_management_review', 403)
             if payload.decision != 'reject':
                 elder = care_eligible(data, row['elder_id'])

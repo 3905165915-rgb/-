@@ -17,20 +17,21 @@ from app.services.facility_service import care_eligible, care_state
 
 
 router = APIRouter(prefix="/records", tags=["records"])
+from app.services.listing_service import Page
 IdempotencyKey = Annotated[str | None, Header(min_length=1, max_length=128)]
 
 
-@router.get('', response_model=list[CareRecord])
+@router.get('', response_model=list[CareRecord] | Page[CareRecord])
 def records(current: StaffUser, store: Store, elder_id: str | None = None, shift_id: str | None = None,
-            limit: int = Query(100, ge=1, le=200), offset: int = Query(0, ge=0)):
-    return record_service.record_list(store, elder_id, shift_id, limit, offset, current['sub'], current['role'])
+            limit: int = Query(100, ge=1, le=200), offset: int = Query(0, ge=0), envelope: bool = False):
+    return record_service.record_list(store, elder_id, shift_id, limit, offset, current['sub'], current['role'], envelope)
 
 
-@router.get('/drafts', response_model=list[AIDraft])
+@router.get('/drafts', response_model=list[AIDraft] | Page[AIDraft])
 def drafts(current: StaffUser, store: Store, elder_id: str | None = None,
            status: Literal['pending_review', 'confirmed', 'rejected', 'failed'] | None = None,
-           limit: int = Query(100, ge=1, le=200), offset: int = Query(0, ge=0)):
-    return record_service.draft_list(store, current['sub'], current['role'], elder_id, status, limit, offset)
+           limit: int = Query(100, ge=1, le=200), offset: int = Query(0, ge=0), envelope: bool = False):
+    return record_service.draft_list(store, current['sub'], current['role'], elder_id, status, limit, offset, envelope)
 
 
 @router.get('/drafts/{draft_id}', response_model=AIDraft)

@@ -197,7 +197,7 @@ def link(store, item_id, payload, user_id, role, key=None):
             target = find(data, collection, payload.target_id, 'attachment_target_not_found')
             if target['elder_id'] != item['elder_id'] or target.get('admission_id') != item['admission_id']:
                 raise DomainError('attachment_target_elder_or_admission_mismatch', 422)
-            if role == 'caregiver' and target['created_by'] != user_id:
+            if role in {'caregiver', 'nurse'} and target['created_by'] != user_id:
                 raise DomainError('attachment_link_requires_author_or_management', 403)
             reference = payload.model_dump()
             if any(all(link.get(k) == v for k, v in reference.items()) for link in item['links']):

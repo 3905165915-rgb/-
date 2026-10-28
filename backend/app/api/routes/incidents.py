@@ -1,7 +1,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Header, Query, HTTPException
-from app.api.deps import ManagementUser, StaffUser, Store
+from app.api.deps import IncidentReporter, ManagementUser, StaffUser, Store
 from app.schemas import incident as schema
 from app.services import incident_service as service
 
@@ -10,7 +10,7 @@ Key = Annotated[str | None, Header(alias='Idempotency-Key', min_length=1, max_le
 
 
 @router.post('/incidents/prepare')
-def prepare(payload: schema.IncidentPrepare, current: StaffUser, store: Store):
+def prepare(payload: schema.IncidentPrepare, current: IncidentReporter, store: Store):
     from app.services.ai_service import AIProviderError
     from pydantic import ValidationError
     try:
@@ -31,7 +31,7 @@ def get(incident_id: str, current: StaffUser, store: Store):
 
 
 @router.post('/incidents', status_code=201)
-def create(payload: schema.IncidentCreate, current: StaffUser, store: Store, idempotency_key: Key = None):
+def create(payload: schema.IncidentCreate, current: IncidentReporter, store: Store, idempotency_key: Key = None):
     return service.create(store, payload, current['sub'], current['role'], idempotency_key)
 
 

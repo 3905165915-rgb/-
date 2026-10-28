@@ -40,7 +40,7 @@ class LoginRequest(BaseModel):
 
 
 class DemoLoginRequest(BaseModel):
-    role: Literal["admin", "supervisor", "caregiver", "family"]
+    role: Literal["admin", "supervisor", "caregiver", "family", 'nurse']
 
 
 class LoginResponse(BaseModel):
@@ -218,7 +218,7 @@ class QualityScanRequest(BaseModel):
     elder_id: str | None = None
     shift_id: str | None = None
     handover_id: str | None = None
-    include_ai: bool = False
+    include_ai: bool | None = None
 
 
 class QualityResolveRequest(BaseModel):

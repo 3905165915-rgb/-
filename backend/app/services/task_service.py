@@ -22,10 +22,10 @@ def task_view(item: dict) -> dict:
     return result
 
 
-def list_tasks(store: JsonStore, elder_id=None, shift_id=None, assigned_to=None, status=None, limit=100, offset=0, user_id=None, role=None):
+def list_tasks(store: JsonStore, elder_id=None, shift_id=None, assigned_to=None, status=None, limit=100, offset=0, user_id=None, role=None, envelope=False, q=None):
     data = store.read()
     items = data['care_tasks']
-    if role == 'caregiver':
+    if role in {'caregiver', 'nurse'}:
         from app.services.care_scope_service import elder_ids
         scope = elder_ids(data, user_id, role)
         items = [r for r in items if r['elder_id'] in scope or r.get('assigned_to') == user_id]
@@ -34,8 +34,12 @@ def list_tasks(store: JsonStore, elder_id=None, shift_id=None, assigned_to=None,
     items = [item for item in items if (elder_id is None or item['elder_id'] == elder_id)
              and (shift_id is None or item['shift_id'] == shift_id)
              and (assigned_to is None or item['assigned_to'] == assigned_to)
-             and (status is None or item['status'] == status)]
-    return [CareTask.model_validate(item) for item in sorted(items, key=lambda item: item['id'])[offset:offset+limit]]
+             and (status is None or item['status'] == status)
+             and (not q or q.casefold() in (item['title'] + ' ' + item.get('elder_name', '')).casefold())]
+    from app.services.listing_service import page
+    rows = [CareTask.model_validate(item) for item in sorted(items, key=lambda item: item['id'])]
+    return page(rows, limit, offset, dict(elder_id=elder_id, shift_id=shift_id,
+                assigned_to=assigned_to, status=status, q=q), envelope)
 
 
 def _validate_source(data, payload: TaskCreateRequest, user_id, role):
@@ -43,7 +47,7 @@ def _validate_source(data, payload: TaskCreateRequest, user_id, role):
         return {'source_record_id': None}
     if payload.source_type == 'record':
         source = find(data, 'care_records', payload.source_id, 'task_source_not_found')
-        if role == 'caregiver' and source.get('shift_id'):
+        if role in {'caregiver', 'nurse'} and source.get('shift_id'):
             shift = find(data, 'shifts', source['shift_id'], 'shift_not_found')
             if user_id not in shift['caregiver_ids']:
                 raise DomainError('not_a_shift_member', 403)
@@ -73,7 +77,7 @@ def create_from_data(data, payload: TaskCreateRequest, user_id, role, advice_id=
         raise DomainError('due_at_must_be_future', 422)
     assigned_to = payload.assigned_to
     active_staff(data, assigned_to)
-    if role == 'caregiver' and assigned_to != user_id:
+    if role in {'caregiver', 'nurse'} and assigned_to != user_id:
         raise DomainError('management_required_to_assign_others', 403)
     if assigned_to and payload.shift_id:
         shift = find(data, 'shifts', payload.shift_id, 'shift_not_found')
@@ -110,7 +114,7 @@ def create(store: JsonStore, payload: TaskCreateRequest, user_id: str, role: str
 
 
 def actor_can_execute(item: dict, user_id: str, role: str):
-    if role == 'caregiver' and item.get('assigned_to') not in {None, user_id}:
+    if role in {'caregiver', 'nurse'} and item.get('assigned_to') not in {None, user_id}:
         raise DomainError('task_assigned_to_another_caregiver', 403)
 
 

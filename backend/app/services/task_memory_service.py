@@ -17,7 +17,7 @@ SNAPSHOT_FIELDS = (
 
 def _actor(data, task, user_id, role):
     user = find(data, 'users', user_id, 'staff_not_found')
-    if role not in {'admin', 'supervisor', 'caregiver'} or not user.get('active', True) or user.get('role') != role:
+    if role not in {'admin', 'supervisor', 'caregiver', 'nurse'} or not user.get('active', True) or user.get('role') != role:
         raise DomainError('task_memory_permissions_changed', 403)
     actor_can_execute(task, user_id, role)
 

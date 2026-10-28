@@ -21,7 +21,7 @@ def context_data(data, elder_id, user_id, role):
         'previous_plan': copy.deepcopy(active),
         'shifts': copy.deepcopy([s for s in data['shifts'] if s.get('status') == 'open']),
         'staff': [{'id': u['id'], 'display_name': u['display_name']} for u in data['users']
-                  if u.get('active', True) and u['role'] in {'admin','supervisor','caregiver'}],
+                  if u.get('active', True) and u['role'] in {'admin','supervisor','caregiver', 'nurse'}],
         'memories': memories(TransactionStore(data), elder_id),
         'needs_assessment': assessment is None}
 

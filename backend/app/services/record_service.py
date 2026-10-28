@@ -9,7 +9,7 @@ from pydantic import ValidationError
 from app.models.entities import AIDraft, CareRecord, CareTask
 from app.schemas.api import CorrectRecordRequest, ManualRecordRequest, TaskCandidate
 from app.storage.json_store import JsonStore
-from app.services.workflow import DomainError, active_staff, audit, editable, find, identifier, now, open_shift, replayable
+from app.services.workflow import DomainError, active_staff, audit, editable, find, identifier, now, open_shift, parse_time, replayable
 from app.services.workflow import current_staff
 from app.services.facility_service import care_eligible, care_state
 
@@ -19,33 +19,37 @@ def _scope(data, elder_id, user_id, role):
     require_elder_access(data, elder_id, user_id, role)
 
 
-def record_list(store: JsonStore, elder_id=None, shift_id=None, limit=100, offset=0, user_id=None, role=None) -> list[CareRecord]:
+def record_list(store: JsonStore, elder_id=None, shift_id=None, limit=100, offset=0, user_id=None, role=None, envelope=False):
     data = store.read()
     items = data['care_records']
-    if role == 'caregiver':
+    if role in {'caregiver', 'nurse'}:
         from app.services.care_scope_service import elder_ids
         scope = elder_ids(data, user_id, role)
         items = [r for r in items if r['elder_id'] in scope]
     items = [item for item in items if (elder_id is None or item['elder_id'] == elder_id)
              and (shift_id is None or item.get('shift_id') == shift_id)]
-    return [CareRecord.model_validate(item) for item in sorted(items, key=lambda x: (x['created_at'], x['id']), reverse=True)[offset:offset+limit]]
+    from app.services.listing_service import page
+    rows = [CareRecord.model_validate(item) for item in sorted(items, key=lambda x: (parse_time(x['created_at']), x['id']), reverse=True)]
+    return page(rows, limit, offset, dict(elder_id=elder_id, shift_id=shift_id), envelope)
 
 
 def record_detail(store: JsonStore, record_id: str) -> CareRecord:
     return CareRecord.model_validate(find(store.read(), 'care_records', record_id, 'record_not_found'))
 
 
-def draft_list(store: JsonStore, user_id: str, role: str, elder_id=None, status=None, limit=100, offset=0) -> list[AIDraft]:
+def draft_list(store: JsonStore, user_id: str, role: str, elder_id=None, status=None, limit=100, offset=0, envelope=False):
     data = store.read()
     items = data['ai_drafts']
-    if role == 'caregiver':
+    if role in {'caregiver', 'nurse'}:
         from app.services.care_scope_service import elder_ids
         scope = elder_ids(data, user_id, role)
         items = [r for r in items if r['elder_id'] in scope]
     items = [item for item in items if (elder_id is None or item['elder_id'] == elder_id)
              and (status is None or item['status'] == status)
              and (role in {'admin', 'supervisor'} or item.get('created_by') == user_id)]
-    return [AIDraft.model_validate(item) for item in sorted(items, key=lambda x: (x['created_at'], x['id']), reverse=True)[offset:offset+limit]]
+    from app.services.listing_service import page
+    rows = [AIDraft.model_validate(item) for item in sorted(items, key=lambda x: (parse_time(x['created_at']), x['id']), reverse=True)]
+    return page(rows, limit, offset, dict(elder_id=elder_id, status=status), envelope)
 
 
 def draft_detail(store: JsonStore, draft_id: str, user_id: str, role: str) -> AIDraft:
@@ -95,7 +99,7 @@ def create_tasks(data: dict, record: CareRecord, candidates: list[dict], user_id
                 shift = find(data, 'shifts', record.shift_id, 'shift_not_found')
                 if candidate.assigned_to not in shift['caregiver_ids']:
                     raise DomainError('assignee_not_in_shift', 422)
-            if role == 'caregiver' and candidate.assigned_to != user_id:
+            if role in {'caregiver', 'nurse'} and candidate.assigned_to != user_id:
                 raise DomainError('management_required_to_assign_others', 403)
         task = CareTask(
             id=identifier('TASK'), elder_id=record.elder_id, shift_id=record.shift_id,

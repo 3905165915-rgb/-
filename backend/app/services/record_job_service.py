@@ -45,12 +45,21 @@ def status(store, elder_id, record_id, user_id, role):
         raise DomainError('record_not_found', 404)
     analysis = next((a for a in reversed(data['record_analyses']) if a['record_id'] == record_id
                      and a['record_revision'] == record.get('revision', 1)), None)
-    if analysis:
-        return inline_record_envelope(store, record_id, analysis)
     job = next((j for j in reversed(data['care_jobs']) if j.get('kind') == 'inline'
                 and j['record_id'] == record_id and j['record_revision'] == record.get('revision', 1)), None)
     state = job['status'] if job and job['status'] in {'queued', 'processing', 'failed'} else 'failed'
-    return inline_record_envelope(store, record_id, {'status': state})
+    result = inline_record_envelope(store, record_id, analysis or {'status': state, 'error_code': (job or {}).get('error_code')})
+    result['saved'] = True
+    result['job'] = {
+        'job_id': job['id'] if job else None, 'record_id': record_id,
+        'source_revision': record.get('revision', 1),
+        'status': analysis['status'] if analysis else state,
+        'attempts': job.get('attempts', 0) if job else 0,
+        'error_code': analysis.get('error_code') if analysis else (job or {}).get('error_code'),
+        'retryable': (analysis['status'] if analysis else state) == 'failed',
+        'result_ref': analysis['id'] if analysis and analysis['status'] in {'ready', 'confirmed'} else None,
+    }
+    return result
 
 
 def retry(store, elder_id, record_id, user_id, role):

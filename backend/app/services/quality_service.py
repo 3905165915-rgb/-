@@ -4,9 +4,9 @@ from __future__ import annotations
 import hashlib
 import json
 
-from app.services.ai_service import get_ai_provider
+from app.services.ai_service import AIProviderError, get_ai_provider
 from app.services.task_service import task_view
-from app.services.workflow import DomainError, audit, current_staff, find, identifier, now, parse_time
+from app.services.workflow import DomainError, audit, current_staff, find, identifier, now, parse_time, replayable
 from app.services import task_condition_service
 
 
@@ -104,37 +104,100 @@ def rule_issues(snapshot):
     return issues
 
 
-def scan(store, scope, user_id):
+def report_view(data, report):
+    from copy import deepcopy
+    from app.schemas.api import QualityScanRequest
+    result = deepcopy(report)
+    try:
+        result['source_current'] = bool(report.get('source_fingerprint')) and fingerprint(
+            collect(data, QualityScanRequest.model_validate(report.get('scope', {})))) == report['source_fingerprint']
+    except DomainError:
+        # A historical report remains readable after its scope is retired.
+        result['source_current'] = False
+    for issue in result['issues']:
+        issue['source_current'] = result['source_current']
+        issue['related_items'] = [
+            {'id': c['source_id'], 'kind': 'task' if any(t['id'] == c['source_id'] for t in data['care_tasks']) else 'record'}
+            for c in issue['citations']]
+    return result
+
+
+def scan(store, scope, user_id, key=None):
+    from app.core.config import settings
     initial = store.read()
     actor_role = current_staff(initial, user_id, management=True)['role']
+    payload = scope.model_dump()
+    if key is not None and any(r['user_id'] == user_id and r['action'] == 'quality_scan_request' and r['key'] == key
+                               for r in initial['idempotency_keys']):
+        return replayable(initial, user_id, 'quality_scan_request', key, payload, lambda: None)
     snapshot = collect(initial, scope)
     source_hash = fingerprint(snapshot)
     issues = rule_issues(snapshot)
     provider_name = None
+    ai_status = 'not_requested'
+    ai_error = None
     sources = ai_sources(snapshot)
-    if scope.include_ai:
-        if len(sources) > 100 or sum(len(row['text']) for row in sources) > 60000:
-            raise DomainError('ai_scope_too_large_choose_elder_or_shift', 422)
-        provider = get_ai_provider()
-        result = provider.quality(sources)
-        provider_name = provider.name
-        for finding in result['findings']:
-            issues.append({'id': identifier('QI'), 'type': 'ai_suggestion', 'code': 'ai_text_review',
-                           'status': 'pending_review', **finding})
+    include_ai = scope.include_ai if scope.include_ai is not None else settings.quality_ai_enabled
+    if include_ai and sources:
+        try:
+            if len(sources) > 100 or sum(len(row['text']) for row in sources) > 60000:
+                raise AIProviderError('ai_scope_too_large_choose_elder_or_shift')
+            provider = get_ai_provider()
+            provider_name = provider.name
+            result = provider.quality(sources)
+            ai_status = 'completed'
+            # Keep one actionable suggestion per source/title/explanation. A model may
+            # repeat the same citation when several records contain similar wording.
+            seen = set()
+            for finding in result['findings']:
+                finding_key = (finding.get('title', ''), finding.get('explanation', ''),
+                       tuple((c.get('source_id'), c.get('quote')) for c in finding.get('citations', [])))
+                if finding_key in seen:
+                    continue
+                seen.add(finding_key)
+                cited_elders = {s['elder_id'] for s in sources if s['source_id'] in
+                               {c['source_id'] for c in finding.get('citations', [])}}
+                issues.append({'id': identifier('QI'), 'type': 'ai_suggestion', 'code': 'ai_text_review',
+                               'status': 'pending_review', **finding,
+                               'elder_id': next(iter(cited_elders)) if len(cited_elders) == 1 else scope.elder_id})
+        except AIProviderError:
+            # Rule checks are independent of the model. Persist them so an outage does
+            # not erase the manager's actionable review queue; the model can be retried.
+            ai_status = 'failed'
+            ai_error = 'ai_unavailable'
     def mutate(data):
         current_staff(data, user_id, actor_role, management=True)
+        if data.get('demo_batch_id') != initial.get('demo_batch_id'):
+            raise DomainError('demo_batch_changed')
+        if key is not None and any(r['user_id'] == user_id and r['action'] == 'quality_scan_request' and r['key'] == key
+                                   for r in data['idempotency_keys']):
+            return replayable(data, user_id, 'quality_scan_request', key, payload, lambda: None)
         if fingerprint(collect(data, scope)) != source_hash:
             raise DomainError('quality_sources_changed_retry_scan')
-        report = {'id': identifier('QC'), 'scope': scope.model_dump(), 'elder_id': scope.elder_id,
+        # Concurrent double clicks against one unchanged snapshot share a report.
+        recent = next((r for r in reversed(data['quality_checks']) if r['created_by'] == user_id
+                       and r['scope'] == payload and r['source_fingerprint'] == source_hash
+                       and r.get('ai_status') == ai_status
+                       and 0 <= (parse_time(now()) - parse_time(r['created_at'])).total_seconds() < 2), None)
+        if recent:
+            return replayable(data, user_id, 'quality_scan_request', key, payload, lambda: recent)
+        report = {'id': identifier('QC'), 'scope': payload, 'elder_id': scope.elder_id,
                   'created_by': user_id, 'created_at': now(), 'status': 'pending_review' if issues else 'reviewed',
                   'source_fingerprint': source_hash, 'sources': sources, 'issues': issues, 'provider': provider_name,
+                  'ai_status': ai_status, 'ai_error': ai_error,
+                  'checked_at': now(), 'rule_status': 'completed', 'model_status': ai_status,
+                  'execution_status': 'partial' if ai_status == 'failed' else 'completed',
+                  'has_sources': bool(sources or snapshot['ai_drafts'] or snapshot['handover']),
+                  'retryable': ai_status == 'failed', 'timezone': 'Asia/Shanghai',
                   'historical_snapshot': True, 'warnings': ['结果是扫描时的建议，不是医疗结论、事故认定或实时状态。']}
+        if ai_status == 'failed':
+            report['warnings'].append('AI部分未完成，已保留规则检查结果；可稍后重新发起含AI质检。')
         if provider_name == 'mock':
             report['warnings'].append('当前为演示结果，非真实AI推理。')
         data['quality_checks'].append(report)
-        audit(data, 'ai_quality_scan' if scope.include_ai else 'quality_scan', report['id'], user_id,
+        audit(data, 'ai_quality_scan' if include_ai else 'quality_scan', report['id'], user_id,
               elder_id=scope.elder_id, detail=f'生成{len(issues)}条待核对建议')
-        return report
+        return replayable(data, user_id, 'quality_scan_request', key, payload, lambda: report)
     return store.mutate(mutate)
 
 
@@ -149,6 +212,8 @@ def resolve(store, report_id, issue_id, payload, user_id):
             if issue['status'] == payload.status and issue.get('review_note') == payload.note:
                 return report
             raise DomainError('quality_issue_already_reviewed')
+        if not report_view(data, report)['source_current']:
+            raise DomainError('quality_sources_changed_retry_scan')
         issue.update(status=payload.status, review_note=payload.note, reviewed_by=user_id, reviewed_at=now())
         if all(row['status'] != 'pending_review' for row in report['issues']):
             report['status'] = 'reviewed'

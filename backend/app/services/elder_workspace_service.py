@@ -46,6 +46,8 @@ def _number(value):
 
 def _followup_due(quote, record):
     """Explicit clock only; relative days are anchored to the record event date."""
+    quote = re.sub(r'今晚|今早|明晚|明早', lambda m: {
+        '今晚': '今天晚上', '今早': '今天上午', '明晚': '明天晚上', '明早': '明天上午'}[m.group()], quote)
     china = timezone(timedelta(hours=8))
     dates = re.findall(r'20\d{2}-\d{2}-\d{2}|今天|明天|后天', quote)
     clocks = re.findall(r'(?:(上午|下午|晚上|中午)\s*)?([0-9零一二两三四五六七八九十]{1,3})(?:[：:](\d{2})|点(?:(半|[0-9零一二两三四五六七八九十]{1,3}分))?)', quote)
@@ -81,10 +83,38 @@ def time_proposal(quote, record):
     except (ValueError, TypeError):
         if re.search(r'上午\s*(?:1[3-9]|2[0-3])(?:点|[:：])|晚上\s*(?:12|十二)点', quote):
             result['conflicts'].append('时段与钟点含义需重新核对')
-        if len(re.findall(r'20\d{2}-\d{2}-\d{2}|今天|明天|后天', quote)) != 1:
+        if len(re.findall(r'20\d{2}-\d{2}-\d{2}|今天|明天|后天|今晚|今早|明晚|明早', quote)) != 1:
             result['missing'].append('请确认具体日期')
         result['missing'].append('请确认明确时段及时间')
     return result
+
+
+def preference_window(text, record):
+    """Date-limited wishes retain their source date, independent of entry time.
+
+    An unspecified temporary period is not silently promoted into a permanent
+    characteristic. Clients can supply the expiry in the existing decision.
+    """
+    base = parse_time(record.get('happened_at') or record['created_at']).astimezone(timezone(timedelta(hours=8)))
+    dates = re.findall(r'今天|今晚|明天|明晚|后天|20\d{2}-\d{2}-\d{2}', text)
+    if len(set(dates)) == 1:
+        token = dates[0]
+        offset = {'今天': 0, '今晚': 0, '明天': 1, '明晚': 1, '后天': 2}.get(token)
+        start = ((base + timedelta(days=offset)).replace(hour=0, minute=0, second=0, microsecond=0)
+                 if offset is not None else parse_time(token).replace(tzinfo=base.tzinfo))
+        return {'valid_from': start.isoformat(), 'expires_at': (start+timedelta(days=1)).isoformat(),
+                'needs_time_confirmation': False, 'timezone': 'Asia/Shanghai'}
+    temporary = bool(re.search(r'暂时|本次|这次|现在|本周|下周|本月', text)) or bool(dates)
+    return {'valid_from': base.isoformat() if temporary else None, 'expires_at': None,
+            'needs_time_confirmation': temporary, 'timezone': 'Asia/Shanghai'}
+
+
+def _memory_window(text, record, expires_at=None):
+    window = preference_window(text, record)
+    if window['needs_time_confirmation'] and expires_at is None:
+        raise DomainError('memory_applicability_time_required', 422)
+    return {'valid_from': parse_time(window['valid_from']) if window['valid_from'] else None,
+            'expires_at': expires_at or (parse_time(window['expires_at']) if window['expires_at'] else None)}
 
 
 def _scenes(point):
@@ -179,8 +209,11 @@ def analysis_failure_code(exc):
 
 
 def analysis_view(analysis):
-    return {key: copy.deepcopy(value) for key, value in analysis.items()
-            if key not in {'source_text', 'source_fingerprint', 'created_by', 'error_code'}}
+    from app.services.candidate_service import groups
+    result = {key: copy.deepcopy(value) for key, value in analysis.items()
+              if key not in {'source_text', 'source_fingerprint', 'created_by', 'error_code'}}
+    result['preference_groups'] = groups(result.get('preference_suggestions', []))
+    return result
 
 
 def _record_analysis_data(data, record_id, user_id, role):
@@ -194,7 +227,7 @@ def _record_analysis_data(data, record_id, user_id, role):
         raise DomainError('record_admission_changed')
     if record.get('shift_id'):
         shift = find(data, 'shifts', record['shift_id'], 'shift_not_found')
-        if role == 'caregiver' and user_id not in shift.get('caregiver_ids', []):
+        if role in {'caregiver', 'nurse'} and user_id not in shift.get('caregiver_ids', []):
             raise DomainError('not_a_shift_member', 403)
     return record, elder
 
@@ -256,7 +289,8 @@ def analyze_record(store, record_id, user_id, role, scene=None, claim=None):
             'content': presentation_text(candidate['content'], elder.get('name')),
             'group': candidate.get('group', 'preference'),
             'frequency': 'explicit' if explicit else ('one_time' if one_time else 'ambiguous'),
-            'attributed_to': candidate.get('attributed_to', 'unknown'), 'evidence_text': evidence_text})
+            'attributed_to': candidate.get('attributed_to', 'unknown'), 'evidence_text': evidence_text,
+            'applicability': preference_window(candidate['content']+' '+evidence_text, record)})
     observations = [{'id': identifier('OBS'), 'text': value,
                      'citation': {'source_field': source_field, 'quote': value}}
                     for value in draft.observations]
@@ -394,6 +428,10 @@ def confirm_record_analysis(store, elder_id, record_id, analysis_id, payload, us
                 suggestion = preferences_by_id.get(decision.suggestion_id)
                 if not suggestion or suggestion['evidence_text'] not in current_source:
                     raise DomainError('analysis_suggestion_source_invalid', 422)
+                suggestion['human_decision'] = {'decision': decision.decision,
+                    'original_content': suggestion['content'], 'final_content': decision.content or suggestion['content'],
+                    'edited': bool(decision.content and decision.content != suggestion['content']),
+                    'by': user_id, 'at': now(), 'source_revision': record.get('revision', 1)}
                 if decision.decision != 'adopt':
                     continue
                 request = MemoryCreateRequest(elder_id=elder_id,
@@ -402,7 +440,8 @@ def confirm_record_analysis(store, elder_id, record_id, analysis_id, payload, us
                     scenes=[analysis.get('scene', {}).get('value') or 'other'],
                     attributed_to=suggestion['attributed_to'], source_record_id=record_id,
                     source_revision=payload.expected_revision, source_field='observations',
-                    source_quote=suggestion['evidence_text'])
+                    source_quote=suggestion['evidence_text'],
+                    **_memory_window(suggestion['content']+' '+suggestion['evidence_text'], record, decision.expires_at))
                 memory = memory_service._create_candidate(data, request, user_id, candidate_source={
                     'inline_analysis_id': analysis_id, 'frequency': suggestion['frequency'],
                     'evidence_kind': 'single_person_self_report' if suggestion['attributed_to'] == 'elder' else 'single_record'})
@@ -451,28 +490,38 @@ def understanding(store, elder_id, user_id, role):
                and ('admission_id' not in r or r['admission_id'] == find(data, 'elders', elder_id, 'elder_not_found').get('current_admission_id'))]
     report = reports[-1] if reports else None
     observations = []
+    unchanged = []
     if report:
+        from app.services.candidate_service import previously_rejected, confirmed_match
         for point in report['points']:
-            if point['status'] == 'rejected':
+            if point['status'] == 'rejected' or previously_rejected(reports, report, point):
                 continue
             memory = next((m for m in memories if (m.get('impression_origin') or {}).get('impression_id') == report['id']
                            and (m.get('impression_origin') or {}).get('point_id') == point['id']), None)
             if memory and memory['effective']:
                 continue
+            match = confirmed_match(point, memories)
+            if match:
+                unchanged.append({**copy.deepcopy(point), 'report_id': report['id'], 'memory_id': match})
+                continue
             current = _cited_sources_current(data, report, point)
             observations.append({**copy.deepcopy(point), 'report_id': report['id'],
                 'display_summary': presentation_text(point['text'], elder_name),
+                'applicability': preference_window(point['text']+' '+point['citations'][0]['quote'],
+                    next(s for s in report['sources'] if s['source_id'] == point['citations'][0]['source_id'])),
                 'source_current': current, 'can_adopt': current
                 and point['category'] != 'attention' and not memory,
                 'evidence': [{**c, 'happened_at': next(s['happened_at'] for s in report['sources']
                              if s['source_id'] == c['source_id'])} for c in point['citations']],
                 'label': '近期观察，尚待核实' if current else '依据已变化，需要重新核实'})
     confirmed = [{**m, 'display_summary': presentation(m, elder_name)} for m in memories if m['effective']]
+    from app.services.candidate_service import groups
     return {'elder_id': elder_id, 'confirmed': confirmed,
+            'confirmed_groups': groups(confirmed), 'candidate_groups': groups(observations),
             'profile_summary_needed': any((m.get('presentation') or {}).get('memory_revision') != m['revision'] for m in confirmed),
             'needs_review': [m for m in memories if m['status'] not in {'retired', 'rejected'}
                              and (not m['source_current'] or m['review_state'] == 'pending')],
-            'observations': observations, 'as_of': now(),
+            'observations': observations, 'unchanged_observations': unchanged, 'as_of': now(),
             'notice': '个人特性由记录整理、经人工确认；原文可展开核实。'}
 
 
@@ -504,6 +553,9 @@ def decide(store, elder_id, report_id, point_id, payload, user_id, role, key=Non
                                       'note': point.get('review_note')})
             point.update(status='confirmed' if payload.decision == 'adopt' else 'rejected',
                          revision=point['revision'] + 1, reviewed_by=user_id, reviewed_at=now(), review_note=payload.note)
+            point['human_decision'] = {'decision': payload.decision, 'original_content': point['text'],
+                'final_content': payload.content or point['text'],
+                'edited': bool(payload.content and payload.content != point['text']), 'by': user_id, 'at': now()}
             memory = None
             if payload.decision == 'adopt':
                 citation = point['citations'][0]
@@ -513,7 +565,8 @@ def decide(store, elder_id, report_id, point_id, payload, user_id, role, key=Non
                     category='communication' if point['category'] == 'communication' else 'stable_preference',
                     scenes=scenes, attributed_to=point['expressor'] if point['expressor'] in {'elder','family','staff'} else 'unknown',
                     source_record_id=source['source_id'], source_revision=source['revision'],
-                    source_field='observations', source_quote=citation['quote'])
+                    source_field='observations', source_quote=citation['quote'],
+                    **_memory_window(point['text']+' '+citation['quote'], source, payload.expires_at))
                 memory = memory_service._create_candidate(data, request, user_id, candidate_source={
                     'impression_id': report_id, 'point_id': point_id, 'point_revision': point['revision'],
                     'citations': copy.deepcopy(point['citations']),
@@ -622,7 +675,7 @@ def _automatic_followups(data, record, suggestions):
         # negation. The source object, clock and staffing are checked by rules.
         sentences = [part.strip() for text in record.get('observations', []) for part in re.split(r'[。；;\n]', text) if part.strip()]
         complete = quote.strip().rstrip('。；;') in sentences
-        people = [p for p in data['users'] if p.get('active', True) and p['role'] in {'caregiver','supervisor','admin'}
+        people = [p for p in data['users'] if p.get('active', True) and p['role'] in {'caregiver','supervisor','admin', 'nurse'}
                   and p.get('display_name') and re.search(r'由\s*' + re.escape(p['display_name']) + r'(?=询问|负责|在|于|[，,、:：\s])', quote)]
         other_elder = any(e['id'] != record['elder_id'] and e.get('name') and e['name'] in quote for e in data['elders'])
         if not complete or other_elder or len(people) != 1 or re.search(r'取消|不再|无需|不要|用药|服药|治疗|复查|诊断|护理等级|风险|若|如果|必要时|可能|再看看|视情况|已完成|已经|已询问', quote):
@@ -963,8 +1016,13 @@ def decisions(store, user_id, role):
     for report in data['elder_impressions']:
         latest[report['elder_id']] = report
     for elder_id, report in latest.items():
+        from app.services.candidate_service import previously_rejected, confirmed_match
+        reports = [r for r in data['elder_impressions'] if r['elder_id'] == elder_id]
+        memories = [memory_service._view(data, m) for m in data['care_memories'] if m['elder_id'] == elder_id]
         for point in report['points']:
             if point['status'] == 'candidate' and point['kind'] in {'trend','conflict'}:
+                if previously_rejected(reports, report, point) or confirmed_match(point, memories):
+                    continue
                 if _cited_sources_current(data, report, point):
                     append(elder_id, point['text'], 'understanding', report['id'] + ':' + point['id'], point['citations'])
     for item in data['care_advice']:

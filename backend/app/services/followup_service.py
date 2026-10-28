@@ -1,11 +1,12 @@
 """Read-only follow-up projection. Original state machines remain authoritative."""
 from copy import deepcopy
-from app.services.workflow import current_staff, now
+from datetime import datetime, timezone
+from app.services.workflow import current_staff, now, parse_time
 from app.services import incident_service, change_review_service, elder_workspace_service
 from app.services.care_scope_service import elder_ids
 
 
-def listing(store, user_id, role, elder_id=None):
+def listing(store, user_id, role, elder_id=None, state=None, limit=None, offset=0):
     data=store.read()
     current_staff(data,user_id,role)
     scope=elder_ids(data,user_id,role)
@@ -14,7 +15,7 @@ def listing(store, user_id, role, elder_id=None):
     items=[]
     def add(kind,row,title,status,group,path,owner=None,reason=None):
         eid=row.get('elder_id')
-        if elder_id and eid != elder_id or role=='caregiver' and eid not in scope:
+        if elder_id and eid != elder_id or role in {'caregiver', 'nurse'} and eid not in scope:
             return
         state='closed' if status in {'closed','reviewed','resolved','dismissed','rejected','confirmed','acknowledged','not_applicable'} else 'review' if status in {'awaiting_review','pending_review'} else 'pending'
         items.append(dict(id=kind+':'+row['id'],object_id=row['id'],kind=kind,group=group,elder_id=eid,
@@ -61,8 +62,17 @@ def listing(store, user_id, role, elder_id=None):
             card['action_path']=action
             card['allowed_actions']=['view',action] if action else ['view']
     if role in {'admin','supervisor'}:
-        for report in data['quality_checks']:
+        seen_quality = set()
+        for report in reversed(data['quality_checks']):
             for issue in report['issues']:
+                citations = issue.get('citations', [])
+                versions = {s['source_id']: s.get('revision', 1) for s in report.get('sources', [])}
+                identity = (issue.get('code'), issue.get('title') if issue.get('type') == 'ai_suggestion' else None,
+                            tuple(sorted((c['source_id'], c['quote'], versions.get(c['source_id']))
+                             for c in citations))) if citations else (report['id'], issue['id'])
+                if identity in seen_quality:
+                    continue
+                seen_quality.add(identity)
                 row={**issue,'elder_id':issue.get('elder_id') or report.get('scope',{}).get('elder_id'),'report_id':report['id']}
                 add('quality',row,issue.get('title') or issue.get('message') or '照护记录待核对',issue['status'],
                     'quality','/quality/checks/'+report['id'],reason=issue.get('explanation'))
@@ -90,38 +100,61 @@ def listing(store, user_id, role, elder_id=None):
     for card in items:
         if card['group']!='elder':
             card['next_action']=action_labels.get(card.get('action_path'),'查看处理结果' if card['state']=='closed' else '查看当前进展')
-    return {'items':items,'counts':{s:sum(r['state']==s for r in items) for s in ('pending','review','closed')},
+    counts = {s: sum(r['state']==s for r in items) for s in ('pending','review','closed')}
+    items = [r for r in items if state is None or r['state'] == state]
+    def due_time(row):
+        if not isinstance(row.get('due_at'), str):
+            return datetime.max.replace(tzinfo=timezone.utc)
+        try:
+            value = parse_time(row['due_at'])
+            return value if value.utcoffset() is not None else datetime.max.replace(tzinfo=timezone.utc)
+        except (ValueError, TypeError, KeyError):
+            return datetime.max.replace(tzinfo=timezone.utc)
+    items.sort(key=lambda r: (r['kind'] != 'incident', due_time(r), r['id']))
+    return {'items':items[offset:offset+limit] if limit is not None else items,'counts':counts,
+            'total':len(items), 'limit':limit, 'offset':offset,
+            'filters':{'elder_id':elder_id, 'state':state}, 'timezone':'Asia/Shanghai',
             'as_of':now(),'notice':'待核对不等于漏护；查看不会自动生成、处理或关闭事项。'}
 
 
 def check_today(store, elder_id, user_id, role, key=None, kinds=None):
-    """Independent checks use isolated copies; no workflow is implicitly resolved."""
+    """Run model work outside the file lock, keeping independent check results."""
     from datetime import timedelta, timezone
     from app.services import quality_service, insight_service
     from app.schemas.api import QualityScanRequest
     from app.services.workflow import audit, identifier, parse_time, replayable
     kinds = list(dict.fromkeys(kinds or ['quality', 'coverage']))
+    snapshot = store.read()
+    elder_workspace_service.access(snapshot, elder_id, user_id, role, management=True)
+    payload = {'elder_id': elder_id, 'kinds': kinds}
+    if key is not None and any(r['user_id'] == user_id and r['action'] == 'check_today_care' and r['key'] == key
+                               for r in snapshot['idempotency_keys']):
+        return replayable(snapshot, user_id, 'check_today_care', key, payload, lambda: None)
+    day = parse_time(now()).astimezone(timezone(timedelta(hours=8))).date()
+    results = []
+    for kind in kinds:
+        try:
+            if kind == 'quality':
+                import hashlib
+                subkey = hashlib.sha256(('today-quality:' + key).encode()).hexdigest() if key else None
+                result = quality_service.scan(store, QualityScanRequest(elder_id=elder_id), user_id, subkey)
+                detail = {'report_id': result['id'], 'issue_count': len(result['issues'])}
+                state = result['execution_status']
+            else:
+                result = insight_service.coverage(store, elder_id, day, user_id, role)
+                detail = {'service_date': str(day), 'items': result['items']}
+                state = 'completed'
+            results.append({'kind': kind, 'status': state, 'result': detail})
+        except Exception:
+            results.append({'kind':kind, 'status':'failed', 'message':'本项检查未完成，请单独重试；其他检查结果已保留。'})
     def commit(data):
         elder_workspace_service.access(data, elder_id, user_id, role, management=True)
+        if data.get('demo_batch_id') != snapshot.get('demo_batch_id'):
+            from app.services.workflow import DomainError
+            raise DomainError('demo_batch_changed')
         def operation():
-            day = parse_time(now()).astimezone(timezone(timedelta(hours=8))).date()
-            results = []
-            for kind in kinds:
-                staged = deepcopy(data)
-                nested = elder_workspace_service.TransactionStore(staged)
-                try:
-                    if kind == 'quality':
-                        result = quality_service.scan(nested, QualityScanRequest(elder_id=elder_id, include_ai=False), user_id)
-                        detail = {'report_id': result['id'], 'issue_count': len(result['issues'])}
-                    else:
-                        result = insight_service.coverage(nested, elder_id, day, user_id, role)
-                        detail = {'service_date': str(day), 'items': result['items']}
-                    data.clear(); data.update(staged)
-                    results.append({'kind':kind, 'status':'completed', 'result':detail})
-                except Exception:
-                    results.append({'kind':kind, 'status':'failed', 'message':'本项检查未完成，请单独重试；其他检查结果已保留。'})
             result = {'id':identifier('CHECK'), 'elder_id':elder_id, 'as_of':now(), 'checks':results}
             audit(data, 'check_today_care', result['id'], user_id, elder_id=elder_id, result=deepcopy(result))
             return result
-        return replayable(data, user_id, 'check_today_care', key, {'elder_id':elder_id, 'kinds':kinds}, operation)
+        return replayable(data, user_id, 'check_today_care', key, payload, operation)
     return store.mutate(commit)

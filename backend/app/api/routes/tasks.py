@@ -9,9 +9,23 @@ from app.schemas.task_memory import TaskMemoryAdoptRequest, TaskMemoryResponse, 
 from app.services import task_memory_service
 from app.schemas.task_condition import ConditionConfigureRequest, ConditionClaimRequest, ConditionCheckRequest, TaskConditionResponse
 from app.services import task_condition_service
+from app.services.listing_service import Page
 
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
+from app.schemas.batch import BatchRequest
+
+
+@router.post('/batch/preview')
+def batch_preview(payload: BatchRequest, current: ManagementUser, store: Store):
+    from app.services.batch_service import execute
+    return execute(store, payload, current['sub'], current['role'], 'tasks', preview=True)
+
+
+@router.post('/batch/transfer')
+def batch_transfer(payload: BatchRequest, current: ManagementUser, store: Store, idempotency_key: IdempotencyKey):
+    from app.services.batch_service import execute
+    return execute(store, payload, current['sub'], current['role'], 'tasks', idempotency_key)
 
 
 @router.post("", response_model=CareTask, status_code=201)
@@ -19,11 +33,13 @@ def create(payload: TaskCreateRequest, current: StaffUser, store: Store, idempot
     return task_service.create(store, payload, current['sub'], current['role'], idempotency_key)
 
 
-@router.get("", response_model=list[CareTask])
+@router.get("", response_model=list[CareTask] | Page[CareTask])
 def tasks(current: StaffUser, store: Store, elder_id: str | None = None, shift_id: str | None = None,
           assigned_to: str | None = None, status: str | None = None,
-          limit: int = Query(100, ge=1, le=200), offset: int = Query(0, ge=0)) -> list[CareTask]:
-    return task_service.list_tasks(store, elder_id, shift_id, assigned_to, status, limit, offset, current['sub'], current['role'])
+          limit: int = Query(100, ge=1, le=200), offset: int = Query(0, ge=0),
+          envelope: bool = False, q: str | None = Query(None, max_length=100)):
+    return task_service.list_tasks(store, elder_id, shift_id, assigned_to, status, limit, offset,
+                                   current['sub'], current['role'], envelope, q)
 
 
 @router.get('/{task_id}', response_model=CareTask)

@@ -15,7 +15,7 @@ MANAGEMENT = {'admin', 'supervisor'}
 def _actor(data, user_id, role, management=False):
     user = find(data, 'users', user_id, 'staff_not_found')
     if (not user.get('active', True) or user.get('role') != role or
-            role not in (MANAGEMENT if management else MANAGEMENT | {'caregiver'})):
+            role not in (MANAGEMENT if management else MANAGEMENT | {'caregiver', 'nurse'})):
         raise DomainError('change_review_permission_denied', 403)
 
 

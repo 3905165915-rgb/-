@@ -5,7 +5,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
-Role = Literal["admin", "supervisor", "caregiver", "family"]
+Role = Literal["admin", "supervisor", "caregiver", "family", 'nurse']
 RecordStatus = Literal["draft", "confirmed", "corrected"]
 TaskStatus = Literal["pending", "in_progress", "completed", "not_done", "transferred", "cancelled", "overdue"]
 

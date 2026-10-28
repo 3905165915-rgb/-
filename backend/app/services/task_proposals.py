@@ -104,7 +104,7 @@ def task_proposals(candidates: list[dict], data: dict, *, elder_id: str,
             seen.add(key)
     shift = next((row for row in data.get('shifts', []) if row['id'] == shift_id), None)
     staff = [row for row in data.get('users', []) if row.get('active', True)
-             and row.get('role') in {'admin', 'supervisor', 'caregiver'}]
+             and row.get('role') in {'admin', 'supervisor', 'caregiver', 'nurse'}]
     for candidate in rows:
         quote = str(candidate.get('evidence_text') or '')
         notes = []
@@ -132,7 +132,7 @@ def task_proposals(candidates: list[dict], data: dict, *, elder_id: str,
             named.extend(row for row in staff if row['id'] == user_id and row not in named)
         if len(named) == 1:
             person = named[0]
-            if (role != 'caregiver' or person['id'] == user_id) and (
+            if (role not in {'caregiver', 'nurse'} or person['id'] == user_id) and (
                 not shift or person['id'] in shift.get('caregiver_ids', [])
             ):
                 candidate['assigned_to'] = person['id']

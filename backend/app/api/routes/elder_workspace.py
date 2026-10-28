@@ -1,18 +1,21 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
+from typing import Literal
 
 from app.api.deps import ManagementUser, StaffUser, Store
 from app.api.routes.records import IdempotencyKey
 from app.schemas.elder_workspace import (AssessmentSave, AutomationRule, FollowupResolution,
-    PlanAutomation, TodayCheckRequest, RecordSave, RecordAnalysisConfirm, UnderstandingDecision)
+    PlanAutomation, TodayCheckRequest, RecordSave, RecordAnalysisConfirm, UnderstandingDecision, DuplicateMemoryRequest)
 from app.services import elder_workspace_service as service
 
 router = APIRouter(tags=['elder-workspace'])
 
 
 @router.get('/followups')
-def followups(current: StaffUser, store: Store, elder_id: str | None = None):
+def followups(current: StaffUser, store: Store, elder_id: str | None = None,
+              state: Literal['pending', 'review', 'closed'] | None = None,
+              limit: int | None = Query(None, ge=1, le=200), offset: int = Query(0, ge=0)):
     from app.services.followup_service import listing
-    return listing(store, current['sub'], current['role'], elder_id)
+    return listing(store, current['sub'], current['role'], elder_id, state, limit, offset)
 
 
 @router.post('/elders/{elder_id}/followups/check-today')
@@ -94,6 +97,19 @@ def summarize_understanding(elder_id: str, current: StaffUser, store: Store):
         raise
     except (AIProviderError, ValueError, TypeError, KeyError) as exc:
         raise HTTPException(503, '个人特性整理暂未完成，已确认资料和原文仍然保留。') from exc
+
+
+@router.post('/elders/{elder_id}/understanding/duplicates/preview')
+def duplicate_preview(elder_id: str, payload: DuplicateMemoryRequest, current: ManagementUser, store: Store):
+    from app.services.candidate_service import consolidate
+    return consolidate(store, elder_id, payload, current['sub'], current['role'], preview=True)
+
+
+@router.post('/elders/{elder_id}/understanding/duplicates/confirm')
+def duplicate_confirm(elder_id: str, payload: DuplicateMemoryRequest, current: ManagementUser, store: Store,
+                      idempotency_key: IdempotencyKey):
+    from app.services.candidate_service import consolidate
+    return consolidate(store, elder_id, payload, current['sub'], current['role'], idempotency_key)
 
 
 @router.post('/elders/{elder_id}/understanding/{report_id}/{point_id}/decision')

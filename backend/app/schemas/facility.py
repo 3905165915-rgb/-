@@ -5,7 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
 
 Name = Annotated[str, Field(min_length=1, max_length=100)]
 Note = Annotated[str, Field(min_length=1, max_length=2000)]
-StaffRole = Literal['admin', 'supervisor', 'caregiver']
+StaffRole = Literal['admin', 'supervisor', 'caregiver', 'nurse']
 
 
 class Command(BaseModel):

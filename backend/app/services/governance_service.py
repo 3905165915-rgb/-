@@ -9,10 +9,26 @@ from time import perf_counter
 from app.services.workflow import DomainError, current_staff, identifier, now, audit, replayable
 
 
+def source_versions(args, kwargs):
+    """Only retain identifiers/revisions, never care text, prompts or credentials."""
+    found = {}
+    for value in [*args, *kwargs.values()]:
+        sources = value if isinstance(value, list) else value.get('sources', []) if isinstance(value, dict) else []
+        for source in sources:
+            if not isinstance(source, dict):
+                continue
+            source_id = source.get('source_id') or source.get('record_id') or source.get('memory_id')
+            revision = source.get('revision', source.get('memory_revision'))
+            if isinstance(source_id, str) and isinstance(revision, int):
+                found[source_id] = revision
+    return found
+
+
 def instrument(provider, data_dir):
     """Preserve provider type/name, log metadata only, and never log prompts/keys."""
     from app.storage.json_store import JsonStore
     for method, feature in [('extract', 'extraction'), ('extract_context', 'context'),
+                            ('personal_profile', 'personal_profile'),
                             ('impression', 'impression'), ('summarize', 'summary'), ('quality', 'quality'),
                             ('care_advice', 'care_advice'), ('assessment_prefill', 'assessment_prefill'),
                             ('ordinary_followups', 'ordinary_followups')]:
@@ -22,9 +38,12 @@ def instrument(provider, data_dir):
             def call(*args, **kwargs):
                 started = perf_counter()
                 outcome = 'returned'
+                failure_code = None
                 try:
                     return fn(*args, **kwargs)
-                except Exception:
+                except Exception as exc:
+                    from app.services.elder_workspace_service import analysis_failure_code
+                    failure_code = analysis_failure_code(exc)
                     outcome = 'failed'
                     raise
                 finally:
@@ -32,6 +51,8 @@ def instrument(provider, data_dir):
                            'prompt_version': ('care-advice-2026-10-25-v1' if feature == 'care_advice'
                                               else 'care-text-2026-10-25'), 'outcome': outcome,
                            'model_id': getattr(provider, 'model', provider.name),
+                           'source_versions': source_versions(args, kwargs),
+                           'error_code': failure_code,
                            'is_demo': provider.name == 'mock', 'created_at': now(),
                            'elapsed_ms': round((perf_counter() - started) * 1000)}
                     # Measurement is part of the model operation, not a fabricated
@@ -135,7 +156,14 @@ def operations(store, user_id, role):
         if draft['id'] in edited_ids or task_edits or record and record['observations'] != draft.get('observations', []):
             manual_edits += 1
     vision = data['image_analyses']
+    decisions = [s['human_decision'] for a in data['record_analyses']
+                 for s in a.get('preference_suggestions', []) if s.get('human_decision')]
+    decisions += [p['human_decision'] for r in data['elder_impressions'] for p in r['points'] if p.get('human_decision')]
     return {'as_of': now(), 'models': groups,
+            'personal_impressions': {'reviewed': len(decisions),
+                'adopted': sum(d['decision'] == 'adopt' for d in decisions),
+                'rejected': sum(d['decision'] == 'reject' for d in decisions),
+                'edited': sum(d['edited'] for d in decisions)},
             'record_drafts': {'total': len(drafts), 'confirmed': len(confirmed),
                 'rejected': sum(r['status'] == 'rejected' for r in drafts), 'confirmed_with_edits': manual_edits,
                 'failed': sum(r['status'] == 'failed' for r in drafts)},

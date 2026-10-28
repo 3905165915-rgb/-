@@ -32,7 +32,7 @@ def _pending(data, kind, row):
     if kind == 'incidents':
         rect = next((r for r in data['rectifications'] if r['incident_id'] == row['id']), None)
         if status == 'reported':
-            return managers, 'triage', '安全事件待分级'
+            return managers, 'triage', '紧急安全事件 · 待查看与分级'
         if status != 'closed' and rect:
             if rect['status'] == 'awaiting_review':
                 submitter = rect['submissions'][-1]['by'] if rect['submissions'] else None
@@ -182,11 +182,25 @@ def listing(store, user_id, role, unread=False, pending=False, limit=100, offset
                 project(fresh, event)
         store.mutate(refresh)
         data = store.read()
-    rows = [copy.deepcopy(n) for n in reversed(data['notifications']) if _visible(data, n, user_id, role)
-            and (not unread or n['read_at'] is None) and (not pending or n['status'] != 'closed')]
+    visible = [n for n in reversed(data['notifications']) if _visible(data, n, user_id, role)]
+    urgent_total = sum(n['object_type'] == 'incidents' and n['status'] != 'closed' for n in visible)
+    rows = [copy.deepcopy(n) for n in visible
+            if (not unread or n['read_at'] is None) and (not pending or n['status'] != 'closed')]
     for row in rows:
         row.pop('dedup_key', None)
+        urgent = row['object_type'] == 'incidents' and row['status'] != 'closed'
+        row['priority'] = 'urgent' if urgent else 'normal'
+        if row['object_type'] == 'incidents':
+            incident = next((i for i in data['incidents'] if i['id'] == row['object_id']), {})
+            rect = next((r for r in data['rectifications'] if r['incident_id'] == row['object_id']), {})
+            row.update(incident_status=incident.get('status'), occurred_at=incident.get('occurred_at'),
+                       rectification_id=rect.get('id'), severity=incident.get('severity'))
+    # Stable sorting retains newest-first ordering within each priority.
+    # Apply before pagination so emergencies cannot be hidden on later pages.
+    rows.sort(key=lambda n: n['priority'] != 'urgent')
     return {'items': rows[offset:offset + limit], 'total': len(rows), 'offset': offset, 'limit': limit,
+            'urgent_total': urgent_total,
+            'filters': {'unread': unread, 'pending': pending}, 'timezone': 'Asia/Shanghai',
             'as_of': now(), 'definition': '已读和接单仅为通知状态；完成、退回、关闭必须通过关联业务操作。'}
 
 

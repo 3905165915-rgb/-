@@ -14,6 +14,7 @@ def get_store() -> JsonStore:
 
 Store = Annotated[JsonStore, Depends(get_store)]
 CurrentUser = Annotated[dict, Depends(get_token_payload)]
-StaffUser = Annotated[dict, Depends(require_roles("admin", "supervisor", "caregiver"))]
+StaffUser = Annotated[dict, Depends(require_roles("admin", "supervisor", "caregiver", 'nurse'))]
+IncidentReporter = Annotated[dict, Depends(require_roles("caregiver", "nurse"))]
 ManagementUser = Annotated[dict, Depends(require_roles("admin", "supervisor"))]
 FamilyUser = Annotated[dict, Depends(require_roles("family"))]

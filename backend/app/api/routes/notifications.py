@@ -9,6 +9,13 @@ from app.schemas.change_review import StrictRequest
 from app.services import notification_service as service
 
 router = APIRouter(prefix='/notifications', tags=['notifications'])
+from app.schemas.batch import BatchRequest
+
+
+@router.post('/batch/read')
+def batch_read(payload: BatchRequest, current: StaffUser, store: Store, idempotency_key: IdempotencyKey):
+    from app.services.batch_service import execute
+    return execute(store, payload, current['sub'], current['role'], 'notifications', idempotency_key)
 
 
 class NotificationAction(StrictRequest):

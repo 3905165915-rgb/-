@@ -3,7 +3,7 @@ from app.services.care_scope_service import require_elder_access
 
 
 async def enforce(data, request, user_id, role):
-    if role != 'caregiver':
+    if role not in {'caregiver', 'nurse'}:
         return
     elder_ids = set()
     for values in (request.path_params, request.query_params):

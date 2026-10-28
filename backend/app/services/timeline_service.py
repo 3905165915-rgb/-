@@ -97,7 +97,7 @@ def timeline(store, item_id, limit=200, offset=0, user_id=None, role='supervisor
     if root is None:
         raise DomainError('timeline_subject_not_found', 404)
     kind, item = root
-    if role == 'caregiver':
+    if role in {'caregiver', 'nurse'}:
         if kind == 'family_cases':
             raise DomainError('management_required', 403)
         if kind in {'incidents', 'rectifications'}:
@@ -197,7 +197,7 @@ def timeline(store, item_id, limit=200, offset=0, user_id=None, role='supervisor
     handover_objects = {row['id']: row['id'] for row in data['handovers']}
     handover_objects.update({row['id']: row['handover_id'] for row in data['handover_items']})
     visible_handovers = set()
-    if role == 'caregiver':
+    if role in {'caregiver', 'nurse'}:
         from app.services.handover_service import access as handover_access
         for handover in data['handovers']:
             try:
@@ -208,7 +208,7 @@ def timeline(store, item_id, limit=200, offset=0, user_id=None, role='supervisor
     for row in data['audit_logs']:
         if row.get('object_id') not in ids:
             continue
-        if role == 'caregiver':
+        if role in {'caregiver', 'nurse'}:
             if row['action'] == 'export_case':
                 continue
             if row['object_id'] in family_case_ids:
@@ -295,7 +295,7 @@ def elder_timeline(store, elder_id, user_id, role, limit=200, offset=0,
                    event_types=None, start: datetime | None = None, end: datetime | None = None):
     """A caregiver workbench timeline limited by the server-side current work scope."""
     data = store.read()
-    if role == 'caregiver':
+    if role in {'caregiver', 'nurse'}:
         from app.services.care_scope_service import require_elder_access
         require_elder_access(data, elder_id, user_id, role)
     else:

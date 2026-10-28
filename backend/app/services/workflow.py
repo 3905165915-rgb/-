@@ -54,14 +54,14 @@ def active_staff(data: dict, user_id: str | None) -> None:
     if user_id is None:
         return
     user = find(data, 'users', user_id, 'assignee_not_found')
-    if not user.get('active', True) or user.get('role') not in {'admin', 'supervisor', 'caregiver'}:
+    if not user.get('active', True) or user.get('role') not in {'admin', 'supervisor', 'caregiver', 'nurse'}:
         raise DomainError('assignee_is_not_active_staff', 422)
 
 
 def current_staff(data: dict, user_id: str, role: str | None = None, management: bool = False) -> dict:
     """Recheck the acting account in the same snapshot/transaction as the operation."""
     user = find(data, 'users', user_id, 'staff_not_found')
-    allowed = {'admin', 'supervisor'} if management else {'admin', 'supervisor', 'caregiver'}
+    allowed = {'admin', 'supervisor'} if management else {'admin', 'supervisor', 'caregiver', 'nurse'}
     if (not user.get('active', True) or user.get('role') not in allowed or
             (role is not None and user.get('role') != role)):
         raise DomainError('staff_permissions_changed', 403)
@@ -74,12 +74,12 @@ def open_shift(data: dict, shift_id: str | None, user_id: str, role: str) -> Non
     shift = find(data, 'shifts', shift_id, 'shift_not_found')
     if shift.get('status') == 'closed':
         raise DomainError('shift_closed')
-    if role == 'caregiver' and user_id not in shift['caregiver_ids']:
+    if role in {'caregiver', 'nurse'} and user_id not in shift['caregiver_ids']:
         raise DomainError('not_a_shift_member', 403)
 
 
 def editable(data: dict, item: dict, user_id: str, role: str) -> None:
-    if role == 'caregiver' and item.get('elder_id'):
+    if role in {'caregiver', 'nurse'} and item.get('elder_id'):
         from app.services.care_scope_service import require_elder_access
         require_elder_access(data, item['elder_id'], user_id, role)
     if role not in {'admin', 'supervisor'} and item.get('created_by') != user_id:

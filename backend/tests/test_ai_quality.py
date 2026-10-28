@@ -124,8 +124,13 @@ def test_quality_provider_failure_does_not_save_success_and_rules_still_work(api
         def quality(self, sources):
             raise AIProviderError('provider unavailable')
     monkeypatch.setattr(quality_service, 'get_ai_provider', lambda: Broken())
-    assert client.post('/api/v1/quality/checks', json={'include_ai': True}, headers=headers('manager')).status_code == 503
-    assert not store.read()['quality_checks']
+    result = client.post('/api/v1/quality/checks', json={'include_ai': True}, headers=headers('manager'))
+    assert result.status_code == 201
+    report = result.json()
+    assert report['ai_status'] == 'failed'
+    assert report['ai_error'] == 'ai_unavailable'
+    assert report['issues']
+    assert store.read()['quality_checks']
     assert client.post('/api/v1/quality/checks', json={'include_ai': False}, headers=headers('manager')).status_code == 201
 
 

@@ -15,7 +15,7 @@ from app.services.facility_service import care_eligible, care_state
 
 def _snapshot(data, elder_id, shift_id, scene, user_id, role):
     user = find(data, 'users', user_id, 'staff_not_found')
-    if role not in {'admin', 'supervisor', 'caregiver'} or not user.get('active', True) or user['role'] != role:
+    if role not in {'admin', 'supervisor', 'caregiver', 'nurse'} or not user.get('active', True) or user['role'] != role:
         raise DomainError('assistant_permissions_changed', 403)
     from app.services.care_scope_service import require_elder_access
     elder = find(data, 'elders', elder_id, 'elder_not_found')
@@ -29,7 +29,7 @@ def _snapshot(data, elder_id, shift_id, scene, user_id, role):
     tasks = [row for row in data['care_tasks'] if row['elder_id'] == elder_id
              and row['status'] in {'pending', 'in_progress', 'not_done', 'overdue'}
              and (shift_id is None or row.get('shift_id') == shift_id)
-             and (role != 'caregiver' or (row.get('assigned_to') in {None, user_id} and
+             and (role not in {'caregiver', 'nurse'} or (row.get('assigned_to') in {None, user_id} and
                   (row.get('shift_id') is None or row.get('shift_id') in member_shifts)))]
     if len(memories['memories']) > 30 or len(tasks) > 30:
         raise DomainError('assistant_scope_too_large', 422)

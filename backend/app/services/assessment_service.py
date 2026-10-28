@@ -215,7 +215,7 @@ def view(data, item):
 
 
 def access(item, user_id, role):
-    if item['status'] in {'draft', 'pending_observation', 'rejected'} and role == 'caregiver' and item['created_by'] != user_id:
+    if item['status'] in {'draft', 'pending_observation', 'rejected'} and role in {'caregiver', 'nurse'} and item['created_by'] != user_id:
         raise DomainError('assessment_draft_not_yours', 403)
 
 
@@ -229,7 +229,7 @@ def get(store, assessment_id, user_id, role):
 def listing(store, user_id, role, elder_id=None, limit=100, offset=0):
     data = store.read()
     from app.services.care_scope_service import elder_ids
-    scope = elder_ids(data, user_id, role) if role == 'caregiver' else None
+    scope = elder_ids(data, user_id, role) if role in {'caregiver', 'nurse'} else None
     rows = []
     for item in reversed(data['assessments']):
         if scope is not None and item['elder_id'] not in scope:

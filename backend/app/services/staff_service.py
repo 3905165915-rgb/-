@@ -3,7 +3,7 @@ from app.services.facility_service import TERMINAL_TASKS, version
 from app.services.passwords import hash_password
 from app.services.workflow import DomainError, audit, current_staff, find, identifier, now
 
-STAFF_ROLES = {'admin', 'supervisor', 'caregiver'}
+STAFF_ROLES = {'admin', 'supervisor', 'caregiver', 'nurse'}
 
 
 def staff_view(row):
@@ -36,7 +36,7 @@ def workload(store, user_id):
 
 
 def _allowed(actor, target_role):
-    if actor['role'] != 'admin' and target_role != 'caregiver':
+    if actor['role'] != 'admin' and target_role not in {'caregiver', 'nurse'}:
         raise DomainError('admin_required_to_manage_management_staff', 403)
 
 

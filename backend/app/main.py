@@ -7,6 +7,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.routes import auth, elders, records, tasks, handovers, timeline, quality, staff, speech, memories, change_reviews, beds, admissions, planning
 from app.core.config import settings
@@ -91,9 +92,34 @@ async def validation_error_handler(request: Request, exc: RequestValidationError
                         'safe_message': '请检查必填内容、字段类型和时间格式', 'retryable': False})
 
 
+@app.exception_handler(StarletteHTTPException)
+async def http_error_handler(_, exc: StarletteHTTPException):
+    messages = {
+        400: '请求未完成，请检查填写内容后重试。',
+        401: '登录已失效，请重新选择身份或登录。',
+        403: '当前账号无权办理此事项，请核对身份或联系主管。',
+        404: '未找到相关资料，请刷新列表后重试。',
+        405: '当前操作方式不可用，请刷新页面后重试。',
+        409: '资料或状态已变化，请刷新并核对后重试。',
+        413: '文件或录音过大，请缩小后重试。',
+        429: '操作较频繁，请稍后重试；已有记录不会因此被删除。',
+        503: '服务暂不可用，请稍后重试或使用人工方式办理。',
+        504: '处理等待超时，请先核实是否已保存，再重试整理。',
+    }
+    detail = exc.detail
+    safe = detail if isinstance(detail, str) and any('\u4e00' <= c <= '\u9fff' for c in detail) else messages.get(exc.status_code, '操作未完成，请刷新后核对当前状态。')
+    return JSONResponse(status_code=exc.status_code, headers=exc.headers,
+                        content={'detail': detail, 'error_code': 'http_' + str(exc.status_code),
+                                 'safe_message': safe, 'retryable': exc.status_code in {429, 503, 504}})
+
+
 @app.exception_handler(DomainError)
 async def domain_error_handler(_, exc: DomainError):
     messages = {
+        'care_assignment_expired': '此分配已过期，不能撤销；如需继续照护，请新建有效分配。',
+        'care_assignment_already_revoked': '此分配已撤销，请刷新查看最新状态。',
+        'batch_action_not_allowed': '此批量操作不适用于当前事项，请逐项打开办理。',
+        'quality_sources_changed_retry_scan': '检查依据已变化，请重新检查后核对。',
         'task_time_change_reason_required': '最终时间与原文建议不同，请补充调整原因后重试',
         'task_service_time_invalid': '执行时间需在班次内且不晚于截止时间',
         'demo_batch_changed': '演示资料已重建，请刷新页面后继续。',
@@ -141,7 +167,9 @@ async def domain_error_handler(_, exc: DomainError):
         'impression_record_too_long': '单条记录过长，暂无法完整整理，请先核对记录内容',
         'impression_historical_review': '这是历史版本或已到复核时间，请先重新整理当前印象',
         'impression_point_requires_review': '请先由主管核对这条印象，再确认加入照护记忆',
-        'impression_not_long_term_preference': '仅多日支持的生活偏好可加入长期记忆；临时意愿、分歧和专业照护关注请另行核实',
+        'impression_not_long_term_preference': '请核对生活偏好或沟通方式；专业照护关注需另行评估，不能直接作为个人偏好',
+        'duplicate_memory_requires_individual_review': '仅可整理内容、适用时间及原文版本完全相同的待确认信息，其他信息请逐条核对。',
+        'memory_applicability_time_required': '这是一项临时意愿，请核对适用到什么时间后再加入个人印象。',
         'impression_memory_evidence_mismatch': '所选原文或版本与印象依据不一致，请刷新后重新选择',
         'impression_memory_already_created': '这条印象已加入照护记忆，请在记忆管理中查看或修订，不要重复创建',
         'assessment_incomplete': '评估仍有待观察项目，补充并核对后才能确认',

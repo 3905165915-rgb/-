@@ -46,7 +46,7 @@ def view(data, item):
 
 
 def access(item, role):
-    if role == 'caregiver' and item['status'] in {'draft', 'rejected'}:
+    if role in {'caregiver', 'nurse'} and item['status'] in {'draft', 'rejected'}:
         raise DomainError('management_required_for_plan_draft', 403)
 
 
@@ -60,7 +60,7 @@ def get(store, plan_id, role):
 def listing(store, role, elder_id=None, limit=100, offset=0, user_id=None):
     data = store.read()
     from app.services.care_scope_service import elder_ids
-    scope = elder_ids(data, user_id, role) if role == 'caregiver' else None
+    scope = elder_ids(data, user_id, role) if role in {'caregiver', 'nurse'} else None
     rows = []
     for item in reversed(data['care_plans']):
         if scope is not None and item['elder_id'] not in scope:

@@ -13,7 +13,7 @@ class EvaluationSubmit(StrictRequest):
     sample_sha256: Annotated[str, Field(pattern='^[0-9a-f]{64}$')]
     sample_kind: Literal['synthetic', 'redacted']
     split: Literal['development', 'holdout']
-    feature: Literal['extraction', 'context', 'impression', 'summary', 'quality', 'vision', 'care_advice', 'assessment_prefill', 'ordinary_followups']
+    feature: Literal['extraction', 'context', 'impression', 'summary', 'quality', 'vision', 'care_advice', 'assessment_prefill', 'ordinary_followups', 'personal_profile']
     model: ObjectId
     prompt_version: ObjectId
     expected_labels: list[Label] = Field(max_length=100)
