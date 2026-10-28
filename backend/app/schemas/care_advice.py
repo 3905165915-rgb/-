@@ -1,7 +1,9 @@
 """Additive contract for grounded life-care suggestions and human decisions."""
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator, field_validator
+from datetime import date
+from app.schemas.care_guidance import ContentType, HintLine, ReminderLine, HintScene, Occasion, calendar_day
 
 from app.schemas.api import AwareTime, TaskCreateRequest
 from app.schemas.memory import MemoryScene
@@ -41,8 +43,43 @@ class AdviceOutput(Strict):
 class AdviceAdopt(Strict):
     expected_revision: int = Field(ge=1, strict=True)
     # The client confirms all scheduling fields. The model never chooses an ID.
-    task: TaskCreateRequest
+    content_type: ContentType = 'followup_task'
+    task: TaskCreateRequest | None = None
     reason: Text
+    title: Annotated[str, Field(min_length=1, max_length=300)] | None = None
+    scene: HintScene | None = None
+    instruction: Text | None = None
+    occasion: Occasion | None = None
+    record_what: Text | None = None
+    service_date: date | None = None
+    condition: Text | None = None
+
+    @field_validator('service_date', mode='before')
+    @classmethod
+    def day(cls, value):
+        return calendar_day(value) if value is not None else value
+
+    @model_validator(mode='after')
+    def separate_types(self):
+        common = {'expected_revision', 'content_type', 'reason'}
+        if self.content_type == 'followup_task':
+            allowed = common | {'task'}
+            if self.task is None:
+                raise ValueError('A follow-up task requires confirmed task fields')
+        else:
+            allowed = common | {'title', 'condition'}
+            line = {'title': self.title, 'condition': self.condition}
+            if self.content_type == 'routine_hint':
+                allowed |= {'scene', 'instruction'}
+                HintLine(**line, scene=self.scene, instruction=self.instruction)
+            else:
+                allowed |= {'occasion', 'record_what', 'service_date'}
+                ReminderLine(**line, occasion=self.occasion, record_what=self.record_what)
+                if self.service_date is None:
+                    raise ValueError('A one-off reminder requires its service date')
+        if self.model_fields_set - allowed:
+            raise ValueError('Fields belonging to another content type are not allowed')
+        return self
 
 
 class AdviceReject(Strict):

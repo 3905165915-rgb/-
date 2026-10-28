@@ -31,16 +31,25 @@ class RecordSave(StrictRequest):
     attachment_ids: list[Annotated[str, Field(min_length=1, max_length=100)]] = Field(default_factory=list, max_length=10)
 
 
-class Arrangement(StrictRequest):
+class ArrangementTaskItem(PlanItem):
+    content_type: Literal['followup_task'] = 'followup_task'
+
+
+class TaskArrangement(StrictRequest):
+    content_type: Literal['followup_task'] = 'followup_task'
     title: Annotated[str, Field(min_length=1, max_length=200)]
     goal: Annotated[str, Field(min_length=1, max_length=1000)]
     starts_on: date
     ends_on: date
-    items: list[PlanItem] = Field(min_length=1, max_length=20)
+    items: list[ArrangementTaskItem] = Field(min_length=1, max_length=20)
     service_date: date
     shift_id: Annotated[str, Field(min_length=1, max_length=100)]
     assigned_to: Annotated[str, Field(min_length=1, max_length=100)]
     context_token: str | None = None
+
+
+from app.schemas.care_guidance import HintArrangement, ReminderArrangement
+Arrangement = TaskArrangement | HintArrangement | ReminderArrangement
 
 
 class PreferenceDecision(StrictRequest):

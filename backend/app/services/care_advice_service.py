@@ -16,6 +16,7 @@ from pydantic import ValidationError
 from app.models.entities import CareRecord
 from app.schemas.care_advice import AdviceOutput
 from app.services import assistant_service, memory_service, task_service
+from app.services import care_guidance_service as guidance_service
 from app.services.ai_service import AIProviderError, get_ai_provider
 from app.services.facility_service import care_eligible, care_state
 from app.services.workflow import (DomainError, audit, current_staff, find,
@@ -160,6 +161,9 @@ def _view(data, item):
         result['task'] = task_service.task_view(task)
     else:
         result['task'] = None
+    if item.get('guidance_id'):
+        row = find(data, 'care_guidance', item['guidance_id'], 'guidance_not_found')
+        result['guidance'] = guidance_service.view(row)
     return result
 
 
@@ -222,7 +226,8 @@ def listing(store, elder_id, user_id, role, scene=None, status=None, limit=50, o
     items = [r for r in data['care_advice'] if r['elder_id'] == elder_id and
              (scene is None or r['scene'] == scene) and (status is None or r['status'] == status)]
     items.sort(key=lambda r: (r['created_at'], r['id']), reverse=True)
-    return {'total': len(items), 'items': [_view(data, r) for r in items[offset:offset+limit]], 'notice': NOTICE}
+    return {'total': len(items), 'items': [_view(data, r) for r in items[offset:offset+limit]], 'notice': NOTICE,
+            'supported_content_types': guidance_service.SUPPORTED_CONTENT_TYPES}
 
 
 def _item(data, elder_id, advice_id, user_id, role):
@@ -239,6 +244,8 @@ def detail(store, elder_id, advice_id, user_id, role):
 
 
 def adopt(store, elder_id, advice_id, payload, user_id, role, key=None):
+    if payload.content_type != 'followup_task':
+        guidance_service.require_key(key)
     def mutate(data):
         item = _item(data, elder_id, advice_id, user_id, role)
         def operation():
@@ -246,6 +253,20 @@ def adopt(store, elder_id, advice_id, payload, user_id, role, key=None):
                 raise DomainError('stale_revision')
             if not _view(data, item)['can_adopt']:
                 raise DomainError('advice_requires_refresh')
+            if payload.content_type != 'followup_task':
+                if item['condition'] and payload.condition != item['condition']:
+                    raise DomainError('advice_condition_must_be_preserved', 422)
+                fields = {'title', 'content_type', 'condition'} | (
+                    {'scene', 'instruction'} if payload.content_type == 'routine_hint' else {'occasion', 'record_what'})
+                line = payload.model_dump(include=fields)
+                guidance = guidance_service.create(data, elder_id, line, user_id, role,
+                    service_date=payload.service_date, source_advice=item)
+                item.update(status='adopted', content_type=payload.content_type, guidance_id=guidance['id'],
+                            revision=item['revision']+1, adopted_at=now(), adopted_by=user_id,
+                            adoption_reason=payload.reason, adopted_action=payload.title)
+                audit(data, 'adopt_care_advice', advice_id, user_id, elder_id=elder_id,
+                      guidance_id=guidance['id'], detail=payload.reason)
+                return _view(data, item)
             if payload.task.elder_id != elder_id or payload.task.source_type != 'manual':
                 raise DomainError('advice_task_object_mismatch', 422)
             if item['condition'] and item['condition'] != payload.task.condition:
@@ -297,6 +318,8 @@ def feedback(store, elder_id, advice_id, payload, user_id, role, key=None):
                 raise DomainError('stale_revision')
             if item['status'] != 'adopted':
                 raise DomainError('advice_not_adopted')
+            if not item.get('task_id'):
+                raise DomainError('advice_feedback_use_guidance', 422)
             task = find(data, 'care_tasks', item['task_id'], 'task_not_found')
             task_service.actor_can_execute(task, user_id, role)
             if task.get('revision', 1) != payload.expected_task_revision:

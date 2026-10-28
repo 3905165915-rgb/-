@@ -480,7 +480,8 @@ def test_recovery_and_schema7_migration_never_resurrect_automation(api, tmp_path
     store.path.write_text(json.dumps(data), encoding='utf-8')
     backup = store.migrate()
     assert backup and json.loads(backup.read_text(encoding='utf-8'))['schema_version'] == 7
-    assert store.read()['schema_version'] == 9 and store.read()['care_jobs'] == []
+    from app.storage.json_store import CURRENT_SCHEMA_VERSION
+    assert store.read()['schema_version'] == CURRENT_SCHEMA_VERSION and store.read()['care_jobs'] == []
     def seed(current):
         current['automation_rules'].append({'id': 'RULE', 'kind': 'followup', 'elder_id': 'E1', 'enabled': True, 'revision': 1})
         current['care_jobs'].append({'id': 'JOB', 'status': 'processing'})
@@ -505,7 +506,8 @@ def test_schema_eight_migration_preserves_data_and_marks_old_record_jobs_for_inl
     backup = store.migrate()
     migrated = store.read()
     assert backup and json.loads(backup.read_text(encoding='utf-8')) == data
-    assert migrated['schema_version'] == 9
+    from app.storage.json_store import CURRENT_SCHEMA_VERSION
+    assert migrated['schema_version'] == CURRENT_SCHEMA_VERSION
     assert migrated['care_records'] == data['care_records']
     assert migrated['care_jobs'][0]['status'] == 'failed'
     assert migrated['care_jobs'][0]['error_code'] == 'requires_inline_reanalysis'
