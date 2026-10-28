@@ -30,3 +30,14 @@
 本次代码尚未推送、尚未部署，线上页面不会因本地修改自动更新。服务器仅做只读日志检查。
 
 发布后在用户实际手机浏览器中允许麦克风，点击“开始录音”，确认秒数增长，持续说话数秒后点击“停止录音”；核对文字保留原有输入。快速开始/停止应提示过短且不产生识别请求；被系统中断则提示重录。频繁操作触发限流时应显示中文提示，不能出现英文 JSON 异常，也不应改动原文字。
+
+## 本次发布记录（2026-10-28）
+
+- Git 提交：`57a746b`（`fix(frontend): stabilize mobile voice capture and file inputs`）。
+- 已推送分支：`release/verified-20261027-frontend`。
+- 线上备份：`/root/hulaozhijiao-backup-frontend-20261028-57a746b`。
+- 发布目录：`/opt/hulaozhijiao/releases/frontend-57a746b`。
+- 已更新：管理端 `/opt/hulaozhijiao/web/admin`、手机端 `/opt/hulaozhijiao/web/mobile`；未修改后端、数据库、模型、密钥或限流配置。
+- Nginx 配置检查和 reload 通过。
+- 线上验收：`https://sdau.fun/` 与 `https://sdau.fun/mobile/` 返回 200；前端静态资源返回成功；`/api/v1/health` 返回 `status=ok`、`schema_version=9`；未授权业务接口仍返回 401。
+- 线上手机录音仍需在真实设备上人工点击验收：允许麦克风后开始录音，确认计时、主动停止后才识别，限流或异常时显示中文提示。
