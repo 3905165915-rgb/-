@@ -15,7 +15,7 @@ import HandoverEditor from '../../components/HandoverEditor.vue'
 import HandoverReceiveList from '../../components/HandoverReceiveList.vue'
 import FeedbackState from '../../components/FeedbackState.vue'
 import HandoverQuick from '../../components/HandoverQuick.vue'
-import { readSession } from '@hulao/shared'
+import { isFollowupTask, readSession } from '@hulao/shared'
 const route = useRoute()
 const router = useRouter()
 const shift = ref(
@@ -105,7 +105,10 @@ onBeforeRouteUpdate(() => (mode === 'api' ? true : leave()))
       <van-button
         v-for="name in [
           ...new Set(
-            tasks.data.value?.map((task) => task.shift).filter(Boolean),
+            tasks.data.value
+              ?.filter(isFollowupTask)
+              .map((task) => task.shift)
+              .filter(Boolean),
           ),
         ]"
         :key="name"
@@ -129,7 +132,11 @@ onBeforeRouteUpdate(() => (mode === 'api' ? true : leave()))
           <HandoverEditor
             ref="editorRef"
             :shift-id="shift"
-            :tasks="tasks.error.value ? [] : (tasks.data.value ?? [])"
+            :tasks="
+              tasks.error.value
+                ? []
+                : (tasks.data.value ?? []).filter(isFollowupTask)
+            "
             :source-writable="!tasks.isPending.value && !tasks.error.value"
           /> </van-tab
         ><van-tab title="接班" name="receive">

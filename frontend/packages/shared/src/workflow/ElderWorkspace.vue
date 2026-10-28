@@ -13,6 +13,8 @@ import ElderAutomation from './ElderAutomation.vue'
 import ElderActivity from './ElderActivity.vue'
 import CareArrangement from './CareArrangement.vue'
 import CareFollowups from './CareFollowups.vue'
+import CareGuidance from './CareGuidance.vue'
+import { isTaskContent } from './care-arrangement'
 import './elder-workspace.css'
 const props = defineProps<{ elderId: string; mobile?: boolean }>()
 const scope = useWorkspaceScope()
@@ -27,6 +29,11 @@ const tabs = [
 ]
 const section = ref('today')
 const followupCount = ref<number | null>(null)
+const guidanceRevision = ref(0)
+function arrangementChanged() {
+  guidanceRevision.value++
+  void load()
+}
 const todayTasks = computed(() =>
   tasks.value.filter((task) => {
     const at = String(task.scheduled_at || task.due_at || '')
@@ -70,6 +77,7 @@ async function load() {
     tasks.value = result.filter(
       (row) =>
         row.elder_id === props.elderId &&
+        isTaskContent(row) &&
         !['completed', 'cancelled', 'not_done'].includes(String(row.status)),
     )
     try {
@@ -167,6 +175,11 @@ onBeforeUnmount(() => {
             </p>
           </li>
         </ul>
+        <CareGuidance
+          :elder-id="elderId"
+          :manage="management"
+          :refresh-key="guidanceRevision"
+        />
         <div class="workspace-actions">
           <button type="button" @click="select('records')">
             记一条本次观察</button
@@ -175,7 +188,12 @@ onBeforeUnmount(() => {
           </button>
         </div>
       </section>
-      <ElderCareAdvice :key="elderId" :elder-id="elderId" :mobile="mobile" />
+      <ElderCareAdvice
+        :key="elderId"
+        :elder-id="elderId"
+        :mobile="mobile"
+        @changed="arrangementChanged"
+      />
     </template>
     <ElderUnderstanding
       v-else-if="section === 'understanding'"
@@ -206,6 +224,7 @@ onBeforeUnmount(() => {
         :key="elderId"
         :elder-id="elderId"
         :mobile="mobile"
+        @changed="arrangementChanged"
       />
       <details>
         <summary>评估与排期设置</summary>
@@ -217,6 +236,7 @@ onBeforeUnmount(() => {
           :key="elderId"
           :elder-id="elderId"
           :mobile="mobile"
+          @changed="arrangementChanged"
         />
       </details>
     </template>

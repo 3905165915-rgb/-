@@ -8,6 +8,7 @@ import { useRoute } from 'vue-router'
 import { useQuery } from '@tanstack/vue-query'
 import {
   formatBusinessTime,
+  isFollowupTask,
   isBusinessToday,
   loadDemoState,
 } from '@hulao/shared'
@@ -30,7 +31,9 @@ const elder = computed(() =>
 )
 const related = computed(
   () =>
-    tasks.data.value?.filter((item) => item.elderId === elder.value?.id) ?? [],
+    tasks.data.value?.filter(
+      (item) => item.elderId === elder.value?.id && isFollowupTask(item),
+    ) ?? [],
 )
 const demo = useQuery({
   queryKey: computed(() =>
@@ -49,7 +52,9 @@ const demoRecords = computed(
 const demoFollowups = computed(() => {
   const state = demo.data.value
   if (!state || !elder.value) return []
-  const tasks = state.tasks.filter((task) => task.elderId === elder.value!.id)
+  const tasks = state.tasks.filter(
+    (task) => task.elderId === elder.value!.id && isFollowupTask(task),
+  )
   return buildDemoFollowups(
     {
       tasks,

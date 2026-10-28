@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, watch } from 'vue'
 import { readSession, type AppMode, type FrontendSession } from '../session'
 import { request } from './model'
 import { workspaceDate } from './workspace-action'
+import CareGuidance from './CareGuidance.vue'
 import {
   careScenes,
   contextDisplayLimit,
@@ -146,6 +147,12 @@ onBeforeUnmount(() => {
       未找到任务，无法查询照护依据。
     </p>
     <template v-else-if="task">
+      <CareGuidance
+        v-if="state.scene"
+        :key="task.id"
+        :elder-id="task.elder_id"
+        :scene="state.scene"
+      />
       <details class="tcc-band">
         <summary>任务详情与执行要求</summary>
         <h3 class="tcc-task-title">

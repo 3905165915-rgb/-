@@ -1,10 +1,12 @@
 import { object } from './workspace-action'
 import type { Row } from './model'
+import { isTaskContent } from './care-arrangement'
 
 export function executionTask(value: unknown, taskId: string): Row {
   const task = object(value)
   if (
     task.id !== taskId ||
+    !isTaskContent(task) ||
     typeof task.title !== 'string' ||
     !task.title.trim() ||
     typeof task.status !== 'string' ||
@@ -19,7 +21,8 @@ export function executionTask(value: unknown, taskId: string): Row {
   return task
 }
 export function executionActions(task: Row | null): string[] {
-  if (!task || !Array.isArray(task.allowed_actions)) return []
+  if (!task || !isTaskContent(task) || !Array.isArray(task.allowed_actions) ||
+    task.assignment_status === 'unassigned' || task.assigned_to === null || task.assigned_to === '') return []
   const status = String(task.status)
   const pending = ['pending', 'overdue', 'transferred'].includes(status)
   const running = status === 'in_progress'

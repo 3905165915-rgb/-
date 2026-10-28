@@ -13,6 +13,7 @@ describe('server care worklist contract', () => {
     expect(() => validateCareWorklist({ scope_rule: '规则', items: [{ ...item, open_tasks: [validTask], pending_count: 1 }] })).not.toThrow()
     for (const value of [
       { scope_rule: '规则', items: [{ ...item, open_tasks: [{ ...validTask, elder_id: 'E2' }], pending_count: 1 }] },
+      ...['routine_hint', 'one_off_reminder', 'unknown'].map(content_type => ({ scope_rule: '规则', items: [{ ...item, open_tasks: [{ ...validTask, content_type }], pending_count: 1 }] })),
       { scope_rule: '规则', items: [{ ...item, open_tasks: [validTask], pending_count: 2 }] },
       { scope_rule: '规则', items: [item, item] },
       { scope_rule: '规则', items: [{ ...item, overdue_count: 1 }] },

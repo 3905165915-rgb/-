@@ -41,6 +41,12 @@ const items = (activity: ReturnType<typeof createElderActivity>) =>
   Object.values(activity.state.value.slots).flatMap((slot) => slot.items)
 
 describe('exact elder activity projection', () => {
+  it('excludes guidance from both server and demo task history', () => {
+    const rows = [row, { ...row, id: 'hint', content_type: 'routine_hint' }, { ...row, id: 'reminder', content_type: 'one_off_reminder' }, { ...row, id: 'unknown', content_type: 'future_type' }]
+    expect(elderActivityItems('task', rows, elderId).map(item => item.reference.id)).toEqual([row.id])
+    const task = { id: 'T', elderId, title: '虚构任务', shift: '', assignee: '', dueAt: '', status: 'pending' as const }
+    expect(demoElderActivity([task, { ...task, id: 'H', contentType: 'routine_hint' }, { ...task, id: 'R', contentType: 'one_off_reminder' }], elderId).map(item => item.reference.id)).toEqual(['T'])
+  })
   it.each(['record', 'task', 'incident', 'memory'] as ActivityType[])(
     'only includes exact elder_id relations for %s, without text or ID-prefix guesses', (type) => {
       expect(elderActivityItems(type, [row,

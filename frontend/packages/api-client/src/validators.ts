@@ -10,6 +10,7 @@ import {
   type RecordDraft,
   type Task,
   type TimelineEvent,
+  isCareContentType,
 } from '@hulao/shared'
 import { ContractError } from './errors'
 import type { LoginResponse } from './index'
@@ -321,6 +322,11 @@ export const parseElder: Parser<Elder> = (value, endpoint, path = '$') => {
 
 export const parseTask: Parser<Task> = (value, endpoint, path = '$') => {
   const wire = object(value, endpoint, path)
+  const wireContentType = Object.hasOwn(wire, 'content_type')
+    ? wire.content_type
+    : wire.contentType
+  if (wireContentType !== undefined && !isCareContentType(wireContentType))
+    invalid(endpoint, `${path}.content_type`, '未知照护内容类型')
   if ('elder_id' in wire)
     value = {
       ...wire,
@@ -337,6 +343,9 @@ export const parseTask: Parser<Task> = (value, endpoint, path = '$') => {
         typeof wire.assigned_name === 'string' ? wire.assigned_name : undefined,
       shiftName:
         typeof wire.shift_name === 'string' ? wire.shift_name : undefined,
+      contentType: wireContentType,
+      executionAt: wire.execution_at ?? wire.executionAt,
+      deadlineAt: wire.deadline_at ?? wire.deadlineAt,
     }
   const row = object(value, endpoint, path)
   strings(row, ['id', 'elderId', 'title'], endpoint, path, true)
@@ -369,6 +378,8 @@ export const parseTask: Parser<Task> = (value, endpoint, path = '$') => {
       endpoint,
       `${path}.scene`,
     )
+  if (row.contentType !== undefined && !isCareContentType(row.contentType))
+    invalid(endpoint, `${path}.contentType`, '未知照护内容类型')
   return value as Task
 }
 

@@ -90,7 +90,18 @@ export function buildDemoMetrics(
   // An explicitly invalid demoDay is unknown; only older snapshots use the clock.
   const day = state.demoDay === undefined ? beijingDay(now) : state.demoDay
   if (!validDay(day)) return null
-  const tasks = state.tasks.filter((task) => task.elderId === elderId)
+  const elderTasks = state.tasks.filter((task) => task.elderId === elderId)
+  const unknownContent = elderTasks.filter(
+    (task) =>
+      task.contentType !== undefined &&
+      !['routine_hint', 'one_off_reminder', 'followup_task'].includes(
+        task.contentType,
+      ),
+  )
+  const tasks = elderTasks.filter(
+    (task) =>
+      task.contentType === undefined || task.contentType === 'followup_task',
+  )
   const dated = tasks.map((task) => ({
     task,
     timestamp: demoTimestamp(task.executionAt),
@@ -119,7 +130,9 @@ export function buildDemoMetrics(
       pending: rows.filter((task) => pendingStatuses.has(task.status)),
     }
     const uncertain =
-      undated.length > 0 || rows.some((task) => !knownStatuses.has(task.status))
+      undated.length > 0 ||
+      unknownContent.length > 0 ||
+      rows.some((task) => !knownStatuses.has(task.status))
     const counts: Record<DemoMetricKey, number | null> = {
       scheduled: uncertain ? null : groups.scheduled.length,
       completed: uncertain ? null : groups.completed.length,

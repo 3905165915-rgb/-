@@ -13,6 +13,8 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:e2e": "node e2e/all.mjs",
+    "test:care-arrangement": "node e2e/care-arrangement.mjs",
+    "dev:workflow": "vite --config vite.workflow.config.ts",
     "test:ui": "node e2e/ui.mjs",
     "dev:demo": "vite --config vite.demo.config.ts --mode demo --host 127.0.0.1 --port 5175 --strictPort",
     "build:demo": "vite build --config vite.demo.config.ts --mode demo",

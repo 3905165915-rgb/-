@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Mic, RefreshCw, Send, Square } from 'lucide-vue-next'
-import { readSession } from '@hulao/shared'
+import { isFollowupTask, readSession } from '@hulao/shared'
 import { useTasks, useElders } from '../services/data'
 import {
   request,
@@ -76,6 +76,7 @@ const targetOptions = computed(() =>
 const sourceTasks = computed(() =>
   (tasks.data.value || []).filter(
     (task) =>
+      isFollowupTask(task) &&
       task.status !== 'completed' &&
       task.status !== 'cancelled' &&
       (task.shift === selectedSource.value?.name || task.itemId),

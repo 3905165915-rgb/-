@@ -201,6 +201,26 @@ describe('demo metrics: dates, scope and traceable task groups', () => {
     expect(result.today.counts.scheduled).toBe(0)
     expect(result.undated).toEqual([])
   })
+  it('excludes hints and one-off reminders from task metrics', () => {
+    const result = buildDemoMetrics(
+      state([
+        task('task'),
+        { ...task('hint'), contentType: 'routine_hint' },
+        { ...task('reminder'), contentType: 'one_off_reminder' },
+      ]),
+      elder.id,
+    )!
+    expect(result.today.groups.scheduled.map((row) => row.id)).toEqual(['task'])
+    expect(result.today.counts.scheduled).toBe(1)
+  })
+  it('keeps metrics uncertain when an unsupported content type is present', () => {
+    const result = buildDemoMetrics(
+      state([{ ...task('unknown-content'), contentType: 'other' as never }]),
+      elder.id,
+    )!
+    expect(result.today.counts.scheduled).toBeNull()
+    expect(result.today.groups.scheduled).toEqual([])
+  })
   it('recomputes current state after actions without mutating the source snapshot', () => {
     const snapshot = state([task('p')])
     const before = structuredClone(snapshot)

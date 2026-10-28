@@ -30,6 +30,8 @@ const storageError = ref('')
 const otherActionsAvailable = computed(
   () =>
     task.value &&
+    task.value.assignment_status !== 'unassigned' &&
+    task.value.assigned_to !== null && task.value.assigned_to !== '' &&
     ['pending', 'overdue', 'transferred', 'in_progress'].includes(
       String(task.value.status),
     ) &&

@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { filterTasks, emptyTaskFilters, taskDeadline } from './task-list'
+import {
+  filterTasks,
+  emptyTaskFilters,
+  isFollowupTask,
+  taskDeadline,
+} from './task-list'
 import type { Task } from './types'
 const task = (id: string, dueAt: string): Task => ({
   id,
@@ -11,6 +16,13 @@ const task = (id: string, dueAt: string): Task => ({
   status: 'pending',
 })
 describe('local task filtering', () => {
+  it('keeps legacy and follow-up tasks while excluding guidance content', () => {
+    expect(isFollowupTask({})).toBe(true)
+    expect(isFollowupTask({ contentType: 'followup_task' })).toBe(true)
+    expect(isFollowupTask({ contentType: 'routine_hint' })).toBe(false)
+    expect(isFollowupTask({ contentType: 'one_off_reminder' })).toBe(false)
+    expect(filterTasks([task('T', ''), { ...task('H', ''), contentType: 'routine_hint' }, { ...task('R', ''), contentType: 'one_off_reminder' }], emptyTaskFilters()).map(row => row.id)).toEqual(['T'])
+  })
   it('searches elder name and bed without mutating input', () => {
     const rows = [task('b', ''), task('a', '')]
     const result = filterTasks(rows, { ...emptyTaskFilters(), q: '101' }, [
