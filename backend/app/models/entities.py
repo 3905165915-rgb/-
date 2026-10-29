@@ -84,6 +84,9 @@ class CareRecord(BaseModel):
     source_draft_id: str | None = None
     source_attachment_ids: list[str] = Field(default_factory=list)
     source_image_analysis_id: str | None = None
+    source_guidance_id: str | None = None
+    source_guidance_revision: int | None = None
+    care_response: Literal['willing', 'alternative', 'rest', 'declined', 'unclear'] | None = None
     created_at: str
     recorded_at: str | None = None
     happened_at: str | None = None

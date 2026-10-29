@@ -36,6 +36,8 @@ async def lifespan(_: FastAPI):
     def organise():
         while not stop.wait(5):
             try:
+                from app.services.care_guidance_service import expire_due
+                expire_due(store)
                 run_plan_rules(store)
                 process_inline_next(store)
                 process_next(store)
@@ -116,6 +118,14 @@ async def http_error_handler(_, exc: StarletteHTTPException):
 @app.exception_handler(DomainError)
 async def domain_error_handler(_, exc: DomainError):
     messages = {
+        'guidance_idempotency_required': '缺少提交凭证，请刷新页面后重试。',
+        'guidance_service_date_expired': '本次提醒的日期已过去，请核对服务日期。',
+        'guidance_not_found': '当前入住下未找到这条照护提示，请刷新核对。',
+        'guidance_transition_invalid': '当前状态不允许此操作，请刷新查看。',
+        'guidance_management_required': '启用或停用日常提示需要主管确认。',
+        'guidance_reminder_inactive': '本次提醒尚未生效、已经结束或到期，请刷新核对。',
+        'guidance_record_time_invalid': '回应时间应属于本次服务日期，且不能晚于现在。',
+        'advice_feedback_use_guidance': '请在本次照护提醒中记录回应，日常提示不需要逐次打卡。',
         'care_assignment_expired': '此分配已过期，不能撤销；如需继续照护，请新建有效分配。',
         'care_assignment_already_revoked': '此分配已撤销，请刷新查看最新状态。',
         'batch_action_not_allowed': '此批量操作不适用于当前事项，请逐项打开办理。',
@@ -224,4 +234,6 @@ app.include_router(photos.router, prefix="/api/v1")
 app.include_router(governance.router, prefix="/api/v1")
 
 app.include_router(care_advice.router, prefix="/api/v1")
+from app.api.routes import care_guidance
+app.include_router(care_guidance.router, prefix="/api/v1")
 app.include_router(elder_workspace.router, prefix="/api/v1")

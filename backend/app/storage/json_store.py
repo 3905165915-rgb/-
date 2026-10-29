@@ -15,7 +15,7 @@ from filelock import FileLock
 
 
 T = TypeVar("T")
-CURRENT_SCHEMA_VERSION = 9
+CURRENT_SCHEMA_VERSION = 10
 
 
 EMPTY_STORE: dict[str, Any] = {
@@ -49,6 +49,8 @@ EMPTY_STORE: dict[str, Any] = {
     "care_assignments": [],
     "care_advice": [],
     "care_advice_batches": [],
+    "care_guidance": [],
+    "care_guidance_plans": [],
     "care_jobs": [],
     "automation_rules": [],
     "record_analyses": [],
@@ -186,9 +188,11 @@ class JsonStore:
             if version == CURRENT_SCHEMA_VERSION:
                 self._validate(data)
                 return None
-            if version not in {1, 2, 3, 4, 5, 6, 7, 8}:
+            if version not in {1, 2, 3, 4, 5, 6, 7, 8, 9}:
                 raise RuntimeError(f'Unsupported migration source: {version}')
-            added = {"care_jobs", "automation_rules", "record_analyses"}
+            added = {"care_guidance", "care_guidance_plans"}
+            if version <= 8:
+                added.update({"care_jobs", "automation_rules", "record_analyses"})
             if version <= 6:
                 added.update({"care_advice", "care_advice_batches"})
             if version <= 4:

@@ -101,8 +101,18 @@ def test_real_extraction(real_ai, case):
     elapsed = time.monotonic() - started
     assert result.status_code == 200, result.text
     draft = result.json()
+    # The API decorates validated model tasks with server-generated review
+    # notes. The offline evaluator expects the strict provider object; verify
+    # the decoration separately and remove only this known transport field.
+    extracted_tasks = []
+    for task in draft['task_candidates']:
+        candidate = dict(task)
+        notes = candidate.pop('review_notes', [])
+        assert isinstance(notes, list) and all(isinstance(note, str) for note in notes)
+        extracted_tasks.append(candidate)
     prediction = {'case_id': case['id'], 'provider': draft['provider'],
-                  'output': {field: draft[field] for field in ('observations', 'task_candidates', 'evidence', 'warnings')}}
+                  'output': {**{field: draft[field] for field in ('observations', 'evidence', 'warnings')},
+                             'task_candidates': extracted_tasks}}
     score = evaluate([case], [prediction])
     evidence('extract-' + case['id'], {'prediction': prediction, 'score': score, 'elapsed_seconds': round(elapsed, 3)})
     assert draft['provider'] == 'deepseek:deepseek-flash'
@@ -154,7 +164,13 @@ def test_real_handover_and_quality_remain_human_reviewed(real_ai):
     evidence('handover', summary)
     assert summary['status'] == 'draft' and summary['ai_summary']['status'] == 'pending_review'
     assert summary['ai_summary']['provider'] == 'deepseek:deepseek-flash'
-    assert not summary['ai_summary']['uncovered_task_ids']
+    # Staff responses deliberately omit unrestricted internal source IDs.
+    # Check complete coverage against the persisted generation, then verify
+    # the staff-facing result contains evidence for the authorized task.
+    persisted = next(row for row in store.read()['handovers'] if row['id'] == handover['id'])
+    assert not persisted['ai_summary']['uncovered_task_ids']
+    assert any(c['source_id'] == created['tasks'][0]['id']
+               for point in summary['ai_summary']['points'] for c in point['citations'])
     assert '没有外出' in summary['ai_summary']['text']
     assert '如果晚餐仍进食较少' in summary['ai_summary']['text']
     assert store.read()['care_tasks'] == before
