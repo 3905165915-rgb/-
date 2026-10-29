@@ -18,12 +18,12 @@ export function writableShifts(shifts: Row[], session: FrontendSession | null): 
   const id = actorId(session)
   return shifts.filter(row => row.status === 'open' && (
     session?.role === 'admin' || session?.role === 'supervisor' ||
-    (session?.role === 'caregiver' && id && Array.isArray(row.caregiver_ids) && row.caregiver_ids.includes(id))
+    (['caregiver', 'nurse'].includes(session?.role || '') && id && Array.isArray(row.caregiver_ids) && row.caregiver_ids.includes(id))
   ))
 }
 
 function canExecute(task: Row, catalogs: Record<string, Row[]>, session: FrontendSession | null) {
-  if (session?.role !== 'caregiver') return true
+  if (!['caregiver', 'nurse'].includes(session?.role || '')) return true
   const id = actorId(session)
   return Boolean(id && (!task.assigned_to || task.assigned_to === id) &&
     (!task.shift_id || writableShifts(catalogs.shifts || [], session).some(row => row.id === task.shift_id)))
@@ -61,7 +61,7 @@ export function shiftFieldOptions(op: Operation, catalogs: Record<string, Row[]>
     // The next shift may belong to a different caregiver.
     target_shift_id: shifts.filter(row => row.status === 'open'),
   }
-  if (session?.role === 'caregiver') {
+  if (['caregiver', 'nurse'].includes(session?.role || '')) {
     const id = actorId(session)
     result.assigned_to = id
       ? (catalogs.staff || []).filter(row => row.id === id)
@@ -98,7 +98,7 @@ export function submissionIssue(op: Operation, params: Row, payload: unknown, ca
     if (task && !canExecute(task, catalogs, session))
       return '该任务不属于你当前可办理的班次或负责人范围。请由主管核对分工，跨班任务须先完成接班。'
   }
-  if (op.path === '/tasks/{task_id}' && op.method === 'patch' && session?.role === 'caregiver')
+  if (op.path === '/tasks/{task_id}' && op.method === 'patch' && ['caregiver', 'nurse'].includes(session?.role || ''))
     return '安排其他护理员、修改责任人或截止时间需要主管或管理员处理。'
   return ''
 }

@@ -100,7 +100,7 @@ export const navigation: NavigationItem[] = [
   },
   {
     path: '/workflows/incidents',
-    label: '照护安全与事件上报',
+    label: '安全事件处置',
     group: '照护跟进',
     internalOnly: true,
     roles: internalRoles,

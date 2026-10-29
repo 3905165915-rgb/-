@@ -30,6 +30,11 @@ export interface RecordAnalysis {
     frequency: 'explicit' | 'one_time' | 'ambiguous'
     attributedTo: string
     evidenceText: string
+    applicability?: {
+      validFrom: string | null
+      expiresAt: string | null
+      needsTimeConfirmation: boolean
+    }
   }>
   createdAt: string
 }
@@ -234,6 +239,15 @@ export function validateInlineRecordResponse(
       !sourceText.includes(preference.evidence_text)
     )
       throw new Error('偏好建议缺少有效原文依据，请刷新核实。')
+    const window =
+      preference.applicability == null ? null : object(preference.applicability)
+    if (
+      window &&
+      (typeof window.needs_time_confirmation !== 'boolean' ||
+        (window.valid_from != null && !aware(window.valid_from)) ||
+        (window.expires_at != null && !aware(window.expires_at)))
+    )
+      throw new Error('个人印象适用时间异常，请核实后再确认。')
     return {
       id: preference.id,
       content: preference.content,
@@ -241,6 +255,15 @@ export function validateInlineRecordResponse(
         preference.frequency as RecordAnalysis['preferenceSuggestions'][number]['frequency'],
       attributedTo: String(preference.attributed_to),
       evidenceText: preference.evidence_text,
+      ...(window
+        ? {
+            applicability: {
+              validFrom: window.valid_from as string | null,
+              expiresAt: window.expires_at as string | null,
+              needsTimeConfirmation: window.needs_time_confirmation as boolean,
+            },
+          }
+        : {}),
     }
   })
   return {
@@ -267,6 +290,8 @@ export interface PreferenceInput {
   suggestionId: string
   decision: '' | 'adopt' | 'reject'
   content: string
+  needsTimeConfirmation?: boolean
+  expiresAt?: string
 }
 
 export interface TaskInput {
@@ -297,6 +322,15 @@ export function buildRecordAnalysisConfirmation(input: {
     throw new Error('请逐项确认或拒绝每条偏好建议。')
   const acceptedTasks = input.tasks.filter((item) => item.accepted)
   if (
+    input.preferences.some(
+      (item) =>
+        item.decision === 'adopt' &&
+        item.needsTimeConfirmation &&
+        !item.expiresAt,
+    )
+  )
+    throw new Error('请确认本次意愿适用到什么时间。')
+  if (
     acceptedTasks.some(
       (item) =>
         !text(item.title) ||
@@ -320,6 +354,13 @@ export function buildRecordAnalysisConfirmation(input: {
       suggestion_id: item.suggestionId,
       decision: item.decision,
       ...(item.decision === 'adopt' ? { content: item.content.trim() } : {}),
+      ...(item.decision === 'adopt' && item.expiresAt
+        ? {
+            expires_at: aware(item.expiresAt)
+              ? new Date(item.expiresAt).toISOString()
+              : date(item.expiresAt),
+          }
+        : {}),
     })),
     accepted_tasks: acceptedTasks.map((item, index) => ({
       suggestion_id: item.suggestionId,

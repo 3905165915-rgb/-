@@ -1,5 +1,7 @@
 # Core API Contracts
 
+2026-10-28联调补充：个人印象候选的 `applicability` 包含 `valid_from`、`expires_at`、`needs_time_confirmation`。仅在采纳且需人工补时间时提交 `expires_at`（带时区）；界面按北京时间填写。今天/明天等明确日期由后端推导，拒绝不需时间。服务器保留schema10日常提示接口，见后端 `CARE_GUIDANCE_API.md`。
+
 All routes are under `/api/v1`. Staff routes must validate the active account, elder scope, current admission, and source revision on the server. A hidden frontend control is not an authorization check.
 
 ## Inline Care Records
@@ -61,3 +63,11 @@ Timeline filters, ordering, and pagination use server-generated `recorded_at`. O
 
 - `demo_batch_id` 在服务端校验。王爷爷重建脚本只用于隔离演示/测试目录；批次变化后旧客户端提交返回 `409 demo_batch_changed`，要求刷新。
 - `DEMO_FAMILY_ALL_ELDERS=true` 仅在 demo/development/test 环境允许演示家属切换老人；生产环境仍使用显式授权。
+
+## Safety incident roles and urgent notifications
+
+- Internal staff roles include `nurse` (护士). Nurses use the same current elder assignments, task ownership and shift membership rules as caregivers; they have no management privileges. Supervisors may provision caregiver and nurse accounts. Existing `caregiver_id`/`caregiver_ids` fields also reference nurses for compatibility.
+- `POST /incidents` and `POST /incidents/prepare` allow only `caregiver` and `nurse`; both routes and services enforce this. Reports require current elder access and admission, occurrence time, description and immediate action. Evidence is optional; a prior formal record and AI processing are not prerequisites.
+- `GET /incidents` and `GET /incidents/{incident_id}` allow management, the reporter and the assigned rectification worker according to existing access rules. Management performs triage and independent review.
+- `/notifications` returns `priority: urgent|normal`; active incident notices have urgent priority. Urgent rows sort before ordinary rows before pagination. Incident rows include `incident_status`, `occurred_at`, `rectification_id` and `severity` when available.
+- `urgent_total` counts the current actor's authorized active incident notices before unread/pending filters and pagination. Reading or accepting a notice retains its urgency; business transitions update or close the responsible recipient's notice. Legacy pending incidents receive the same projection.

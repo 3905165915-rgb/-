@@ -71,7 +71,7 @@ onBeforeRouteLeave(() => (mode === 'api' ? true : leave()))
 onBeforeRouteUpdate(() => (mode === 'api' ? true : leave()))
 </script>
 <template>
-  <HandoverQuick v-if="serverWorkflow && readSession()?.role === 'caregiver'" />
+  <HandoverQuick v-if="serverWorkflow && ['caregiver', 'nurse'].includes(readSession()?.role || '')" />
   <WorkflowPanel
     v-else-if="serverWorkflow"
     group="handovers"

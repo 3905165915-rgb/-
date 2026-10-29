@@ -13,6 +13,7 @@ export const roleLabels: Record<Role, string> = {
   admin: '管理员',
   supervisor: '主管',
   caregiver: '护理员',
+  nurse: '护士',
   family: '家属',
 }
 export const useAuthStore = defineStore('auth', () => {

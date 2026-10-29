@@ -363,7 +363,7 @@ function allowed(
     !!session &&
     session.mode === mode &&
     !!session.accountKey &&
-    ['admin', 'supervisor', 'caregiver'].includes(session.role || '') &&
+    ['admin', 'supervisor', 'caregiver', 'nurse'].includes(session.role || '') &&
     (mode === 'demo' || !!session.accessToken?.trim())
   )
 }

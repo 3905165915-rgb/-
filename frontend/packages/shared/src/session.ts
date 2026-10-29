@@ -1,4 +1,4 @@
-export type Role = 'admin' | 'supervisor' | 'caregiver' | 'family'
+export type Role = 'admin' | 'supervisor' | 'caregiver' | 'family' | 'nurse'
 export type AppMode = 'api' | 'demo'
 export interface FrontendSession {
   mode: AppMode
@@ -13,6 +13,8 @@ const roles: Record<string, Role> = {
   supervisor: 'supervisor',
   caregiver: 'caregiver',
   family: 'family',
+  nurse: 'nurse',
+  护士: 'nurse',
   管理员: 'admin',
   主管: 'supervisor',
   护理员: 'caregiver',

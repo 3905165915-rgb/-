@@ -263,7 +263,7 @@ export function canReviewPhoto(
     return false
   if (role === 'admin' || role === 'supervisor')
     return ['confirm', 'reject'].includes(decision)
-  if (role !== 'caregiver' || row.status === 'pending_management') return false
+  if (!['caregiver', 'nurse'].includes(role || '') || row.status === 'pending_management') return false
   const professional =
     (row.output as Row | null)?.requires_professional_review === true
   return (

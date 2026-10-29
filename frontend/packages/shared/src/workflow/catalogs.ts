@@ -45,7 +45,7 @@ export function validateCatalog(resource: string, value: unknown): Row[] {
     ids.add(item.id)
     if (catalogModels[resource]) checkResponse(schemas[catalogModels[resource]], item, path)
     if (resource === 'staff') {
-      if (typeof item.display_name !== 'string' || !item.display_name.trim() || !['admin', 'supervisor', 'caregiver'].includes(item.role)) invalid(path)
+      if (typeof item.display_name !== 'string' || !item.display_name.trim() || !['admin', 'supervisor', 'caregiver', 'nurse'].includes(item.role)) invalid(path)
     }
     if (resource === 'shifts') {
       if (typeof item.name !== 'string' || !['open', 'closed'].includes(item.status) || !Array.isArray(item.caregiver_ids) || item.caregiver_ids.some((id: unknown) => typeof id !== 'string')) invalid(path)

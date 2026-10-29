@@ -19,7 +19,7 @@ const reason = ref('')
 type Assignment = { id: string; elder_id: string; caregiver_id: string; kind: string; start_at: string; end_at: string; revision: number; status: string }
 const created = ref<Assignment[]>([])
 const revokeReasons = ref<Record<string, string>>({})
-const caregiverOptions = computed(() => staff.value.filter(row => row.role === 'caregiver' && row.active === true))
+const caregiverOptions = computed(() => staff.value.filter(row => ['caregiver', 'nurse'].includes(String(row.role || '')) && row.active === true))
 const session = ref(readSession())
 const createAttempt = ref<{ key: string; payload: Row } | null>(null)
 const revokeAttempts = ref<Record<string, { key: string; reason: string; revision: number }>>({})
@@ -146,14 +146,14 @@ onBeforeUnmount(() => { clear(); window.removeEventListener('focus', changed); w
     <header><div><h2 id="assignment-title">照护范围安排</h2><p>服务器按有效时间、开放班次和任务责任计算访问范围。</p></div><button type="button" :disabled="loadingStaff" @click="loadStaff">刷新员工目录</button></header>
     <form class="assignment-form" @submit.prevent="assign">
       <label>老人<select v-model="elderId" aria-label="老人" :disabled="busy || !!createAttempt" required><option value="">选择老人</option><option v-for="elder in elders.data.value" :key="elder.id" :value="elder.id">{{ elder.name }} · {{ elder.bedLabel }}</option></select></label>
-      <label>护理员<select v-model="caregiverId" aria-label="护理员" required :disabled="loadingStaff || busy || !!createAttempt"><option value="">选择在职护理员</option><option v-for="person in caregiverOptions" :key="String(person.id)" :value="String(person.id)">{{ person.display_name }}</option></select></label>
+      <label>护理员<select v-model="caregiverId" aria-label="护理员" required :disabled="loadingStaff || busy || !!createAttempt"><option value="">选择在职护理员或护士</option><option v-for="person in caregiverOptions" :key="String(person.id)" :value="String(person.id)">{{ person.display_name }}</option></select></label>
       <label>安排类型<select v-model="kind" :disabled="busy || !!createAttempt"><option value="explicit_assignment">明确分配</option><option value="temporary_support">临时支援</option></select></label>
       <label>开始时间<input v-model="startAt" type="datetime-local" :disabled="busy || !!createAttempt" required /></label>
       <label>结束时间<input v-model="endAt" type="datetime-local" :disabled="busy || !!createAttempt" required /></label>
       <label class="reason-field">安排原因<input v-model="reason" :disabled="busy || !!createAttempt" maxlength="500" required /></label>
       <button type="submit" :disabled="busy || !!recoveryProblem || loadingStaff || !caregiverOptions.length">{{ busy ? '正在提交…' : createAttempt ? '使用同一请求编号重试' : '创建照护分配' }}</button>
     </form>
-    <p v-if="!loadingStaff && !caregiverOptions.length" role="status">当前员工目录没有可分配的在职护理员。</p>
+    <p v-if="!loadingStaff && !caregiverOptions.length" role="status">当前员工目录没有可分配的在职护理员或护士。</p>
     <p v-if="error" class="error" role="alert">{{ error }}</p>
     <p v-if="recoveryProblem" class="error" role="alert">{{ recoveryProblem }}</p>
     <p v-if="notice" role="status">{{ notice }}</p>

@@ -174,7 +174,15 @@ function alive(ticket: number) {
 function initDecisions(value: InlineRecordResponse) {
   result.value = value
   preferences.value = (value.analysis?.preferenceSuggestions || []).map(
-    (row) => ({ suggestionId: row.id, decision: '', content: row.content }),
+    (row) => ({
+      suggestionId: row.id,
+      decision: '',
+      content: row.content,
+      needsTimeConfirmation: row.applicability?.needsTimeConfirmation,
+      expiresAt: row.applicability?.expiresAt
+        ? localTime(new Date(row.applicability.expiresAt)).slice(0, 16)
+        : '',
+    }),
   )
   tasks.value = (value.analysis?.taskSuggestions || []).map((row) => ({
     suggestionId: row.id,
@@ -736,6 +744,13 @@ onBeforeUnmount(() => {
               v-model="item.content"
               maxlength="1000"
               :disabled="confirmLocked"
+          /></label>
+          <label v-if="item.decision === 'adopt' && item.needsTimeConfirmation"
+            >本次适用到（北京时间）<input
+              v-model="item.expiresAt"
+              type="datetime-local"
+              :disabled="confirmLocked"
+              required
           /></label>
         </article>
         <h5 v-if="tasks.length">待办建议</h5>

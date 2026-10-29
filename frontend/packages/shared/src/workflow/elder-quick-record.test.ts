@@ -54,6 +54,75 @@ const analysis = {
 }
 
 describe('inline elder record workflow', () => {
+  it('preserves applicability and requires an end time only for adopted undated temporary wishes', () => {
+    const timed = {
+      ...analysis,
+      preference_suggestions: [
+        {
+          ...analysis.preference_suggestions[0],
+          applicability: {
+            valid_from: '2026-10-27T01:00:00Z',
+            expires_at: null,
+            needs_time_confirmation: true,
+          },
+        },
+      ],
+    }
+    const result = validateInlineRecordResponse(
+      { record, analysis_status: 'ready', analysis: timed },
+      'ELDER-test',
+    )
+    expect(
+      result.analysis?.preferenceSuggestions[0].applicability
+        ?.needsTimeConfirmation,
+    ).toBe(true)
+    const input = {
+      expectedRevision: 2,
+      preferenceSuggestionIds: ['PREF-1'],
+      tasks: [],
+      preferences: [
+        {
+          suggestionId: 'PREF-1',
+          decision: 'adopt' as const,
+          content: '暂时希望休息',
+          needsTimeConfirmation: true,
+        },
+      ],
+    }
+    expect(() => buildRecordAnalysisConfirmation(input)).toThrow('适用到')
+    expect(
+      buildRecordAnalysisConfirmation({
+        ...input,
+        preferences: [
+          { ...input.preferences[0], expiresAt: '2026-10-28T21:00' },
+        ],
+      }).preference_decisions,
+    ).toMatchObject([{ expires_at: '2026-10-28T13:00:00.000Z' }])
+    expect(
+      buildRecordAnalysisConfirmation({
+        ...input,
+        preferences: [{ ...input.preferences[0], decision: 'reject' }],
+      }).preference_decisions,
+    ).toEqual([{ suggestion_id: 'PREF-1', decision: 'reject' }])
+    expect(() =>
+      validateInlineRecordResponse(
+        {
+          record,
+          analysis_status: 'ready',
+          analysis: {
+            ...timed,
+            preference_suggestions: [
+              {
+                ...timed.preference_suggestions[0],
+                applicability: { needs_time_confirmation: 'yes' },
+              },
+            ],
+          },
+        },
+        'ELDER-test',
+      ),
+    ).toThrow('适用时间')
+  })
   it('shows safe analysis failure details while accepting the older saved-record envelope', () => {
     const failed = { record, analysis_status: 'failed', analysis: null }
     expect(

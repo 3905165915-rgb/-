@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import SafetyAlertBar from '@hulao/shared/safety-alert'
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
@@ -277,6 +278,7 @@ function leaveAccount(event: FocusEvent) {
         </div>
       </header>
       <main class="admin-main">
+        <SafetyAlertBar :key="auth.role || 'guest'" />
         <RouterView />
       </main>
     </div>

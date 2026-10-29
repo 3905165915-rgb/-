@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { resultActionLabel } from './result-actions'
 import { label, display, optionLabel, resourceFor, type Row } from './model'
 const props = withDefaults(
   defineProps<{
@@ -94,13 +95,7 @@ function readable(value: unknown, field: string) {
       type="button"
       @click="emit('select', object)"
     >
-      {{
-        object.status === 'draft' && Array.isArray(object.items)
-          ? Number(object.revision || 0) < 1
-            ? '刷新交班事项'
-            : '填写注意事项并提交交班'
-          : '选择此项办理后续'
-      }}
+      {{ resultActionLabel(object) }}
     </button>
     <template v-if="task">
       <WorkflowResult

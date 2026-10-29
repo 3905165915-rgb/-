@@ -4,11 +4,11 @@ import { clean, schemas, type Row } from './model'
 
 // UI hints are editable draft values, never an authorization decision.
 export function recordTaskOwners(catalogs: Record<string, Row[]>, session: FrontendSession | null, shiftId: unknown): Row[] {
-  if (!session?.role || !['admin', 'supervisor', 'caregiver'].includes(session.role)) return []
+  if (!session?.role || !['admin', 'supervisor', 'caregiver', 'nurse'].includes(session.role)) return []
   const shift = (catalogs.shifts || []).find(row => row.id === shiftId)
   return (catalogs.staff || []).filter(row =>
-    row.active !== false && ['admin', 'supervisor', 'caregiver'].includes(String(row.role)) &&
-    (session?.role !== 'caregiver' || row.id === actorId(session)) &&
+    row.active !== false && ['admin', 'supervisor', 'caregiver', 'nurse'].includes(String(row.role)) &&
+    (!['caregiver', 'nurse'].includes(session?.role || '') || row.id === actorId(session)) &&
     (!shiftId || (Array.isArray(shift?.caregiver_ids) && shift.caregiver_ids.includes(row.id))),
   )
 }

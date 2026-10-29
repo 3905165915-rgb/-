@@ -44,7 +44,7 @@ function checkEpoch(state: DemoStateV2, epoch?: string) {
 }
 function requireInternal(expectedAccount?: string) {
   const session = readSession()
-  if (session?.mode !== 'demo' || !session.accountKey || !['admin', 'supervisor', 'caregiver'].includes(session.role || ''))
+  if (session?.mode !== 'demo' || !session.accountKey || !['admin', 'supervisor', 'caregiver', 'nurse'].includes(session.role || ''))
     throw new Error('当前身份不能办理内部照护事项')
   if (expectedAccount && session.accountKey !== expectedAccount) throw new Error('登录账号已变化，请重新进入页面')
   return session.accountKey

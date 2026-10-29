@@ -75,6 +75,10 @@ export function notificationCategory(
   if (item.status === 'closed') return 'processed'
   return reviewStages.has(item.stage) ? 'review' : 'pending'
 }
+export function isUrgentNotification(item: ServerNotification) {
+  return item.object_type === 'incidents' && item.status !== 'closed'
+}
+
 export function filterNotifications(
   items: ServerNotification[],
   category: FollowupCategory,
@@ -84,7 +88,7 @@ export function filterNotifications(
     (item) =>
       notificationCategory(item) === category &&
       (!objectType || item.object_type === objectType),
-  )
+  ).sort((a, b) => Number(isUrgentNotification(b)) - Number(isUrgentNotification(a)))
 }
 
 export interface NotificationWork {
@@ -119,23 +123,8 @@ export function notificationWork(
   } else if (item.object_type === 'incidents') {
     group = 'incidents'
     context.incident_id = item.object_id
-    if (item.stage === 'triage') action = '/incidents/{incident_id}/triage'
-    else if (
-      ['review', 'awaiting_review', 'rectify', 'assigned'].includes(
-        item.stage,
-      ) &&
-      typeof item.rectification_id === 'string' &&
-      item.rectification_id.trim()
-    ) {
-      context.rectification_id = item.rectification_id
-      action =
-        item.stage === 'review' || item.stage === 'awaiting_review'
-          ? '/rectifications/{rectification_id}/review'
-          : '/rectifications/{rectification_id}/submit'
-    } else {
-      action = '/incidents/{incident_id}'
-      autoRead = true
-    }
+    action = '/incidents/{incident_id}'
+    autoRead = true
   } else if (
     item.object_type === 'care_memories' &&
     item.stage === 'memory_review'
@@ -182,7 +171,7 @@ export function notificationWork(
       op.roles.includes(role),
   )
   if (!operation) return null
-  label = autoRead ? '查看事项与办理入口' : operation.title
+  label = group === 'incidents' ? '立即查看事件' : autoRead ? '查看事项与办理入口' : operation.title
   return { group, action, context, autoRead, label }
 }
 
@@ -275,6 +264,8 @@ export function validateNotifications(value: unknown) {
       Number(page.offset) + page.items.length > Number(page.total))
   )
     throw new Error('服务器通知字段不完整，数据未显示。')
+  if (page.urgent_total !== undefined && (!Number.isSafeInteger(page.urgent_total) || Number(page.urgent_total) < 0))
+    throw new Error('紧急事件通知计数异常，请刷新核查。')
   const ids = new Set<string>()
   for (const item of page.items as unknown[]) {
     if (!item || typeof item !== 'object' || Array.isArray(item))
@@ -307,6 +298,7 @@ export function validateNotifications(value: unknown) {
   }
   return page as {
     items: ServerNotification[]
+    urgent_total?: number
     total: number
     offset: number
     limit: number

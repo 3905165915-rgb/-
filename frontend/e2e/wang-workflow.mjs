@@ -3,8 +3,10 @@ import { mkdir } from 'node:fs/promises'
 import { chromium } from 'playwright'
 
 // Run only against an isolated reset_wang_demo JSON store with mock AI.
-const base = process.env.WORKFLOW_URL || 'http://127.0.0.1:5176'
-const api = process.env.WORKFLOW_API || 'http://127.0.0.1:8769/api/v1'
+const base = process.env.WORKFLOW_URL || 'http://127.0.0.1:5181'
+const api = process.env.WORKFLOW_API || base + '/api/v1'
+assert.ok(['127.0.0.1', 'localhost'].includes(new URL(base).hostname), 'Synthetic loopback only')
+assert.ok(['127.0.0.1', 'localhost'].includes(new URL(api).hostname), 'Synthetic API only')
 const output = 'test-results/wang-workflow'
 await mkdir(output, { recursive: true })
 const browser = await chromium.launch({ headless: true, channel: process.env.BROWSER_CHANNEL || 'msedge' })
@@ -12,7 +14,9 @@ const errors = []
 async function account(role) {
   const response = await fetch(api + '/auth/demo-login', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({role})})
   assert.equal(response.status,200)
-  return response.json()
+  const login = await response.json()
+  assert.ok(login.user_id.startsWith('SYNTHETIC-'), 'Refuse non-synthetic account')
+  return login
 }
 async function open(role, width=390) {
   const login=await account(role)
@@ -29,13 +33,13 @@ assert.deepEqual(elders.map(e=>e.name),['王爷爷'])
 const elder=elders[0]
 try {
   const page=manager.page
-  await page.goto(base+'/admin/dashboard')
+  await page.goto(base+'/dashboard')
   await page.getByRole('heading',{name:/管理看板/}).first().waitFor()
   await page.getByRole('heading',{name:'任务状态总览',exact:true}).waitFor()
   await page.getByRole('img',{name:/任务状态分布，共[1-9]/}).waitFor()
   await noOverflow(page)
   await page.screenshot({path:output+'/admin-dashboard.png',fullPage:true})
-  await page.goto(base+'/admin/elders/'+elder.id+'?section=assessment')
+  await page.goto(base+'/elders/'+elder.id+'?section=assessment')
   const arrangement=page.getByRole('region',{name:'三步照护安排'})
   await arrangement.getByText('已带入有效生活能力评估，无需重复填写。').waitFor()
   await arrangement.getByRole('button',{name:'下一步：安排服务'}).click()
@@ -54,7 +58,7 @@ try {
   await arrangement.getByRole('button',{name:'确认安排',exact:true}).click()
   await arrangement.getByRole('heading',{name:'安排已保存'}).waitFor()
   console.log('PASS 三步照护安排：复用评估→预览→原子确认')
-  await page.goto(base+'/admin/elders/'+elder.id+'?section=records')
+  await page.goto(base+'/elders/'+elder.id+'?section=records')
   await page.getByLabel('本次记录',{exact:true}).fill('老人说：“我每天喜欢午休后听低音量京剧。”请联系家属。')
   await page.getByLabel(/^照护场景/).selectOption('activity')
   const saving=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname.endsWith('/elders/'+elder.id+'/record'))
@@ -77,7 +81,7 @@ try {
   assert.equal(confirmed.tasks[0].source_record_id,saved.record.id)
   console.log('PASS 原文先保存→后台整理→刷新恢复→核对偏好及任务')
   await page.getByRole('button',{name:'历史',exact:true}).click()
-  await page.getByRole('button',{name:'写记录',exact:true}).waitFor()
+  await page.getByRole('navigation',{name:'记录栏目'}).getByRole('button',{name:'写记录',exact:true}).waitFor()
   await page.screenshot({path:output+'/records-history.png',fullPage:true})
   const caregiver=await open('caregiver')
   await caregiver.page.goto(base+'/mobile/tasks/'+confirmed.tasks[0].id)
@@ -89,7 +93,7 @@ try {
   await noOverflow(caregiver.page)
   await caregiver.page.screenshot({path:output+'/mobile-task.png',fullPage:true})
   console.log('PASS 护理员：单主操作→登记结果→前后端状态一致')
-  await page.goto(base+'/admin/elders/'+elder.id+'?section=followups')
+  await page.goto(base+'/elders/'+elder.id+'?section=followups')
   await page.getByRole('button',{name:'检查今天的照护',exact:true}).click()
   await page.getByText('记录检查：已完成。',{exact:true}).waitFor()
   await page.getByRole('button',{name:/待处理/}).first().click()
@@ -105,7 +109,8 @@ try {
   const assigning=page.waitForResponse(r=>r.request().method()==='POST'&&/\/change-reviews\/[^/]+\/assign$/.test(new URL(r.url()).pathname))
   await followups.getByRole('button',{name:'确认提交',exact:true}).click()
   assert.equal((await assigning).status(),200)
-  await followups.getByText('小王',{exact:true}).first().waitFor()
+  await followups.getByText('服务器已确认，本机回执已保存').waitFor()
+  assert.equal((await followups.innerText()).includes('护理员'),true)
   assert.equal((await followups.innerText()).includes('fingerprint'),false)
   assert.equal((await followups.innerText()).includes('closed_by'),false)
   await caregiver.page.goto(base+'/mobile/elders/'+elder.id+'?section=followups')
@@ -114,7 +119,10 @@ try {
   console.log('PASS 今天照护检查与按事项直达办理')
   const family=await open('family')
   await family.page.goto(base+'/mobile/family')
-  await family.page.getByRole('heading',{name:/王爷爷/}).first().waitFor()
+  await family.page.getByText('王爷爷',{exact:true}).first().waitFor()
+  await family.page.getByRole('radio').first().check()
+  await family.page.getByRole('button',{name:'看看家人的近况'}).click()
+  await family.page.getByText('王爷爷的生活相册',{exact:true}).waitFor()
   assert.equal(await family.page.getByRole('button',{name:'确认选择',exact:true}).count(),0)
   assert.equal((await family.page.locator('body').innerText()).includes('个性化照护依据变化待核验'),false)
   await noOverflow(family.page)

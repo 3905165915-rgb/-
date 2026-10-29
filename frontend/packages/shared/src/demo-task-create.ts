@@ -24,7 +24,7 @@ export function applyDemoTaskCreation(
   if (
     actor?.mode !== 'demo' ||
     !actor.accountKey ||
-    !['admin', 'supervisor', 'caregiver'].includes(actor.role || '')
+    !['admin', 'supervisor', 'caregiver', 'nurse'].includes(actor.role || '')
   )
     throw new Error('当前身份不能新建照护任务')
   if (state.epoch !== input.epoch)

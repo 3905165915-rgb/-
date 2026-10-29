@@ -348,7 +348,7 @@ function staffSession(value: FrontendSession | null): value is FrontendSession {
     value.mode === 'api' &&
     !!value.accessToken &&
     !!value.accountKey &&
-    ['admin', 'supervisor', 'caregiver'].includes(value.role || '')
+    ['admin', 'supervisor', 'caregiver', 'nurse'].includes(value.role || '')
   )
 }
 function httpStatus(error: unknown) {

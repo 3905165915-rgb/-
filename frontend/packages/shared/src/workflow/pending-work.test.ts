@@ -87,20 +87,20 @@ describe('server notifications', () => {
   it('opens only existing authorized business forms without copying notification revisions', () => {
     expect(notificationWork(item, 'supervisor')).toMatchObject({
       group: 'incidents',
-      action: '/incidents/{incident_id}/triage',
+      action: '/incidents/{incident_id}',
       context: { incident_id: 'INC1' },
-      autoRead: false,
+      autoRead: true,
     })
-    expect(notificationWork(item, 'caregiver')).toBeNull()
+    expect(notificationWork(item, 'caregiver')).toMatchObject({ autoRead: true })
     expect(
       notificationWork({ ...item, stage: 'review' }, 'supervisor'),
     ).toMatchObject({ action: '/incidents/{incident_id}', autoRead: true })
     const review = { ...item, stage: 'review', rectification_id: 'RECT1' }
     expect(notificationWork(review, 'supervisor')).toMatchObject({
-      action: '/rectifications/{rectification_id}/review',
-      context: { incident_id: 'INC1', rectification_id: 'RECT1' },
+      action: '/incidents/{incident_id}',
+      context: { incident_id: 'INC1' },
     })
-    expect(notificationWork(review, 'caregiver')).toBeNull()
+    expect(notificationWork(review, 'caregiver')).toMatchObject({ autoRead: true })
     const change = { ...item, object_type: 'change_reviews', stage: 'review' }
     const work = notificationWork(change, 'supervisor')!
     expect(work.action).toBe('/change-reviews/{case_id}/review')

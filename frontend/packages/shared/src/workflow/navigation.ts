@@ -27,7 +27,7 @@ export function operationTitle(op: Operation): string {
     '/handovers/{handover_id}/submit': '填写注意事项并提交交班',
     '/quality/checks': op.method === 'post' ? '执行质量检查' : '检查报告',
     '/memories/from-draft': '从整理结果选择记忆候选',
-    '/incidents': op.method === 'post' ? '人工上报事件' : '安全事件清单',
+    '/incidents': op.method === 'post' ? '紧急上报安全事件' : '安全事件清单',
     '/incidents/{incident_id}': '事件与整改进度',
   }
   return names[op.path] || op.title

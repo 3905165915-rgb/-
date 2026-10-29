@@ -31,7 +31,7 @@ const titles: Record<string, string> = {
   memories: '个性化照护记忆',
   changes: '来源变更核验',
   family: '家属授权与沟通',
-  incidents: '照护安全与事件上报',
+  incidents: '安全事件处置',
   reports: '运营指标与证据导出',
   staff: '员工账号与责任清单',
 }

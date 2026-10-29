@@ -16,7 +16,7 @@ async function load() {
   context.value = null
   error.value = ''
   const session = readSession()
-  if (!sameCareSession(owner, session) || session?.mode !== 'api' || !['admin', 'supervisor', 'caregiver'].includes(session.role || '') || !props.elderId || !isCareScene(props.scene)) {
+  if (!sameCareSession(owner, session) || session?.mode !== 'api' || !['admin', 'supervisor', 'caregiver', 'nurse'].includes(session.role || '') || !props.elderId || !isCareScene(props.scene)) {
     loading.value = false
     return
   }

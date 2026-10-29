@@ -256,7 +256,7 @@ async function loadPhotos() {
   if (
     !elderId ||
     session.value?.mode !== 'api' ||
-    !['admin', 'supervisor', 'caregiver'].includes(session.value.role || '')
+    !['admin', 'supervisor', 'caregiver', 'nurse'].includes(session.value.role || '')
   )
     return
   loadingPhotos.value = true
@@ -628,7 +628,7 @@ async function initialize() {
   if (
     !elderId ||
     session.value?.mode !== 'api' ||
-    !['admin', 'supervisor', 'caregiver'].includes(session.value.role || '')
+    !['admin', 'supervisor', 'caregiver', 'nurse'].includes(session.value.role || '')
   )
     return
   loadingPhotos.value = true

@@ -77,7 +77,7 @@ export function createApi(baseURL?: string) {
           parseLoginResponse(response.data, 'POST /auth/login'),
         )
     },
-    demoLogin(role: 'admin' | 'supervisor' | 'caregiver' | 'family') {
+    demoLogin(role: 'admin' | 'supervisor' | 'caregiver' | 'nurse' | 'family') {
       return client
         .post<unknown>('/auth/demo-login', { role })
         .then((response) =>

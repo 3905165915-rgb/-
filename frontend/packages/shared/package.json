@@ -19,6 +19,7 @@
     "./workflow-journals": "./src/workflow/WorkflowJournals.vue",
     "./task-care-context": "./src/workflow/TaskCareContext.vue",
     "./elder-impression": "./src/workflow/ElderImpression.vue",
+    "./safety-alert": "./src/workflow/SafetyAlertBar.vue",
     "./care-safety": "./src/workflow/CareSafety.vue",
     "./pending-work": "./src/workflow/PendingWork.vue"
   }

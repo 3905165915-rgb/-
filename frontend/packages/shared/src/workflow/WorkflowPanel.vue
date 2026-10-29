@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { resultAction, incidentActions } from './result-actions'
 import { clearSession, readSession } from '../session'
 import { onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router'
 import {
@@ -83,6 +84,7 @@ import {
   listAll,
   resourceFor,
   rowName,
+  display,
   WorkflowRequestError,
 } from './model'
 import './workflow.css'
@@ -92,6 +94,7 @@ const props = withDefaults(
     title?: string
     context?: Row
     initialAction?: string
+    initialMethod?: string
     autoRead?: boolean
     taskCreation?: boolean
     focused?: boolean
@@ -100,6 +103,7 @@ const props = withDefaults(
     title: '',
     context: () => ({}),
     initialAction: '',
+    initialMethod: '',
     autoRead: false,
     taskCreation: false,
     focused: false,
@@ -134,6 +138,68 @@ const hasMenu = computed(
   () => !props.focused && !props.taskCreation && allowed.value.length > 1,
 )
 const menuDialog = ref<HTMLDialogElement>()
+const businessForm = ref<HTMLFormElement>()
+const coverageContext = ref<Row | null>(null)
+const coverageItemName = ref('')
+const incidentDetail = computed(() =>
+  props.group === 'incidents' &&
+  active.value?.path === '/incidents/{incident_id}' &&
+  result.value
+    ? (result.value as Row)
+    : null,
+)
+const incidentButtons = computed(() =>
+  props.group === 'incidents' &&
+  active.value?.path === '/incidents/{incident_id}' &&
+  result.value
+    ? incidentActions(result.value as Row, allowed.value)
+    : [],
+)
+
+async function focusBusinessForm() {
+  await nextTick()
+  businessForm.value?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+  businessForm.value
+    ?.querySelector<HTMLElement>(
+      'select:not(:disabled), textarea:not(:disabled), input:not([type=hidden]):not(:disabled)',
+    )
+    ?.focus({ preventScroll: true })
+}
+
+async function goIncidentAction(op: Operation) {
+  if (busy.value || phase.value === 'pending') return
+  const item = result.value as Row
+  const rect = item.rectification as Row | null
+  // The detail request may be newer than the initially loaded directories.
+  catalogs.value.incidents = [
+    ...(catalogs.value.incidents || []).filter((row) => row.id !== item.id),
+    item,
+  ]
+  if (rect?.id)
+    catalogs.value.rectifications = [
+      ...(catalogs.value.rectifications || []).filter(
+        (row) => row.id !== rect.id,
+      ),
+      rect,
+    ]
+  remember(item)
+  if (rect?.id) selected.value.rectification_id = rect.id
+  choose(op, false)
+  if (active.value?.id !== op.id) return
+  syncVersions()
+  persistForm()
+  await focusBusinessForm()
+}
+
+async function returnToCoverage() {
+  const op = allowed.value.find(
+    (item) => item.path === '/insights/coverage' && item.method === 'get',
+  )
+  if (!op || !coverageContext.value) return
+  Object.assign(selected.value, coverageContext.value)
+  choose(op, false)
+  if (active.value?.id === op.id) await run()
+}
 const recordHistory = ref<unknown>(null)
 const historyError = ref('')
 const reviewSource = ref<Row | null>(null)
@@ -260,7 +326,7 @@ const fieldOptions = computed(() => {
 })
 const noWritableShift = computed(
   () =>
-    role === 'caregiver' &&
+    ['caregiver', 'nurse'].includes(role || '') &&
     catalogs.value.shifts &&
     writableShifts(catalogs.value.shifts, readSession()).length === 0,
 )
@@ -459,6 +525,21 @@ const visibleParameters = computed(
     ) || [],
 )
 const visibleBodySchema = computed(() => {
+  if (
+    coverageContext.value &&
+    active.value?.path === '/insights/coverage/reviews' &&
+    bodySchema.value
+  ) {
+    const schema = structuredClone(bodySchema.value)
+    for (const key of [
+      'elder_id',
+      'service_date',
+      'occurrence_key',
+      'expected_fingerprint',
+    ])
+      delete schema.properties?.[key]
+    return schema
+  }
   if (props.focused && bodySchema.value) {
     const schema = structuredClone(bodySchema.value)
     for (const key of Object.keys(schema.properties || {})) {
@@ -815,13 +896,14 @@ async function loadCatalogs() {
     if (resources.has('memories')) resources.add('elders')
     if (resources.has('handover_items')) resources.add('handovers')
     if (resources.has('issues')) resources.add('quality')
-    if (role === 'caregiver' && resources.has('tasks')) resources.add('shifts')
+    if (['caregiver', 'nurse'].includes(role || '') && resources.has('tasks'))
+      resources.add('shifts')
     if (resources.has('rectifications')) resources.add('incidents')
     if (role === 'family') {
       resources.clear()
       resources.add('bindings')
     }
-    if (role === 'caregiver')
+    if (['caregiver', 'nurse'].includes(role || ''))
       for (const resource of [
         'beds',
         'family_accounts',
@@ -873,7 +955,7 @@ async function loadCatalogs() {
     if (
       resources.has('admissions') &&
       role !== 'family' &&
-      role !== 'caregiver'
+      !['caregiver', 'nurse'].includes(role || '')
     ) {
       const elders = catalogs.value.elders || []
       const admissions = await Promise.all(
@@ -883,7 +965,10 @@ async function loadCatalogs() {
       )
       catalogs.value.admissions = admissions.flat()
     }
-    if (resources.has('admissions') && role === 'caregiver')
+    if (
+      resources.has('admissions') &&
+      ['caregiver', 'nurse'].includes(role || '')
+    )
       catalogs.value.admissions = (catalogs.value.elders || []).flatMap(
         (row) =>
           row.current_admission_id
@@ -1347,8 +1432,34 @@ function switchRecordMode(mode: 'manual' | 'assisted') {
   persistForm()
 }
 async function selectResult(row: Row) {
-  remember(row)
   if (phase.value === 'pending' || busy.value) return
+  const next = resultAction(props.group, row, params.value)
+  if (next) {
+    const op = allowed.value.find(
+      (item) =>
+        item.path === next.path && (item.method === 'get') === next.autoRead,
+    )
+    if (!op) return
+    if (props.group === 'coverage') {
+      coverageContext.value = {
+        elder_id: next.context.elder_id,
+        service_date: next.context.service_date,
+      }
+      coverageItemName.value = rowName(row)
+    }
+    Object.assign(selected.value, next.context)
+    remember(row)
+    choose(op, false)
+    if (active.value?.id !== op.id) return
+    if (next.autoRead) await run()
+    else {
+      message.value = `正在处理：${rowName(row)}。请选择处理结论并填写说明。`
+      persistForm()
+    }
+    await focusBusinessForm()
+    return
+  }
+  remember(row)
   if (props.group === 'handovers' && row.status === 'draft') {
     const nextPath =
       Number(row.revision || 0) < 1
@@ -1653,6 +1764,7 @@ watch(
     props.group,
     JSON.stringify(props.context),
     props.initialAction,
+    props.initialMethod,
     props.autoRead,
   ],
   async () => {
@@ -1689,7 +1801,11 @@ function initialOperationId() {
                   /^\{[^}]+\}$/.test(part) ||
                   part === props.initialAction.split('/')[i],
               ))) &&
-        (props.autoRead ? op.method === 'get' : op.method !== 'get'),
+        (props.initialMethod
+          ? op.method === props.initialMethod
+          : props.autoRead
+            ? op.method === 'get'
+            : op.method !== 'get'),
     )?.id ||
     allowed.value[0]?.id ||
     ''
@@ -1923,8 +2039,45 @@ onMounted(async () => {
               采用当前版本并重新核对
             </button>
           </p>
-          <form class="wf-form" @submit.prevent="run">
+          <form
+            v-if="!incidentDetail"
+            ref="businessForm"
+            class="wf-form"
+            @submit.prevent="run"
+          >
             <h3>{{ taskCreation ? '任务内容' : operationTitle(active) }}</h3>
+            <div
+              v-if="
+                group === 'coverage' &&
+                active.path === '/insights/coverage/reviews' &&
+                coverageContext
+              "
+              class="wf-toolbar"
+            >
+              <strong>{{ coverageItemName }}</strong>
+              <span
+                >{{
+                  rowName(
+                    catalogs.elders?.find(
+                      (row) => row.id === coverageContext?.elder_id,
+                    ) || {},
+                  )
+                }}
+                · {{ coverageContext.service_date }}</span
+              >
+              <button
+                type="button"
+                class="wf-secondary"
+                :disabled="busy || phase === 'pending'"
+                @click="returnToCoverage"
+              >
+                {{
+                  phase === 'succeeded'
+                    ? '查看更新后的核对结果'
+                    : '返回核对结果'
+                }}
+              </button>
+            </div>
             <p v-if="isAdmissionCreate(active)" class="wf-muted">
               新入住：先为老人建档，再选择待入住老人和空闲床位。已在院老人无需重复入住；没有历史入住单时才使用补登记。
               {{
@@ -1933,8 +2086,16 @@ onMounted(async () => {
                   : ''
               }}
             </p>
-            <p v-if="group === 'incidents'" class="wf-notice">
-              可先提交已知事实和立即措施，无需等待AI或先创建正式记录。证据为可选项；有引用时请确认属于当前老人和入住关系。主管后续负责分类、分级与整改。
+            <p
+              v-if="
+                group === 'incidents' &&
+                active.path === '/incidents' &&
+                active.method === 'post'
+              "
+              class="wf-notice wf-urgent-guidance"
+              role="note"
+            >
+              紧急情况先联系现场护士、主管并按机构应急流程处置。填写已知事实和已采取措施后立即上报，系统向管理人员发送紧急通知。
             </p>
             <div
               v-if="recordComposer"
@@ -2298,9 +2459,11 @@ onMounted(async () => {
             </div>
           </form>
           <p v-if="error" class="wf-error" role="alert">{{ error }}</p>
-          <p v-if="message" class="wf-success" role="status">{{ message }}</p>
+          <p v-if="message && !incidentDetail" class="wf-success" role="status">
+            {{ message }}
+          </p>
           <section
-            v-if="focused && result !== null"
+            v-if="focused && result !== null && group !== 'incidents'"
             class="wf-results"
             aria-label="本次办理结果"
           >
@@ -2313,6 +2476,21 @@ onMounted(async () => {
             </p>
           </section>
           <section v-else-if="result !== null" class="wf-results">
+            <div
+              v-if="incidentButtons.length"
+              class="wf-toolbar"
+              aria-label="事件后续操作"
+            >
+              <button
+                v-for="op in incidentButtons"
+                :key="op.id"
+                type="button"
+                :disabled="busy"
+                @click="goIncidentAction(op)"
+              >
+                {{ operationTitle(op) }}
+              </button>
+            </div>
             <h3>
               {{
                 group === 'records'
@@ -2351,8 +2529,42 @@ onMounted(async () => {
                 下载证据链
               </button>
             </div>
+            <article v-if="incidentDetail" class="wf-incident-detail">
+              <h3>
+                {{
+                  rowName(
+                    catalogs.elders?.find(
+                      (row) => row.id === incidentDetail?.elder_id,
+                    ) || {},
+                  )
+                }}
+                · {{ display(incidentDetail.status, 'status') }}
+              </h3>
+              <p>
+                发生时间：{{
+                  display(incidentDetail.occurred_at, 'occurred_at')
+                }}
+              </p>
+              <h4>现场情况</h4>
+              <p class="wf-incident-facts">{{ incidentDetail.description }}</p>
+              <h4>已采取措施</h4>
+              <p class="wf-incident-facts">
+                {{ incidentDetail.immediate_action }}
+              </p>
+              <p>
+                人工分级：{{
+                  incidentDetail.severity
+                    ? display(incidentDetail.severity, 'severity')
+                    : '待管理人员核实分级'
+                }}
+              </p>
+              <details>
+                <summary>查看完整事件、证据与整改记录</summary>
+                <WorkflowResult :value="result" :catalogs="catalogs" />
+              </details>
+            </article>
             <RecordResults
-              v-if="group === 'records'"
+              v-else-if="group === 'records'"
               :value="result"
               :catalogs="catalogs"
               @select="selectResult"
@@ -2393,6 +2605,34 @@ onMounted(async () => {
   </section>
 </template>
 <style scoped>
+.wf-incident-detail {
+  border: 1px solid #f3a59b;
+  border-left: 4px solid #b42318;
+  background: #fff8f6;
+  border-radius: 8px;
+  padding: 18px;
+  line-height: 1.7;
+}
+.wf-incident-detail h3,
+.wf-incident-detail h4 {
+  color: #7a271a;
+  margin: 0 0 8px;
+}
+.wf-incident-facts {
+  white-space: pre-wrap;
+  margin: 0 0 18px;
+}
+.wf-incident-detail summary {
+  cursor: pointer;
+  padding-block: 10px;
+}
+.wf-urgent-guidance {
+  border-left: 4px solid #b42318;
+  padding: 12px 16px;
+  background: #fff1ef;
+  color: #7a271a;
+  line-height: 1.7;
+}
 .wf-audio-actions {
   position: relative;
 }

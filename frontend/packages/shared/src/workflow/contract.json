@@ -3718,7 +3718,7 @@
         },
         "role": {
           "type": "string",
-          "enum": ["admin", "supervisor", "caregiver"],
+          "enum": ["admin", "supervisor", "caregiver", "nurse"],
           "title": "Role",
           "default": "caregiver"
         },
@@ -3789,7 +3789,7 @@
           "anyOf": [
             {
               "type": "string",
-              "enum": ["admin", "supervisor", "caregiver"]
+              "enum": ["admin", "supervisor", "caregiver", "nurse"]
             },
             {
               "type": "null"
@@ -4519,7 +4519,7 @@
       "title": "老人档案",
       "path": "/elders",
       "method": "get",
-      "roles": ["admin", "supervisor", "caregiver"],
+      "roles": ["admin", "supervisor", "caregiver", "nurse"],
       "parameters": [],
       "paginated": false,
       "schema": null
@@ -4543,7 +4543,7 @@
       "title": "查看老人资料",
       "path": "/elders/{elder_id}",
       "method": "get",
-      "roles": ["admin", "supervisor", "caregiver"],
+      "roles": ["admin", "supervisor", "caregiver", "nurse"],
       "parameters": [
         {
           "name": "elder_id",
@@ -4631,7 +4631,7 @@
       "title": "正式照护记录",
       "path": "/records",
       "method": "get",
-      "roles": ["admin", "supervisor", "caregiver"],
+      "roles": ["admin", "supervisor", "caregiver", "nurse"],
       "parameters": [
         {
           "name": "elder_id",
@@ -4675,7 +4675,7 @@
       "title": "待核对草稿",
       "path": "/records/drafts",
       "method": "get",
-      "roles": ["admin", "supervisor", "caregiver"],
+      "roles": ["admin", "supervisor", "caregiver", "nurse"],
       "parameters": [
         {
           "name": "elder_id",
@@ -4720,7 +4720,7 @@
       "title": "恢复草稿",
       "path": "/records/drafts/{draft_id}",
       "method": "get",
-      "roles": ["admin", "supervisor", "caregiver"],
+      "roles": ["admin", "supervisor", "caregiver", "nurse"],
       "parameters": [
         {
           "name": "draft_id",
@@ -4741,7 +4741,7 @@
       "title": "放弃AI草稿",
       "path": "/records/drafts/{draft_id}/reject",
       "method": "post",
-      "roles": ["admin", "supervisor", "caregiver"],
+      "roles": ["admin", "supervisor", "caregiver", "nurse"],
       "parameters": [
         {
           "name": "draft_id",
@@ -4764,7 +4764,7 @@
       "title": "新建人工记录",
       "path": "/records/manual",
       "method": "post",
-      "roles": ["admin", "supervisor", "caregiver"],
+      "roles": ["admin", "supervisor", "caregiver", "nurse"],
       "parameters": [],
       "paginated": false,
       "schema": {
@@ -4777,7 +4777,7 @@
       "title": "AI原文提取",
       "path": "/records/extract",
       "method": "post",
-      "roles": ["admin", "supervisor", "caregiver"],
+      "roles": ["admin", "supervisor", "caregiver", "nurse"],
       "parameters": [],
       "paginated": false,
       "schema": {
@@ -4790,7 +4790,7 @@
       "title": "人工核对并确认记录",
       "path": "/records/{draft_id}/confirm",
       "method": "post",
-      "roles": ["admin", "supervisor", "caregiver"],
+      "roles": ["admin", "supervisor", "caregiver", "nurse"],
       "parameters": [
         {
           "name": "draft_id",
@@ -4813,7 +4813,7 @@
       "title": "情境AI助手",
       "path": "/records/context-extract",
       "method": "post",
-      "roles": ["admin", "supervisor", "caregiver"],
+      "roles": ["admin", "supervisor", "caregiver", "nurse"],
       "parameters": [],
       "paginated": false,
       "schema": {
@@ -4826,7 +4826,7 @@
       "title": "查看正式记录",
       "path": "/records/{record_id}",
       "method": "get",
-      "roles": ["admin", "supervisor", "caregiver"],
+      "roles": ["admin", "supervisor", "caregiver", "nurse"],
       "parameters": [
         {
           "name": "record_id",
@@ -4847,7 +4847,7 @@
       "title": "记录更正历史",
       "path": "/records/{record_id}/history",
       "method": "get",
-      "roles": ["admin", "supervisor", "caregiver"],
+      "roles": ["admin", "supervisor", "caregiver", "nurse"],
       "parameters": [
         {
           "name": "record_id",
@@ -4868,7 +4868,7 @@
       "title": "追加记录更正",
       "path": "/records/{record_id}/corrections",
       "method": "post",
-      "roles": ["admin", "supervisor", "caregiver"],
+      "roles": ["admin", "supervisor", "caregiver", "nurse"],
       "parameters": [
         {
           "name": "record_id",
@@ -4891,7 +4891,7 @@
       "title": "每日任务列表",
       "path": "/tasks",
       "method": "get",
-      "roles": ["admin", "supervisor", "caregiver"],
+      "roles": ["admin", "supervisor", "caregiver", "nurse"],
       "parameters": [
         {
           "name": "elder_id",
@@ -4967,7 +4967,7 @@
       "title": "任务详情",
       "path": "/tasks/{task_id}",
       "method": "get",
-      "roles": ["admin", "supervisor", "caregiver"],
+      "roles": ["admin", "supervisor", "caregiver", "nurse"],
       "parameters": [
         {
           "name": "task_id",
@@ -5011,7 +5011,7 @@
       "title": "开始／未执行／转交／取消／重开",
       "path": "/tasks/{task_id}/transition",
       "method": "post",
-      "roles": ["admin", "supervisor", "caregiver"],
+      "roles": ["admin", "supervisor", "caregiver", "nurse"],
       "parameters": [
         {
           "name": "task_id",
@@ -5034,7 +5034,7 @@
       "title": "提交任务完成结果",
       "path": "/tasks/{task_id}/complete",
       "method": "post",
-      "roles": ["admin", "supervisor", "caregiver"],
+      "roles": ["admin", "supervisor", "caregiver", "nurse"],
       "parameters": [
         {
           "name": "task_id",
@@ -5057,7 +5057,7 @@
       "title": "已采用的个性化依据",
       "path": "/tasks/{task_id}/memory-references",
       "method": "get",
-      "roles": ["admin", "supervisor", "caregiver"],
+      "roles": ["admin", "supervisor", "caregiver", "nurse"],
       "parameters": [
         {
           "name": "task_id",
@@ -5078,7 +5078,7 @@
       "title": "采用个性化记忆",
       "path": "/tasks/{task_id}/memory-references",
       "method": "post",
-      "roles": ["admin", "supervisor", "caregiver"],
+      "roles": ["admin", "supervisor", "caregiver", "nurse"],
       "parameters": [
         {
           "name": "task_id",
@@ -5101,7 +5101,7 @@
       "title": "撤回个性化依据",
       "path": "/tasks/{task_id}/memory-references/{reference_id}/withdraw",
       "method": "post",
-      "roles": ["admin", "supervisor", "caregiver"],
+      "roles": ["admin", "supervisor", "caregiver", "nurse"],
       "parameters": [
         {
           "name": "task_id",
@@ -5133,7 +5133,7 @@
       "title": "当前条件核验",
       "path": "/tasks/{task_id}/condition",
       "method": "get",
-      "roles": ["admin", "supervisor", "caregiver"],
+      "roles": ["admin", "supervisor", "caregiver", "nurse"],
       "parameters": [
         {
           "name": "task_id",
@@ -5154,7 +5154,7 @@
       "title": "配置人工核验条件",
       "path": "/tasks/{task_id}/condition/configure",
       "method": "post",
-      "roles": ["admin", "supervisor", "caregiver"],
+      "roles": ["admin", "supervisor", "caregiver", "nurse"],
       "parameters": [
         {
           "name": "task_id",
@@ -5177,7 +5177,7 @@
       "title": "认领跨班核验",
       "path": "/tasks/{task_id}/condition/claim",
       "method": "post",
-      "roles": ["admin", "supervisor", "caregiver"],
+      "roles": ["admin", "supervisor", "caregiver", "nurse"],
       "parameters": [
         {
           "name": "task_id",
@@ -5200,7 +5200,7 @@
       "title": "提交条件核验结论",
       "path": "/tasks/{task_id}/condition/check",
       "method": "post",
-      "roles": ["admin", "supervisor", "caregiver"],
+      "roles": ["admin", "supervisor", "caregiver", "nurse"],
       "parameters": [
         {
           "name": "task_id",
@@ -5236,7 +5236,7 @@
       "title": "班次列表",
       "path": "/shifts",
       "method": "get",
-      "roles": ["admin", "supervisor", "caregiver"],
+      "roles": ["admin", "supervisor", "caregiver", "nurse"],
       "parameters": [],
       "paginated": true,
       "schema": null
@@ -5247,7 +5247,7 @@
       "title": "班次详情",
       "path": "/shifts/{shift_id}",
       "method": "get",
-      "roles": ["admin", "supervisor", "caregiver"],
+      "roles": ["admin", "supervisor", "caregiver", "nurse"],
       "parameters": [
         {
           "name": "shift_id",
@@ -5268,7 +5268,7 @@
       "title": "新建交班草稿",
       "path": "/handovers",
       "method": "post",
-      "roles": ["admin", "supervisor", "caregiver"],
+      "roles": ["admin", "supervisor", "caregiver", "nurse"],
       "parameters": [],
       "paginated": false,
       "schema": {
@@ -5281,7 +5281,7 @@
       "title": "交班单列表",
       "path": "/handovers",
       "method": "get",
-      "roles": ["admin", "supervisor", "caregiver"],
+      "roles": ["admin", "supervisor", "caregiver", "nurse"],
       "parameters": [
         {
           "name": "shift_id",
@@ -5309,7 +5309,7 @@
       "title": "交班明细与原文证据",
       "path": "/handovers/{handover_id}",
       "method": "get",
-      "roles": ["admin", "supervisor", "caregiver"],
+      "roles": ["admin", "supervisor", "caregiver", "nurse"],
       "parameters": [
         {
           "name": "handover_id",
@@ -5330,7 +5330,7 @@
       "title": "刷新交班来源",
       "path": "/handovers/{handover_id}/refresh",
       "method": "post",
-      "roles": ["admin", "supervisor", "caregiver"],
+      "roles": ["admin", "supervisor", "caregiver", "nurse"],
       "parameters": [
         {
           "name": "handover_id",
@@ -5351,7 +5351,7 @@
       "title": "人工审核并提交交班",
       "path": "/handovers/{handover_id}/submit",
       "method": "post",
-      "roles": ["admin", "supervisor", "caregiver"],
+      "roles": ["admin", "supervisor", "caregiver", "nurse"],
       "parameters": [
         {
           "name": "handover_id",
@@ -5374,7 +5374,7 @@
       "title": "生成AI交班摘要",
       "path": "/handovers/{handover_id}/ai-summary",
       "method": "post",
-      "roles": ["admin", "supervisor", "caregiver"],
+      "roles": ["admin", "supervisor", "caregiver", "nurse"],
       "parameters": [
         {
           "name": "handover_id",
@@ -5397,7 +5397,7 @@
       "title": "逐项接班／待澄清",
       "path": "/handovers/{handover_id}/items/{item_id}/receive",
       "method": "post",
-      "roles": ["admin", "supervisor", "caregiver"],
+      "roles": ["admin", "supervisor", "caregiver", "nurse"],
       "parameters": [
         {
           "name": "handover_id",
@@ -5429,7 +5429,7 @@
       "title": "补充交班澄清",
       "path": "/handovers/{handover_id}/items/{item_id}/clarify",
       "method": "post",
-      "roles": ["admin", "supervisor", "caregiver"],
+      "roles": ["admin", "supervisor", "caregiver", "nurse"],
       "parameters": [
         {
           "name": "handover_id",
@@ -5461,7 +5461,7 @@
       "title": "照护事项过程回放",
       "path": "/items/{item_id}/timeline",
       "method": "get",
-      "roles": ["admin", "supervisor", "caregiver"],
+      "roles": ["admin", "supervisor", "caregiver", "nurse"],
       "parameters": [
         {
           "name": "item_id",
@@ -5576,7 +5576,7 @@
       "title": "员工列表",
       "path": "/staff",
       "method": "get",
-      "roles": ["admin", "supervisor", "caregiver"],
+      "roles": ["admin", "supervisor", "caregiver", "nurse"],
       "parameters": [],
       "paginated": true,
       "schema": null
@@ -5695,7 +5695,7 @@
       "title": "语音服务状态",
       "path": "/speech/status",
       "method": "get",
-      "roles": ["admin", "supervisor", "caregiver"],
+      "roles": ["admin", "supervisor", "caregiver", "nurse"],
       "parameters": [],
       "paginated": false,
       "schema": null
@@ -5719,7 +5719,7 @@
       "title": "个性化记忆列表",
       "path": "/memories",
       "method": "get",
-      "roles": ["admin", "supervisor", "caregiver"],
+      "roles": ["admin", "supervisor", "caregiver", "nurse"],
       "parameters": [
         {
           "name": "elder_id",
@@ -5787,7 +5787,7 @@
       "title": "按服务场景检索有效记忆",
       "path": "/memories/context",
       "method": "get",
-      "roles": ["admin", "supervisor", "caregiver"],
+      "roles": ["admin", "supervisor", "caregiver", "nurse"],
       "parameters": [
         {
           "name": "elder_id",
@@ -5825,7 +5825,7 @@
       "title": "记忆详情与有效状态",
       "path": "/memories/{memory_id}",
       "method": "get",
-      "roles": ["admin", "supervisor", "caregiver"],
+      "roles": ["admin", "supervisor", "caregiver", "nurse"],
       "parameters": [
         {
           "name": "memory_id",
@@ -5846,7 +5846,7 @@
       "title": "选择AI记忆候选",
       "path": "/memories/from-draft",
       "method": "post",
-      "roles": ["admin", "supervisor", "caregiver"],
+      "roles": ["admin", "supervisor", "caregiver", "nurse"],
       "parameters": [],
       "paginated": false,
       "schema": {
@@ -5859,7 +5859,7 @@
       "title": "记忆历史版本",
       "path": "/memories/{memory_id}/history",
       "method": "get",
-      "roles": ["admin", "supervisor", "caregiver"],
+      "roles": ["admin", "supervisor", "caregiver", "nurse"],
       "parameters": [
         {
           "name": "memory_id",
@@ -5926,7 +5926,7 @@
       "title": "变更核验队列",
       "path": "/change-reviews",
       "method": "get",
-      "roles": ["admin", "supervisor", "caregiver"],
+      "roles": ["admin", "supervisor", "caregiver", "nurse"],
       "parameters": [
         {
           "name": "status",
@@ -6016,7 +6016,7 @@
       "title": "变更影响与当前证据",
       "path": "/change-reviews/{case_id}",
       "method": "get",
-      "roles": ["admin", "supervisor", "caregiver"],
+      "roles": ["admin", "supervisor", "caregiver", "nurse"],
       "parameters": [
         {
           "name": "case_id",
@@ -6060,7 +6060,7 @@
       "title": "提交变更核验结论",
       "path": "/change-reviews/{case_id}/submit",
       "method": "post",
-      "roles": ["admin", "supervisor", "caregiver"],
+      "roles": ["admin", "supervisor", "caregiver", "nurse"],
       "parameters": [
         {
           "name": "case_id",
@@ -6290,7 +6290,7 @@
       "title": "照护计划列表",
       "path": "/care-plans",
       "method": "get",
-      "roles": ["admin", "supervisor", "caregiver"],
+      "roles": ["admin", "supervisor", "caregiver", "nurse"],
       "parameters": [
         {
           "name": "elder_id",
@@ -6331,7 +6331,7 @@
       "title": "计划内容与有效状态",
       "path": "/care-plans/{plan_id}",
       "method": "get",
-      "roles": ["admin", "supervisor", "caregiver"],
+      "roles": ["admin", "supervisor", "caregiver", "nurse"],
       "parameters": [
         {
           "name": "plan_id",
@@ -6421,7 +6421,7 @@
       "title": "核对任务的计划依据",
       "path": "/tasks/{task_id}/plan-check",
       "method": "get",
-      "roles": ["admin", "supervisor", "caregiver"],
+      "roles": ["admin", "supervisor", "caregiver", "nurse"],
       "parameters": [
         {
           "name": "task_id",
@@ -6711,7 +6711,7 @@
       "title": "不良事件列表",
       "path": "/incidents",
       "method": "get",
-      "roles": ["admin", "supervisor", "caregiver"],
+      "roles": ["admin", "supervisor", "caregiver", "nurse"],
       "parameters": [
         {
           "name": "elder_id",
@@ -6739,7 +6739,7 @@
       "title": "上报不良事件",
       "path": "/incidents",
       "method": "post",
-      "roles": ["admin", "supervisor", "caregiver"],
+      "roles": ["caregiver", "nurse"],
       "parameters": [],
       "paginated": false,
       "schema": {
@@ -6752,7 +6752,7 @@
       "title": "事件与整改进度",
       "path": "/incidents/{incident_id}",
       "method": "get",
-      "roles": ["admin", "supervisor", "caregiver"],
+      "roles": ["admin", "supervisor", "caregiver", "nurse"],
       "parameters": [
         {
           "name": "incident_id",
@@ -6819,7 +6819,7 @@
       "title": "提交整改证据",
       "path": "/rectifications/{rectification_id}/submit",
       "method": "post",
-      "roles": ["admin", "supervisor", "caregiver"],
+      "roles": ["admin", "supervisor", "caregiver", "nurse"],
       "parameters": [
         {
           "name": "rectification_id",
@@ -7045,7 +7045,7 @@
       "title": "预览计划变更影响",
       "path": "/care-plans/{plan_id}/impact",
       "method": "get",
-      "roles": ["admin", "supervisor", "caregiver"],
+      "roles": ["admin", "supervisor", "caregiver", "nurse"],
       "parameters": [
         {
           "name": "plan_id",
@@ -7066,7 +7066,7 @@
       "title": "新建照护任务",
       "path": "/tasks",
       "method": "post",
-      "roles": ["admin", "supervisor", "caregiver"],
+      "roles": ["admin", "supervisor", "caregiver", "nurse"],
       "parameters": [],
       "paginated": false,
       "schema": {

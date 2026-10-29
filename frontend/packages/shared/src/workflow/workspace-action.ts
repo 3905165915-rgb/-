@@ -30,7 +30,7 @@ export const plainBody = (body: Row): Row =>
   object(JSON.parse(JSON.stringify(body)))
 export const staffSession = (session: FrontendSession | null) =>
   session?.mode === 'api' &&
-  ['admin', 'supervisor', 'caregiver'].includes(session.role || '')
+  ['admin', 'supervisor', 'caregiver', 'nurse'].includes(session.role || '')
 export function workspaceStorageKey(
   owner: FrontendSession | null,
   elderId: string,

@@ -28,6 +28,7 @@ import {
   followupTools,
   notificationCategory,
   notificationWork,
+  isUrgentNotification,
   type DemoFollowup,
   type FollowupCategory,
   type ServerNotification,
@@ -60,7 +61,7 @@ const pageNumber = computed(() => Math.floor(offset.value / limit) + 1)
 const permitted = computed(
   () =>
     !!session.value &&
-    ['admin', 'supervisor', 'caregiver'].includes(session.value.role || ''),
+    ['admin', 'supervisor', 'caregiver', 'nurse'].includes(session.value.role || ''),
 )
 const demoMode = computed(() => session.value?.mode === 'demo')
 const tools = computed(() =>
@@ -421,9 +422,10 @@ onBeforeUnmount(() => {
         }}
       </p>
       <ul>
-        <li v-for="item in visibleNotifications" :key="item.id">
+        <li v-for="item in visibleNotifications" :key="item.id" :class="{ 'urgent-notice': isUrgentNotification(item) }">
           <div class="notice-main">
             <div class="notice-title">
+              <b v-if="isUrgentNotification(item)" class="urgent-badge">紧急</b>
               <strong>{{
                 item.title ||
                 notificationObjects[item.object_type] ||
@@ -452,11 +454,11 @@ onBeforeUnmount(() => {
               class="open-link"
               :to="notificationLocation(item, props.mobile)"
             >
-              进入关联业务<ChevronRight :size="16" aria-hidden="true" />
+              {{ isUrgentNotification(item) ? '立即查看事件' : '进入关联业务' }}<ChevronRight :size="16" aria-hidden="true" />
             </RouterLink>
             <p v-else>当前通知的业务入口待核实，请联系主管核对。</p>
             <button
-              v-if="notificationWork(item, session?.role || null)"
+              v-if="!isUrgentNotification(item) && notificationWork(item, session?.role || null)"
               type="button"
               class="secondary"
               :disabled="loading || !!busyId"
@@ -481,7 +483,7 @@ onBeforeUnmount(() => {
               <CheckCheck :size="16" aria-hidden="true" />标记已读
             </button>
             <button
-              v-if="item.status === 'pending'"
+              v-if="item.status === 'pending' && !isUrgentNotification(item)"
               type="button"
               :disabled="loading || !!busyId"
               @click="act(item, 'accept')"
@@ -555,6 +557,9 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+li.urgent-notice { border: 1px solid #f3a59b; border-left: 5px solid #b42318; background: #fff4f2; }
+.urgent-badge { background: #b42318; color: white; border-radius: 4px; padding: 3px 8px; }
+.urgent-notice .open-link { background: #b42318; color: white; padding: 8px 14px; border-radius: 6px; }
 .server-notifications {
   min-width: 0;
   overflow-wrap: anywhere;

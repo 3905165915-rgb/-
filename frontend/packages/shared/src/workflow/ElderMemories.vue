@@ -29,7 +29,7 @@ const editorPanel = ref<InstanceType<typeof WorkflowPanel>>()
 const session = readSession()
 const api =
   session?.mode === 'api' &&
-  ['admin', 'supervisor', 'caregiver'].includes(session.role || '')
+  ['admin', 'supervisor', 'caregiver', 'nurse'].includes(session.role || '')
 const management = ['admin', 'supervisor'].includes(session?.role || '')
 let epoch = 0
 function revoke() {

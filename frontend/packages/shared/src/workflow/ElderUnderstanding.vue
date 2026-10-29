@@ -10,6 +10,7 @@ import {
 import { useWorkspaceScope } from './workspace-scope'
 import ElderMemories from './ElderMemories.vue'
 import { personalFeature, personalFeatures } from './personal-profile'
+import { date } from './workspace-time'
 const props = defineProps<{ elderId: string; recordPath: string }>()
 const scope = useWorkspaceScope()
 const { active, management } = scope
@@ -18,6 +19,13 @@ const observations = ref<Row[]>([])
 const needsReview = ref<Row[]>([])
 const features = computed(() => personalFeatures(confirmed.value))
 const content = ref<Record<string, string>>({})
+const endsAt = ref<Record<string, string>>({})
+function needsEndTime(row: Row) {
+  return (
+    !!row.applicability &&
+    object(row.applicability).needs_time_confirmation === true
+  )
+}
 const editing = ref('')
 const reviewing = ref(false)
 const loading = ref(false)
@@ -132,10 +140,27 @@ function validate(value: unknown) {
 async function decide(row: Row, decision: 'adopt' | 'reject') {
   if (!management || !scope.valid() || busy.value || pending.value) return
   if (decision === 'adopt' && row.can_adopt !== true) return
+  error.value = ''
+  if (
+    decision === 'adopt' &&
+    needsEndTime(row) &&
+    !endsAt.value[String(row.id)]
+  ) {
+    error.value = '请确认本次意愿适用到什么时间。'
+    return
+  }
   const body: Row = {
     expected_revision: row.revision,
     decision,
     note: '已核对来源原文，本人当次意愿优先',
+  }
+  if (decision === 'adopt' && needsEndTime(row)) {
+    try {
+      body.expires_at = date(endsAt.value[String(row.id)])
+    } catch {
+      error.value = '请填写有效的北京时间。'
+      return
+    }
   }
   if (decision === 'adopt' && editing.value === row.id) {
     if (!content.value[String(row.id)]?.trim()) {
@@ -171,6 +196,7 @@ watch(
   () => props.elderId,
   () => {
     confirmed.value = []
+    endsAt.value = {}
     observations.value = []
     needsReview.value = []
     content.value = {}
@@ -277,6 +303,13 @@ defineExpose({ refresh: load })
               </blockquote>
             </details>
             <template v-if="management">
+              <label v-if="row.can_adopt === true && needsEndTime(row)">
+                本次适用到（北京时间）<input
+                  v-model="endsAt[String(row.id)]"
+                  type="datetime-local"
+                  :disabled="busy || !!pending"
+                />
+              </label>
               <label v-if="editing === row.id"
                 >核对后的内容<textarea
                   v-model="content[String(row.id)]"

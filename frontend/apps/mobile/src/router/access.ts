@@ -2,6 +2,7 @@ import { canAccess, type Role } from '@hulao/shared'
 export const internalRoles: readonly Role[] = [
   'admin',
   'caregiver',
+  'nurse',
   'supervisor',
 ]
 export interface NavigationItem {
