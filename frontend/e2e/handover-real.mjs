@@ -65,7 +65,7 @@ page.setDefaultTimeout(45000)
 page.on('pageerror', (error) => errors.push(error.message))
 try {
   await page.goto(base + '/mobile/handover')
-  const note = page.getByLabel('交班内容')
+  const note = page.getByLabel('交班内容', { exact: true })
   await note.fill('王爷爷希望自行决定午休时间，活动前请再次询问本人意愿。')
   await page.waitForFunction(
     () => !document.querySelector('[aria-label="刷新班次"]').disabled,

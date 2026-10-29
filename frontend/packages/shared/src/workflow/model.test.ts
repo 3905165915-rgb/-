@@ -102,6 +102,7 @@ describe('business form contracts', () => {
     expect(() => clean(schema, { score: '2.5' })).toThrow()
   })
   it('preserves time zone information and escapes IDs independently from query parameters', () => {
+    expect(clean({type:'string',format:'date-time'}, '2026-10-20T21:00')).toBe('2026-10-20T13:00:00.000Z')
     expect(
       clean(
         { type: 'string', format: 'date-time' },

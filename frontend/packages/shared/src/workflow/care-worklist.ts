@@ -1,3 +1,4 @@
+import { isTaskContent } from './care-arrangement'
 export type CareWorkTask = { id: string; elder_id: string; title: string; status: string; due_at?: string | null; [key: string]: unknown }
 export type CareWorkItem = {
   elder: { id: string; name: string; bed_id: string | null; status: string }
@@ -38,7 +39,7 @@ export function validateCareWorklist(value: unknown): CareWorklist {
     const tasks = item.open_tasks.map((value): CareWorkTask => {
       const task = record(value)
       const id = text(task.id)
-      if (taskIds.has(id) || text(task.elder_id) !== elderId || text(task.title) === '' || !['pending', 'in_progress', 'overdue'].includes(String(task.status))) return fail()
+      if (!isTaskContent(task) || taskIds.has(id) || text(task.elder_id) !== elderId || text(task.title) === '' || !['pending', 'in_progress', 'overdue'].includes(String(task.status))) return fail()
       if (task.due_at != null && (typeof task.due_at !== 'string' || !/(Z|[+-]\d{2}:\d{2})$/.test(task.due_at) || !Number.isFinite(Date.parse(task.due_at)))) return fail()
       taskIds.add(id)
       return task as CareWorkTask

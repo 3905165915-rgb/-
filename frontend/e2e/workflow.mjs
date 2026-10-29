@@ -584,7 +584,7 @@ try {
   }) => {
     await page.goto(base + '/mobile/handover')
     await page.getByText('虚构回访任务', { exact: true }).waitFor()
-    const note = page.getByLabel('交班内容')
+    const note = page.getByLabel('交班内容', { exact: true })
     await note.fill('明天下午三点询问是否愿意听戏')
     state.failHandoverAI = true
     await page.getByRole('button', { name: '分析并核对', exact: true }).click()
@@ -592,9 +592,9 @@ try {
     assert.equal(await note.inputValue(), '明天下午三点询问是否愿意听戏')
     assert.equal(writes.filter((row) => row.path.endsWith('/submit')).length, 0)
     await page.reload()
-    await page.getByLabel('交班内容').waitFor()
+    await page.getByLabel('交班内容', { exact: true }).waitFor()
     assert.equal(
-      await page.getByLabel('交班内容').inputValue(),
+      await page.getByLabel('交班内容', { exact: true }).inputValue(),
       '明天下午三点询问是否愿意听戏',
     )
     assert.equal(writes.filter((row) => row.path === '/handovers').length, 1)

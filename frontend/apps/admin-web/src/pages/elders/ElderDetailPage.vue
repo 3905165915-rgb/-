@@ -8,6 +8,7 @@ import { useRoute } from 'vue-router'
 import { useQuery } from '@tanstack/vue-query'
 import {
   formatBusinessTime,
+  isFollowupTask,
   isBusinessToday,
   loadDemoState,
 } from '@hulao/shared'
@@ -30,7 +31,9 @@ const elder = computed(() =>
 )
 const related = computed(
   () =>
-    tasks.data.value?.filter((item) => item.elderId === elder.value?.id) ?? [],
+    tasks.data.value?.filter(
+      (item) => item.elderId === elder.value?.id && isFollowupTask(item),
+    ) ?? [],
 )
 const demo = useQuery({
   queryKey: computed(() =>
@@ -49,7 +52,9 @@ const demoRecords = computed(
 const demoFollowups = computed(() => {
   const state = demo.data.value
   if (!state || !elder.value) return []
-  const tasks = state.tasks.filter((task) => task.elderId === elder.value!.id)
+  const tasks = state.tasks.filter(
+    (task) => task.elderId === elder.value!.id && isFollowupTask(task),
+  )
   return buildDemoFollowups(
     {
       tasks,
@@ -86,7 +91,7 @@ const todayTasks = computed(() =>
 </script>
 <template>
   <section class="elder-detail-page">
-    <el-button link class="back-link" @click="$router.push('/elders')">
+    <el-button link class="back-link" @click="$router.push({path:'/elders',query:{q:route.query.list_q,status:route.query.list_status}})">
       <ArrowLeft :size="16" aria-hidden="true" />返回档案列表 </el-button
     ><QueryFeedback
       :loading="elders.isPending.value"
@@ -119,11 +124,11 @@ const todayTasks = computed(() =>
         <RouterLink
           :to="{
             path: '/workflows/records',
-            query: { elder_id: elder.id, action: '/records/context-extract' },
+            query: { elder_id: elder.id },
           }"
           >写记录</RouterLink
         >
-        <RouterLink :to="{ path: '/care-plan', query: { elder: elder.id } }"
+        <RouterLink :to="{ query: { ...route.query, section: 'assessment' } }"
           >制定安排</RouterLink
         >
       </div>
@@ -181,8 +186,19 @@ const todayTasks = computed(() =>
         :key="elder.id"
         :elder-id="elder.id"
       />
-      <ElderWorkspace v-else :key="elder.id" :elder-id="elder.id" />
-      <div class="data-section">
+      <ElderWorkspace
+        v-else
+        :key="elder.id"
+        :elder-id="elder.id"
+        :elder="elder"
+      >
+        <template #profile-actions>
+          <details><summary>修订基础资料</summary>
+            <WorkflowPanel group="elders" title="老人资料修订" :context="{ elder_id: elder.id }" />
+          </details>
+        </template>
+      </ElderWorkspace>
+      <div v-if="mode === 'demo'" class="data-section">
         <div class="profile-section">
           <div class="section-title">
             <h2>基本资料</h2>
@@ -337,12 +353,6 @@ const todayTasks = computed(() =>
         </section>
       </template>
     </template>
-    <WorkflowPanel
-      v-if="mode === 'api'"
-      group="elders"
-      title="老人资料修订"
-      :context="{ elder_id: String(route.params.id) }"
-    />
   </section>
 </template>
 <style scoped>

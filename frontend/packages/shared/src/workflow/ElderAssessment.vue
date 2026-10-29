@@ -17,6 +17,7 @@ import {
   type AssessmentItem,
 } from './assessment-answers'
 import { useWorkspaceScope } from './workspace-scope'
+import { effectiveAssessment } from './assessment-current'
 const props = defineProps<{ elderId: string }>()
 const scope = useWorkspaceScope()
 const { active, management } = scope
@@ -101,7 +102,7 @@ async function load() {
     assessments.value = rows(response)
     if (assessments.value.some((row) => row.elder_id !== props.elderId))
       throw new Error('评估资料与当前老人不匹配。')
-    selected.value = assessments.value[0] || null
+    selected.value = effectiveAssessment(assessments.value)
   } catch (failure) {
     if (alive(ticket)) error.value = (failure as Error).message
   } finally {
@@ -311,12 +312,13 @@ onBeforeUnmount(() => {
     <p v-if="selected">
       {{ assessmentStates[String(selected.status)] || '状态待核实' }} ·
       {{
-        selected.total_score === null
+        ['pending_observation', 'draft'].includes(String(selected.status)) || typeof selected.total_score !== 'number'
           ? '待观察项目未补齐，无正式总分'
           : selected.total_score + ' 分'
       }}
       · {{ workspaceDate(selected.assessed_at) }}
     </p>
+    <p v-else-if="!loading && !error">当前没有有效评估结果。待观察和历史评估不会作为正式照护评分。</p>
     <div
       v-if="
         management &&

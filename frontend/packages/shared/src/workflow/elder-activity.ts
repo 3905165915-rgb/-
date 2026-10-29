@@ -3,6 +3,8 @@ import type { AppMode, FrontendSession } from '../session'
 import type { Task } from '../types'
 import type { Row } from './model'
 import { sameCareSession } from './task-care-context'
+import { isTaskContent } from './care-arrangement'
+import { isFollowupTask } from '../task-list'
 
 export const activityTypes = {
   record: '照护记录',
@@ -201,6 +203,7 @@ function makeItem(
   const id = string(row.id)
   if (
     !id.trim() ||
+    (type === 'task' && !isTaskContent(row)) ||
     row.elder_id !== elderId ||
     (type === 'handover' && !string(parent?.id).trim())
   )
@@ -313,7 +316,7 @@ export function demoElderActivity(
   elderId: string,
 ): ActivityItem[] {
   return tasks
-    .filter((task) => task.elderId === elderId)
+    .filter((task) => task.elderId === elderId && isFollowupTask(task))
     .map((task) => ({
       key: 'demo-task:' + task.id,
       elderId,
@@ -554,6 +557,7 @@ function timelineItem(value: unknown, elderId: string): ActivityItem {
   )
     throw new Error('老人时间线数据格式异常')
   const type = row.event_type as ActivityType
+  if (type === 'task' && !isTaskContent(row)) throw new Error('时间线将提示或提醒标成任务，请核实服务端分类。')
   const recordedAt =
     typeof row.recorded_at === 'string' ? row.recorded_at : row.entered_at
   const happenedAt = row.happened_at

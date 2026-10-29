@@ -14,6 +14,36 @@
   background: var(--hl-surface, #fff);
   border-radius: 12px;
 }
+
+.workspace-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.workspace-facts > div {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--hl-border);
+  border-radius: 6px;
+  background: var(--hl-surface);
+}
+
+.workspace-facts dt {
+  color: var(--hl-muted);
+  font-size: 13px;
+}
+
+.workspace-facts dd {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 600px) {
+  .workspace-facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
 .workspace-tabs button {
   border: 0;
   background: transparent;

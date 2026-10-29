@@ -42,6 +42,18 @@ describe('elder workbench associations', () => {
     expect(card).toMatchObject({ pending: 2, inProgress: 1, overdue: 1 })
     expect(card.tasks).toHaveLength(6)
   })
+  it('does not place guidance content in the caregiver task workbench', () => {
+    const card = elderWorkbench(
+      [elder],
+      [
+        task,
+        { ...task, id: 'hint', contentType: 'routine_hint' },
+        { ...task, id: 'reminder', contentType: 'one_off_reminder' },
+      ],
+    )[0]
+    expect(card.tasks.map((row) => row.id)).toEqual([task.id])
+    expect(card.pending).toBe(1)
+  })
   it('preserves provided notes and updates without inventing changes or confirmed hints', () => {
     const plain = elderWorkbench([elder], [task])[0].elder
     expect(plain).not.toHaveProperty('notes')

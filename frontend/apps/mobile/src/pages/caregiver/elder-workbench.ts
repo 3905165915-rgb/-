@@ -1,9 +1,9 @@
-import type { Elder, Task } from '@hulao/shared'
+import { isFollowupTask, type Elder, type Task } from '@hulao/shared'
 
 // Task association is a view of loaded data, never a permanent assignment.
 export function elderWorkbench(elders: Elder[], tasks: Task[]) {
   const byElder = new Map<string, Task[]>()
-  for (const task of tasks) {
+  for (const task of tasks.filter(isFollowupTask)) {
     const rows = byElder.get(task.elderId) ?? []
     if (!rows.some((row) => row.id === task.id)) rows.push(task)
     byElder.set(task.elderId, rows)

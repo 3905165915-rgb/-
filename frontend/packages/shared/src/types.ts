@@ -43,6 +43,7 @@ export interface Task {
   bedSnapshot?: string
   shiftName?: string
   source?: 'demo' | 'record' | 'plan' | 'manual'
+  contentType?: 'routine_hint' | 'one_off_reminder' | 'followup_task'
   scene?: 'bathing' | 'activity' | 'rest' | 'dining' | 'communication' | 'other'
   sourceRecordId?: string
   nameSnapshot?: string

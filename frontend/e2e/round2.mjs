@@ -596,7 +596,7 @@ try {
     await page.getByRole('button', { name: '本机草稿', exact: true }).click()
     await page.locator('.draft-row').first().waitFor()
     await page.locator('.draft-popup select').first().selectOption('任务')
-    await page.locator('.draft-popup input[type=search]').fill('本窗口需要另存')
+    await page.getByRole('searchbox', {name:'搜索草稿内容或编号', exact:true}).fill('本窗口需要另存')
     await page
       .locator('.draft-popup')
       .getByText('本窗口需要另存的结果', { exact: true })

@@ -1,5 +1,6 @@
 import { shallowRef } from 'vue'
 import type { AppMode, FrontendSession } from '../session'
+import { isTaskContent } from './care-arrangement'
 
 export const careScenes = {
   bathing: '洗浴',
@@ -176,7 +177,7 @@ export function parseTaskContext(value: unknown, taskId: string): TaskContext {
   const row = object(value)
   const plan = row.source_plan_snapshot as Row | undefined
   const planItem = plan?.item as Row | undefined
-  ensure(row.id === taskId)
+  ensure(row.id === taskId && isTaskContent(row))
   return {
     id: taskId,
     service_scene: isCareScene(planItem?.scene) ? planItem.scene : undefined,

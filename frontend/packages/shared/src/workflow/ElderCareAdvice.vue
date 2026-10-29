@@ -3,6 +3,20 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { listAll, request, type Row } from './model'
 import { careScenes } from './task-care-context'
 import {
+  careContentTypeDescriptions,
+  careContentTypeLabels,
+  careContentTypes,
+  careHintScenes,
+  careReminderOccasions,
+  contentTypeRecommendation,
+  defaultRecordWhat,
+  supportsCareType,
+  validateCareGuidance,
+  validateCareLine,
+  validCareDay,
+  type CareContentType,
+} from './care-arrangement'
+import {
   object,
   rows,
   useWorkspaceAction,
@@ -10,7 +24,10 @@ import {
 } from './workspace-action'
 import { useWorkspaceScope } from './workspace-scope'
 import { date, localTime } from './workspace-time'
+import { beijingDay } from '../demo-metrics'
+import './elder-workspace.css'
 const props = defineProps<{ elderId: string; mobile?: boolean }>()
+const emit = defineEmits<{ changed: [] }>()
 const scope = useWorkspaceScope()
 const { active, management } = scope
 const advice = ref<Row[]>([]),
@@ -33,6 +50,19 @@ const shift = ref(''),
   observation = ref(''),
   happened = ref(''),
   decision = ref('insufficient_evidence')
+const adoptType = ref<CareContentType | ''>('')
+const occasion = ref('before_activity')
+const hintScene = ref('communication')
+const recordWhat = ref('')
+const hintInstruction = ref('')
+const serviceDate = ref(beijingDay(Date.now()))
+const capabilities = ref<Row | null>(null)
+const directoryError = ref('')
+const contentTypeOptions = careContentTypes.map((value) => ({
+  value,
+  label: careContentTypeLabels[value],
+  description: careContentTypeDescriptions[value],
+}))
 const action = useWorkspaceAction(() => props.elderId, 'care-advice')
 const { pending, busy, error: saveError } = action
 let epoch = 0
@@ -65,28 +95,48 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    const [result, shiftRows, staffRows] = await Promise.all([
+    const [adviceResult, shiftResult, staffResult] = await Promise.allSettled([
       request('/elders/' + encodeURIComponent(props.elderId) + '/care-advice'),
       listAll('/shifts'),
       listAll('/staff'),
     ])
     if (!alive(ticket)) return
+    if (adviceResult.status === 'rejected') throw adviceResult.reason
+    const result = adviceResult.value
+    capabilities.value = object(result)
     const items = rows(object(result).items)
     if (
       items.some(
         (row) =>
           row.elder_id !== props.elderId ||
           typeof row.id !== 'string' ||
-          !['proposed', 'adopted', 'rejected'].includes(String(row.status)),
+          ![
+            'proposed',
+            'adopted',
+            'rejected',
+            'pending',
+            'enabled',
+            'needs_adjustment',
+            'disabled',
+          ].includes(String(row.status)),
       )
     )
       throw new Error('建议资料与当前老人或状态不匹配。')
     advice.value = items
-    shifts.value = shiftRows.filter((row) => row.status === 'open')
-    staff.value = staffRows
+    shifts.value =
+      shiftResult.status === 'fulfilled'
+        ? shiftResult.value.filter((row) => row.status === 'open')
+        : []
+    staff.value = staffResult.status === 'fulfilled' ? staffResult.value : []
+    directoryError.value =
+      shiftResult.status === 'rejected' || staffResult.status === 'rejected'
+        ? '排班或人员暂未读取，不能确认跟进任务；日常提示和本次提醒仍可核对。'
+        : ''
   } catch (failure) {
     if (alive(ticket)) {
       error.value = (failure as Error).message
+      advice.value = []
+      capabilities.value = null
       shifts.value = []
       staff.value = []
     }
@@ -125,13 +175,19 @@ async function generate() {
   }
 }
 function begin(row: Row, intent: string) {
-  if (pending.value || !scope.valid()) return
+  if (busy.value || loading.value || pending.value || !scope.valid()) return
   open.value = String(row.id)
   mode.value = intent
   shift.value = ''
   assignee.value = ''
   due.value = ''
   reason.value = ''
+  adoptType.value = ''
+  occasion.value = 'before_activity'
+  recordWhat.value = ''
+  hintInstruction.value = ''
+  serviceDate.value = beijingDay(Date.now())
+  hintScene.value = 'communication'
   observation.value = ''
   response.value = 'unclear'
   decision.value = 'insufficient_evidence'
@@ -151,14 +207,48 @@ function validate(value: unknown) {
     row.elder_id !== props.elderId ||
     row.id !== expected ||
     !Number.isInteger(row.revision) ||
-    !['proposed', 'adopted', 'rejected'].includes(String(row.status))
+    ![
+      'proposed',
+      'adopted',
+      'rejected',
+      'pending',
+      'enabled',
+      'needs_adjustment',
+      'disabled',
+    ].includes(String(row.status))
   )
     throw new Error('建议操作回执异常，请重试原提交核实。')
+  if (pending.value?.path.endsWith('/adopt')) {
+    const type = pending.value.body.content_type
+    if (
+      Number(row.revision) <= Number(pending.value.body.expected_revision) ||
+      row.status !== 'adopted'
+    )
+      throw new Error('建议采用回执的状态或版本未确认，请核实原提交。')
+    if (type === 'routine_hint' || type === 'one_off_reminder') {
+      const guidance = validateCareGuidance(row.guidance, props.elderId)
+      if (
+        row.content_type !== type ||
+        guidance.content_type !== type ||
+        row.task ||
+        (row.created_tasks !== undefined &&
+          (!Array.isArray(row.created_tasks) || row.created_tasks.length))
+      )
+        throw new Error('提示或本次提醒不应关联任务，请核实服务端处理结果。')
+    } else if (
+      !task(row) ||
+      task(row)!.elder_id !== props.elderId ||
+      (task(row)!.content_type !== undefined &&
+        task(row)!.content_type !== 'followup_task')
+    )
+      throw new Error('任务采用回执缺少正确的关联任务，请核实原提交。')
+  }
   return row
 }
 async function done(row: Row | null) {
   if (row && scope.valid()) {
     open.value = ''
+    emit('changed')
     notice.value =
       '服务器已确认本次操作。反馈仅记录执行与感受，不代表建议造成效果。'
     await load()
@@ -173,29 +263,75 @@ async function act(row: Row, intent: string) {
   try {
     let body: Row = { expected_revision: row.revision }
     if (intent === 'adopt') {
-      if (
-        !selectedShift.value ||
-        !people.value.some((person) => person.id === assignee.value) ||
-        !title.value.trim() ||
-        !criteria.value.trim() ||
-        !reason.value.trim()
-      )
-        throw new Error(
-          '请明确实际班次、责任人、安排内容、完成标准与采用说明。',
+      if (row.status !== 'proposed' || row.can_adopt !== true)
+        throw new Error('这条建议当前不可采用，请重新读取。')
+      if (!adoptType.value || !title.value.trim() || !reason.value.trim())
+        throw new Error('请先选择采用方式、填写安排内容和采用说明。')
+      if (!supportsCareType(capabilities.value, adoptType.value))
+        throw new Error('当前服务尚未开放这种采用方式，请先与后端完成接入。')
+      if (adoptType.value === 'followup_task') {
+        if (directoryError.value) throw new Error(directoryError.value)
+        if (
+          !selectedShift.value ||
+          !people.value.some((person) => person.id === assignee.value) ||
+          !criteria.value.trim()
         )
-      body = {
-        ...body,
-        task: {
-          elder_id: props.elderId,
+          throw new Error('跟进任务请明确班次、负责人和执行要求。')
+        body = {
+          ...body,
+          content_type: adoptType.value,
+          task: {
+            elder_id: props.elderId,
+            title: title.value.trim(),
+            shift_id: shift.value,
+            assigned_to: assignee.value,
+            due_at: date(due.value),
+            completion_criteria: criteria.value.trim(),
+            condition: row.condition || null,
+            source_type: 'manual',
+          },
+          reason: reason.value.trim(),
+        }
+      } else {
+        const lineErrors = validateCareLine(
+          {
+            title: title.value,
+            scene: hintScene.value,
+            instruction: hintInstruction.value,
+            occasion: occasion.value,
+            record_what: recordWhat.value,
+          },
+          adoptType.value,
+        )
+        if (lineErrors.length) throw new Error(lineErrors[0])
+        if (
+          adoptType.value === 'one_off_reminder' &&
+          !validCareDay(serviceDate.value)
+        )
+          throw new Error('请核对本次服务日期。')
+        body = {
+          ...body,
+          content_type: adoptType.value,
+          scene:
+            adoptType.value === 'routine_hint' ? hintScene.value : undefined,
+          instruction:
+            adoptType.value === 'routine_hint'
+              ? hintInstruction.value.trim()
+              : undefined,
+          occasion:
+            adoptType.value === 'one_off_reminder' ? occasion.value : undefined,
+          record_what:
+            adoptType.value === 'one_off_reminder'
+              ? recordWhat.value.trim()
+              : undefined,
+          service_date:
+            adoptType.value === 'one_off_reminder'
+              ? serviceDate.value
+              : undefined,
           title: title.value.trim(),
-          shift_id: shift.value,
-          assigned_to: assignee.value,
-          due_at: date(due.value),
-          completion_criteria: criteria.value.trim(),
           condition: row.condition || null,
-          source_type: 'manual',
-        },
-        reason: reason.value.trim(),
+          reason: reason.value.trim(),
+        }
       }
     } else if (intent === 'feedback') {
       const assigned = task(row)
@@ -243,6 +379,11 @@ async function act(row: Row, intent: string) {
   } catch (failure) {
     error.value = (failure as Error).message
   }
+}
+function chooseType(value: CareContentType) {
+  adoptType.value = value
+  if (!recordWhat.value.trim() && value === 'one_off_reminder')
+    recordWhat.value = defaultRecordWhat(value, title.value)
 }
 watch(
   () => props.elderId,
@@ -327,13 +468,28 @@ onBeforeUnmount(() => {
         <strong>{{ row.title }}</strong
         ><span class="workspace-badge">{{
           row.status === 'adopted'
-            ? '已安排'
+            ? row.content_type === 'routine_hint'
+              ? '已采用为日常提示'
+              : row.content_type === 'one_off_reminder'
+                ? '已采用为本次提醒'
+                : '已采用为跟进任务'
             : row.status === 'rejected'
               ? '未采用'
-              : '待人工核对'
+              : row.status === 'enabled'
+                ? '已启用'
+                : row.status === 'needs_adjustment'
+                  ? '需调整'
+                  : row.status === 'disabled'
+                    ? '已停用'
+                    : '待人工核对'
         }}</span>
       </header>
       <p>{{ row.action }}</p>
+      <p v-if="contentTypeRecommendation(row)" class="muted">
+        AI 建议采用方式：{{
+          careContentTypeLabels[contentTypeRecommendation(row)!]
+        }}，须由工作人员选择确认。
+      </p>
       <p>依据：{{ row.rationale }}</p>
       <p class="workspace-warning">不确定性：{{ row.uncertainty }}</p>
       <p v-if="row.condition">执行前提：{{ row.condition }}</p>
@@ -377,12 +533,12 @@ onBeforeUnmount(() => {
       </details>
       <div class="workspace-actions">
         <button
-          v-if="row.can_adopt === true"
+          v-if="row.status === 'proposed' && row.can_adopt === true"
           type="button"
           :disabled="busy || !!pending"
           @click="begin(row, 'adopt')"
         >
-          采用并安排</button
+          采用并选择处理方式</button
         ><button
           v-if="row.status === 'proposed'"
           type="button"
@@ -424,43 +580,127 @@ onBeforeUnmount(() => {
             }}
           </legend>
           <template v-if="mode === 'adopt'">
-            <label
-              >安排内容<textarea v-model="title" maxlength="300" required />
-            </label>
+            <p>先选择采用方式；日常提示和本次提醒不会自动生成任务。</p>
             <div class="workspace-form-grid">
-              <label
-                >实际班次<select v-model="shift" required>
-                  <option value="">请选择开放班次</option>
-                  <option
-                    v-for="item in shifts"
-                    :key="String(item.id)"
-                    :value="item.id"
-                  >
-                    {{ item.name || item.id }} ·
-                    {{ workspaceDate(item.start_at) }}
-                  </option>
-                </select></label
-              ><label
-                >实际责任人<select v-model="assignee" required>
-                  <option value="">请选择班次成员</option>
-                  <option
-                    v-for="person in people"
-                    :key="String(person.id)"
-                    :value="person.id"
-                  >
-                    {{ person.display_name }}
-                  </option>
-                </select></label
-              ><label
-                >截止时间（北京时间）<input
-                  v-model="due"
-                  type="datetime-local"
-                  required
-              /></label>
+              <button
+                v-for="option in contentTypeOptions"
+                :key="option.value"
+                type="button"
+                :class="{ selected: adoptType === option.value }"
+                :aria-pressed="adoptType === option.value"
+                @click="chooseType(option.value)"
+              >
+                {{ option.label }}<small> · {{ option.description }}</small>
+              </button>
             </div>
-            <label
-              >完成标准<textarea v-model="criteria" maxlength="2000" required />
-            </label>
+            <p
+              v-if="adoptType && !supportsCareType(capabilities, adoptType)"
+              role="status"
+              class="workspace-warning"
+            >
+              当前后端尚未开放这种采用方式，不能确认保存。
+            </p>
+            <p
+              v-if="adoptType === 'followup_task' && directoryError"
+              role="alert"
+            >
+              {{ directoryError }}
+            </p>
+            <template v-if="adoptType">
+              <label
+                >安排内容<textarea v-model="title" maxlength="300" required />
+              </label>
+              <div
+                v-if="adoptType === 'followup_task'"
+                class="workspace-form-grid"
+              >
+                <label
+                  >实际班次<select v-model="shift" required>
+                    <option value="">请选择开放班次</option>
+                    <option
+                      v-for="item in shifts"
+                      :key="String(item.id)"
+                      :value="item.id"
+                    >
+                      {{ item.name || item.id }} ·
+                      {{ workspaceDate(item.start_at) }}
+                    </option>
+                  </select></label
+                ><label
+                  >实际责任人<select v-model="assignee" required>
+                    <option value="">请选择班次成员</option>
+                    <option
+                      v-for="person in people"
+                      :key="String(person.id)"
+                      :value="person.id"
+                    >
+                      {{ person.display_name }}
+                    </option>
+                  </select></label
+                ><label
+                  >截止时间（北京时间）<input
+                    v-model="due"
+                    type="datetime-local"
+                    required
+                /></label>
+              </div>
+              <label v-if="adoptType === 'followup_task'"
+                >执行要求<textarea
+                  v-model="criteria"
+                  maxlength="2000"
+                  required
+                />
+              </label>
+              <template v-else-if="adoptType === 'routine_hint'">
+                <label
+                  >适用场景<select v-model="hintScene">
+                    <option
+                      v-for="(label, key) in careHintScenes"
+                      :key="key"
+                      :value="key"
+                    >
+                      {{ label }}
+                    </option>
+                  </select></label
+                >
+                <label
+                  >照护提示<textarea
+                    v-model="hintInstruction"
+                    maxlength="2000"
+                    required
+                    placeholder="例如：放慢语速，一次只说一件事。"
+                  />
+                </label>
+              </template>
+              <template v-else-if="adoptType === 'one_off_reminder'">
+                <label
+                  >本次发生在<select v-model="occasion">
+                    <option
+                      v-for="(label, key) in careReminderOccasions"
+                      :key="key"
+                      :value="key"
+                    >
+                      {{ label }}
+                    </option>
+                  </select></label
+                >
+                <label
+                  >需要记录什么<textarea
+                    v-model="recordWhat"
+                    maxlength="2000"
+                    required
+                    placeholder="记录老人是否愿意参加、选择其他活动、想休息，或暂未得到明确回应。"
+                  />
+                </label>
+                <label
+                  >本次服务日期（北京时间）<input
+                    v-model="serviceDate"
+                    type="date"
+                    required
+                /></label>
+                <p>一次性意愿不会自动成为长期习惯。</p>
+              </template>
+            </template>
           </template>
           <template v-if="mode === 'feedback'">
             <label
@@ -492,15 +732,20 @@ onBeforeUnmount(() => {
               <option value="adjust">需调整安排</option>
               <option value="stop">停止此尝试</option>
             </select></label
-          ><label v-if="mode !== 'feedback'"
+          ><label
+            v-if="mode !== 'feedback' && (mode !== 'adopt' || !!adoptType)"
             >{{ mode === 'adopt' ? '采用说明' : '核对说明'
             }}<textarea v-model="reason" maxlength="2000" required />
           </label>
           <div class="workspace-actions">
-            <button type="submit">
-              {{
-                mode === 'adopt' ? '确认采用并安排任务' : '保存本次处理'
-              }}</button
+            <button
+              type="submit"
+              :disabled="
+                mode === 'adopt' &&
+                (!adoptType || !supportsCareType(capabilities, adoptType))
+              "
+            >
+              {{ mode === 'adopt' ? '确认采用' : '保存本次处理' }}</button
             ><button type="button" @click="open = ''">收起</button>
           </div>
         </fieldset>

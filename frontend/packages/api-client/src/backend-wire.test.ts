@@ -46,6 +46,31 @@ describe('backend 0.4.0 wire contract', () => {
     ])
       expect(() => parseTask({ ...task, ...patch }, '/tasks')).toThrow()
   })
+  it('maps and validates care content types from the task wire format', () => {
+    const task = {
+      id: 'T-guidance',
+      elder_id: 'E1',
+      title: '活动前询问意愿',
+      status: 'pending',
+      shift_name: '午班',
+      assignee_name: '小王',
+      due_at: '',
+      content_type: 'one_off_reminder',
+      execution_at: '2026-10-27T09:00:00+08:00',
+      deadline_at: '2026-10-27T09:30:00+08:00',
+    }
+    expect(parseTask(task, '/tasks')).toMatchObject({
+      contentType: 'one_off_reminder',
+      executionAt: task.execution_at,
+      deadlineAt: task.deadline_at,
+    })
+    expect(() => parseTask({ ...task, content_type: null }, '/tasks')).toThrow(
+      '未知照护内容类型',
+    )
+    expect(() => parseTask({ ...task, content_type: 'unknown' }, '/tasks')).toThrow(
+      '未知照护内容类型',
+    )
+  })
   const draft = {
     id: 'AI-1',
     elder_id: 'E-1',

@@ -13,7 +13,6 @@ import { loadDemoState, subscribeDemo } from '../demo-store'
 import WorkflowPanel from './WorkflowPanel.vue'
 import { listAll, request, type Row } from './model'
 import { sameCareSession } from './task-care-context'
-import WorkspaceDecisions from './WorkspaceDecisions.vue'
 import {
   clearNotificationAction,
   notificationActionKey,
@@ -54,6 +53,8 @@ const loading = ref(false)
 const loaded = ref(false)
 const error = ref('')
 const busyId = ref('')
+const batchBusy = ref(false)
+const batchResult = ref('')
 let epoch = 0
 let actionEpoch = 0
 const pages = computed(() => Math.max(1, Math.ceil(total.value / limit)))
@@ -80,7 +81,7 @@ const businessOptions = computed(() =>
       ],
 )
 const visibleNotifications = computed(() =>
-  filterNotifications(notifications.value, category.value, business.value),
+  notifications.value,
 )
 const visibleDemoItems = computed(() =>
   demoItems.value.filter(
@@ -256,15 +257,32 @@ async function act(row: ServerNotification, action: 'read' | 'accept') {
       item.id === row.id ? updated : item,
     )
     await load()
+    return true
   } catch (failure) {
     if (ticket === epoch && sameCareSession(readSession(), current))
       error.value =
         failure instanceof Error
           ? failure.message + '；保留原请求编号，可重试或刷新核实。'
           : '操作未确认；保留原请求编号，可重试。'
+    return false
   } finally {
     if (actionTicket === actionEpoch) busyId.value = ''
   }
+}
+async function markPageRead() {
+  if (batchBusy.value || loading.value || busyId.value) return
+  const current = session.value
+  const targets = notifications.value.filter(item => !isRead(item))
+  batchBusy.value = true
+  let confirmed = 0
+  try {
+    for (const row of targets) {
+      if (!sameCareSession(readSession(), current)) break
+      if (await act(row, 'read')) confirmed++
+    }
+    if (sameCareSession(readSession(), current))
+      batchResult.value = `本页 ${targets.length} 条消息：${confirmed} 条已确认已读，${targets.length - confirmed} 条未确认。已读不改变业务进展。`
+  } finally { batchBusy.value = false }
 }
 function revoke() {
   epoch++
@@ -320,17 +338,18 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section class="server-notifications" aria-label="照护跟进">
+  <section class="server-notifications" aria-label="消息">
     <header>
       <div>
-        <h1>照护跟进</h1>
-        <p>按待处理、待复查和已处理组织，按事项核对并办理。</p>
+        <h1>消息</h1>
+        <p>查看提醒与已读状态。业务处理进展请进入照护跟进核对。</p>
+        <RouterLink to="/followups">进入业务办理</RouterLink>
       </div>
       <button
         class="icon-button"
         type="button"
-        aria-label="刷新照护跟进"
-        title="刷新照护跟进"
+        aria-label="刷新消息"
+        title="刷新消息"
         :disabled="loading || !!busyId"
         @click="load"
       >
@@ -343,10 +362,9 @@ onBeforeUnmount(() => {
         虚构演示：从本机任务、交班与照护理解复查生成跟进入口；不提供服务器通知或跨设备已读状态。
       </p>
       <p v-else class="meta">
-        分类数量和业务筛选仅限当前服务器通知页；不代表全量业务。已读、接单不等于业务完成；已处理表示通知已关闭，业务结果请进入事项核对。
+        已读只表示看过消息，接单只表示接受提醒；两者都不代表业务完成。列表与总数均使用服务器的未读筛选范围。
       </p>
-      <WorkspaceDecisions v-if="!demoMode" />
-      <nav class="category-tabs" aria-label="跟进分类">
+      <nav v-if="demoMode" class="category-tabs" aria-label="本机演示分类">
         <button
           v-for="tab in followupCategories"
           :key="tab.value"
@@ -372,7 +390,7 @@ onBeforeUnmount(() => {
         </nav>
       </details>
       <div class="filters">
-        <label
+        <label v-if="demoMode"
           >业务筛选<select v-model="business">
             <option value="">
               全部业务（{{ demoMode ? '本机演示' : '当前页' }}）
@@ -391,6 +409,8 @@ onBeforeUnmount(() => {
           />仅未读（服务器筛选）</label
         >
       </div>
+      <button v-if="!demoMode" type="button" class="secondary" :disabled="loading || !!busyId || batchBusy || !notifications.some(item => !isRead(item))" @click="markPageRead">{{ batchBusy ? '正在逐条确认…' : '将本页未读消息标记已读' }}</button>
+      <p v-if="batchResult" role="status">{{ batchResult }}</p>
       <p v-if="!demoMode" class="meta">
         {{ definition || '状态以服务器通知为准。'
         }}<span v-if="asOf">最近刷新：{{ when(asOf) }}</span>
@@ -418,7 +438,7 @@ onBeforeUnmount(() => {
             ? '读取失败，无法判断当前范围是否还有事项。'
             : demoMode
               ? '当前分类与业务筛选下没有本机演示事项。'
-              : '当前通知页的分类与业务筛选下没有事项；可切换分类或翻页查看。'
+              : '当前筛选范围没有消息；可取消仅未读筛选或刷新。'
         }}
       </p>
       <ul>
@@ -461,7 +481,7 @@ onBeforeUnmount(() => {
               v-if="!isUrgentNotification(item) && notificationWork(item, session?.role || null)"
               type="button"
               class="secondary"
-              :disabled="loading || !!busyId"
+              :disabled="loading || !!busyId || batchBusy"
               :aria-expanded="selectedId === item.id"
               @click="selectedId = selectedId === item.id ? '' : item.id"
             >
@@ -477,7 +497,7 @@ onBeforeUnmount(() => {
               v-if="!isRead(item)"
               type="button"
               class="secondary"
-              :disabled="loading || !!busyId"
+              :disabled="loading || !!busyId || batchBusy"
               @click="act(item, 'read')"
             >
               <CheckCheck :size="16" aria-hidden="true" />标记已读
@@ -529,7 +549,7 @@ onBeforeUnmount(() => {
       <nav
         v-if="!demoMode && total > limit"
         class="pagination"
-        aria-label="服务器通知分页（分类与业务仅筛选当前页）"
+        aria-label="消息分页"
       >
         <button
           type="button"

@@ -226,24 +226,19 @@ try {
     try {
       await page.goto(base + '/admin/care-plan?elder=' + elder.id)
       const region = page.getByRole('region', {
-        name: '三步照护安排',
+        name: '照护安排',
         exact: true,
       })
-      await region
-        .getByRole('button', { name: '下一步：安排服务', exact: true })
-        .click()
+      await region.getByRole('button', { name: /^跟进任务/ }).click()
       await region
         .getByLabel('服务内容', { exact: true })
         .fill('虚构：先询问本人再安排活动')
       await region
-        .getByLabel('怎样完成', { exact: true })
+        .getByLabel('执行要求', { exact: true })
         .fill('保留刷新前最后一句')
       await page.reload()
-      await region
-        .getByRole('button', { name: '下一步：安排服务', exact: true })
-        .click()
       assert.equal(
-        await region.getByLabel('怎样完成', { exact: true }).inputValue(),
+        await region.getByLabel('执行要求', { exact: true }).inputValue(),
         '保留刷新前最后一句',
       )
       assert.equal(

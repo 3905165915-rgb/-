@@ -1,6 +1,6 @@
 <script setup lang="ts">
 const serverWorkflow = ['api'].includes(import.meta.env.VITE_APP_MODE || 'api')
-import WorkflowPanel from '@hulao/shared/workflow'
+import HandoverWorkspace from '../../../../../packages/shared/src/workflow/HandoverWorkspace.vue'
 import { compactReference } from '@hulao/shared'
 import { ref, watch } from 'vue'
 import {
@@ -15,7 +15,7 @@ import HandoverEditor from '../../components/HandoverEditor.vue'
 import HandoverReceiveList from '../../components/HandoverReceiveList.vue'
 import FeedbackState from '../../components/FeedbackState.vue'
 import HandoverQuick from '../../components/HandoverQuick.vue'
-import { readSession } from '@hulao/shared'
+import { isFollowupTask, readSession } from '@hulao/shared'
 const route = useRoute()
 const router = useRouter()
 const shift = ref(
@@ -71,19 +71,9 @@ onBeforeRouteLeave(() => (mode === 'api' ? true : leave()))
 onBeforeRouteUpdate(() => (mode === 'api' ? true : leave()))
 </script>
 <template>
-  <HandoverQuick v-if="serverWorkflow && ['caregiver', 'nurse'].includes(readSession()?.role || '')" />
-  <WorkflowPanel
-    v-else-if="serverWorkflow"
-    group="handovers"
-    title="交接班"
-    :context="route.query"
-    :initial-action="
-      typeof route.query.handover_id === 'string'
-        ? '/handovers/{handover_id}'
-        : '/handovers'
-    "
-    :auto-read="typeof route.query.handover_id === 'string'"
-  />
+  <HandoverWorkspace v-if="serverWorkflow" mobile :quick-composer="['caregiver', 'nurse'].includes(readSession()?.role || '')">
+    <template #composer><HandoverQuick /></template>
+  </HandoverWorkspace>
   <section v-else class="handover-page editor-page">
     <h1>交接班</h1>
     <van-field
@@ -105,7 +95,10 @@ onBeforeRouteUpdate(() => (mode === 'api' ? true : leave()))
       <van-button
         v-for="name in [
           ...new Set(
-            tasks.data.value?.map((task) => task.shift).filter(Boolean),
+            tasks.data.value
+              ?.filter(isFollowupTask)
+              .map((task) => task.shift)
+              .filter(Boolean),
           ),
         ]"
         :key="name"
@@ -129,7 +122,11 @@ onBeforeRouteUpdate(() => (mode === 'api' ? true : leave()))
           <HandoverEditor
             ref="editorRef"
             :shift-id="shift"
-            :tasks="tasks.error.value ? [] : (tasks.data.value ?? [])"
+            :tasks="
+              tasks.error.value
+                ? []
+                : (tasks.data.value ?? []).filter(isFollowupTask)
+            "
             :source-writable="!tasks.isPending.value && !tasks.error.value"
           /> </van-tab
         ><van-tab title="接班" name="receive">

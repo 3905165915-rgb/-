@@ -11,6 +11,7 @@ import {
   type HandoverItem,
   type FamilyCase,
   type TimelineEvent,
+  isFollowupTask,
 } from '@hulao/shared'
 import { request } from '../../../../packages/shared/src/workflow/model'
 import { validateCareWorklist } from '../../../../packages/shared/src/workflow/care-worklist'
@@ -86,13 +87,14 @@ export function useCareWorklist() {
   })
 }
 export async function fetchTasks() {
-  return checkedList<Task>(await gateway.tasks(), [
+  const rows = checkedList<Task>(await gateway.tasks(), [
     'elderId',
     'title',
     'shift',
     'assignee',
     'status',
   ])
+  return rows.filter(isFollowupTask)
 }
 export function useTasks() {
   return useQuery({

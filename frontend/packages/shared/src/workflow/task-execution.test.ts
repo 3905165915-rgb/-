@@ -14,10 +14,17 @@ it('requires a matched task with a usable revision and typed allowed actions', (
     { revision: 0 },
     { title: '' },
     { allowed_actions: [1] },
+    { content_type: 'routine_hint' },
+    { content_type: 'one_off_reminder' },
+    { content_type: 'unknown' },
   ])
     expect(() => executionTask({ ...task, ...change }, task.id)).toThrow(
       '重新读取',
     )
+})
+it('never executes unassigned items even when the server exposes task actions', () => {
+  for (const change of [{ assigned_to: null }, { assigned_to: '' }, { assignment_status: 'unassigned' }, { content_type: 'routine_hint' }])
+    expect(executionActions({ ...task, ...change })).toEqual([])
 })
 it('intersects server actions with the latest task state', () => {
   expect(executionActions(task)).toEqual(['start', 'not_done'])

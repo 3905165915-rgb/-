@@ -576,12 +576,12 @@ onBeforeUnmount(() => {
             class="secondary"
             @click="choose({ kind: 'pending' })"
           >
-            查看全部明细
+            查看全部 {{ shown.pending_work.items.length }} 项
           </button>
         </div>
         <ul>
           <li
-            v-for="item in shown.pending_work.items.slice(0, 8)"
+            v-for="item in shown.pending_work.items.slice(0, 5)"
             :key="String(item.kind) + ':' + String(item.id)"
           >
             <div>

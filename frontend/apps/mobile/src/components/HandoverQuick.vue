@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Mic, RefreshCw, Send, Square } from 'lucide-vue-next'
 import { readSession, taskStatusLabels } from '@hulao/shared'
+import { isFollowupTask } from '@hulao/shared'
 import {
   incomingShiftOptions,
   selectHandoverShifts,
@@ -121,6 +122,7 @@ const shiftIssue = computed(() => {
 const sourceTasks = computed(() =>
   rawTasks.value.filter(
     (task) =>
+      isFollowupTask(task) &&
       task.status !== 'completed' &&
       task.status !== 'cancelled' &&
       task.shift_id === sourceShiftId.value,

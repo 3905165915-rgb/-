@@ -12,6 +12,7 @@ import {
 } from 'lucide-vue-next'
 import {
   formatBusinessTime,
+  isFollowupTask,
   isBusinessToday,
   loadDemoState,
   taskStatusLabels,
@@ -47,7 +48,9 @@ const demoRecords = computed(
 const demoFollowups = computed(() => {
   const state = demo.data.value
   if (!state || !elder.value) return []
-  const tasks = state.tasks.filter((task) => task.elderId === elder.value!.id)
+  const tasks = state.tasks.filter(
+    (task) => task.elderId === elder.value!.id && isFollowupTask(task),
+  )
   return buildDemoFollowups(
     {
       tasks,
@@ -68,7 +71,8 @@ function time(value: string, full = false) {
 const related = computed(() =>
   elder.value && ready.value && tasksReady.value
     ? (tasks.data.value ?? []).filter(
-        (task) => task.elderId === elder.value!.id,
+        (task) =>
+          task.elderId === elder.value!.id && isFollowupTask(task),
       )
     : [],
 )
@@ -158,8 +162,14 @@ const demoRecordCount = computed(
         :key="elder.id"
         :elder-id="elder.id"
       />
-      <ElderWorkspace v-else :key="elder.id" :elder-id="elder.id" mobile />
-      <section class="profile-section" aria-labelledby="elder-profile-title">
+      <ElderWorkspace
+        v-else
+        :key="elder.id"
+        :elder-id="elder.id"
+        :elder="elder"
+        mobile
+      />
+      <section v-if="mode === 'demo'" class="profile-section" aria-labelledby="elder-profile-title">
         <h2 id="elder-profile-title">基本资料</h2>
         <dl class="elder-facts">
           <div>

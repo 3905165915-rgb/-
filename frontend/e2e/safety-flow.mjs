@@ -78,7 +78,7 @@ async function setup(role, width = 1366) {
       if (path === '/incidents')
         return route.fulfill({ status: 201, json: incident })
       if (path === '/insights/coverage/reviews')
-        return json({ id: 'REVIEW-test', decision: 'needs_followup' })
+        return json({ elder_id: elder.id, service_date: '2026-10-28', items: [{ occurrence_key: 'OCC-test', fingerprint: 'a'.repeat(64), title: '午间饮水', coverage_status: 'missing_record', tasks: [], evidence: [] }], record_task_links: [] })
       throw new Error('Unexpected write: ' + path)
     }
     if (path === '/notifications')
@@ -104,12 +104,14 @@ async function setup(role, width = 1366) {
       return json({
         elder_id: elder.id,
         service_date: '2026-10-28',
+        record_task_links: [],
         items: [
           {
             occurrence_key: 'OCC-test',
             fingerprint: 'a'.repeat(64),
             title: '午间饮水',
-            status: 'missing',
+            coverage_status: 'missing_record',
+            tasks: [], evidence: [],
             elder_id: elder.id,
           },
         ],
@@ -203,57 +205,21 @@ try {
   {
     const { context, page, writes } = await setup('admin')
     try {
-      await page.goto(base + '/admin/coverage')
-      await page
-        .locator(
-          '[data-field="service_date"] input, [data-field$=".service_date"] input',
-        )
-        .first()
-        .fill('2026-10-28')
-      await page
-        .locator(
-          '[data-field="elder_id"] select, [data-field$=".elder_id"] select',
-        )
-        .first()
-        .selectOption(elder.id)
-      await page.locator('form button[type="submit"]').first().click()
-      await page
-        .getByRole('button', { name: '核对并处理此项', exact: true })
-        .click()
-      await field(page, 'decision').waitFor()
-      assert.equal(await field(page, 'occurrence_key').count(), 0)
-      assert.equal(await field(page, 'expected_fingerprint').count(), 0)
-      assert.ok(
-        await page
-          .locator('.wf-form')
-          .first()
-          .innerText()
-          .then(
-            (text) => text.includes('2026-10-28') && text.includes(elder.name),
-          ),
-      )
-      assert.equal(writes.length, 0)
-      await shot(page, 'coverage-direct-review')
-      await field(page, 'decision').selectOption('needs_followup')
-      await field(page, 'note').fill('已核对，安排当班人员跟进饮水情况')
-      await page.locator('form button[type="submit"]').first().click()
-      assert.equal(writes.length, 0)
-      await page.getByRole('button', { name: '确认提交', exact: true }).click()
-      await page.getByText('本次操作已完成', { exact: true }).first().waitFor()
-      assert.deepEqual(writes[0], {
-        path: '/insights/coverage/reviews',
-        body: {
-          elder_id: elder.id,
-          service_date: '2026-10-28',
-          occurrence_key: 'OCC-test',
-          expected_fingerprint: 'a'.repeat(64),
-          decision: 'needs_followup',
-          note: '已核对，安排当班人员跟进饮水情况',
-        },
-      })
-      await page.getByRole('button', { name: '查看更新后的核对结果', exact: true }).click()
-      assert.equal(await page.locator('[data-field="service_date"] input').first().inputValue(), '2026-10-28')
-      assert.equal(await page.locator('[data-field="elder_id"] select').first().inputValue(), elder.id)
+      await page.goto(base + '/admin/coverage?elder='+elder.id+'&service_date=2026-10-28')
+      const panel=page.getByRole('region',{name:'双向核对工作区',exact:true})
+      await panel.getByRole('button',{name:'人工核对这一项',exact:true}).click()
+      assert.equal(await field(page,'occurrence_key').count(),0)
+      assert.equal(await field(page,'expected_fingerprint').count(),0)
+      assert.equal(writes.length,0)
+      await shot(page,'coverage-direct-review')
+      await panel.getByRole('combobox',{name:/^核对结论/}).selectOption('needs_followup')
+      await panel.getByLabel('核对说明',{exact:true}).fill('已核对，安排当班人员跟进饮水情况')
+      await panel.getByRole('button',{name:'保存核对',exact:true}).click()
+      await panel.getByRole('button',{name:'人工核对这一项',exact:true}).waitFor()
+      assert.equal(writes.length,1)
+      assert.deepEqual(writes[0],{path:'/insights/coverage/reviews',body:{elder_id:elder.id,service_date:'2026-10-28',occurrence_key:'OCC-test',expected_fingerprint:'a'.repeat(64),decision:'needs_followup',note:'已核对，安排当班人员跟进饮水情况'}})
+      assert.equal(await panel.getByLabel('照护日期',{exact:true}).inputValue(),'2026-10-28')
+      assert.equal(await panel.getByRole('combobox',{name:/^老人/}).inputValue(),elder.id)
       console.log('PASS coverage: direct form, complete payload on confirmation, same context after return')
     } finally {
       await context.close()

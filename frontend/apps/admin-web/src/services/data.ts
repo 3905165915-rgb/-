@@ -11,6 +11,7 @@ import {
   type HandoverItem,
   type FamilyCase,
   type TimelineEvent,
+  isFollowupTask,
 } from '@hulao/shared'
 
 export const mode: AppMode =
@@ -74,13 +75,14 @@ export function useElders() {
   })
 }
 export async function fetchTasks() {
-  return checkedList<Task>(await gateway.tasks(), [
+  const rows = checkedList<Task>(await gateway.tasks(), [
     'elderId',
     'title',
     'shift',
     'assignee',
     'status',
   ])
+  return rows.filter(isFollowupTask)
 }
 export function useTasks() {
   return useQuery({

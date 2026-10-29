@@ -189,7 +189,7 @@ try {
         await pending.innerText(),
         /task-source|overdue|另一个班次的任务/,
       )
-      await page.getByLabel('交班内容').fill('活动前再次询问本人意愿。')
+      await page.getByLabel('交班内容', { exact: true }).fill('活动前再次询问本人意愿。')
       await page
         .getByRole('button', { name: '分析并核对', exact: true })
         .click()
@@ -222,7 +222,7 @@ try {
     '错误旧草稿自动修正班次且保留文字；分析失败可人工核对提交',
     async ({ page, writes }) => {
       assert.equal(
-        await page.getByLabel('交班内容').inputValue(),
+        await page.getByLabel('交班内容', { exact: true }).inputValue(),
         '王爷爷今天想自行决定午休时间。',
       )
       assert.equal(await page.getByLabel('交出班次').inputValue(), 'current')
@@ -260,7 +260,7 @@ try {
   await scenario(
     '只有一个班次时明确提示主管安排下一班',
     async ({ page }) => {
-      await page.getByLabel('交班内容').fill('需继续了解本人意愿。')
+      await page.getByLabel('交班内容', { exact: true }).fill('需继续了解本人意愿。')
       await page
         .getByText('尚未安排后续接班班次，请联系主管先安排下一班。', {
           exact: true,
@@ -278,12 +278,12 @@ try {
   await scenario(
     '分析后改动原文不能误交旧摘要，更换班次保留输入',
     async ({ page }) => {
-      await page.getByLabel('交班内容').fill('活动前询问本人意愿。')
+      await page.getByLabel('交班内容', { exact: true }).fill('活动前询问本人意愿。')
       await page
         .getByRole('button', { name: '分析并核对', exact: true })
         .click()
       await page.getByLabel('摘要', { exact: true }).waitFor()
-      await page.getByLabel('交班内容').fill('本人今天想休息，请下班再次确认。')
+      await page.getByLabel('交班内容', { exact: true }).fill('本人今天想休息，请下班再次确认。')
       assert.equal(
         await page.getByRole('button', { name: '核对并提交交班' }).isDisabled(),
         true,
@@ -295,7 +295,7 @@ try {
         .getByRole('button', { name: '人工核对交班', exact: true })
         .waitFor()
       assert.equal(
-        await page.getByLabel('交班内容').inputValue(),
+        await page.getByLabel('交班内容', { exact: true }).inputValue(),
         '本人今天想休息，请下班再次确认。',
       )
       await page.waitForFunction(

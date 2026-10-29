@@ -31,6 +31,7 @@ import {
   type TaskInput,
 } from './elder-quick-record'
 import PhotoObservation from './PhotoObservation.vue'
+import CareGuidance from './CareGuidance.vue'
 
 const attributionLabels: Record<string, string> = {
   elder: '老人本人',
@@ -557,6 +558,7 @@ onBeforeUnmount(() => {
       {{ error || saveError || action.error.value || confirmation.error.value }}
     </p>
     <p v-if="notice" role="status">{{ notice }}</p>
+    <CareGuidance :elder-id="elderId" :scene="scene" />
     <form @submit.prevent="save">
       <label
         >照护场景<select v-model="scene" :disabled="busy || !!pending">

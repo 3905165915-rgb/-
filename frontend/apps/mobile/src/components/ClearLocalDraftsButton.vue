@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import WorkspaceDrafts from '../../../../packages/shared/src/workflow/WorkspaceDrafts.vue'
+import WorkflowJournals from '../../../../packages/shared/src/workflow/WorkflowJournals.vue'
 import { Files } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
 import { showConfirmDialog } from 'vant'
@@ -85,6 +87,8 @@ async function openDraft(row: LocalDraftRow) {
         @click="open = false"
       />
     </header>
+    <WorkspaceDrafts v-if="open" mobile @navigate="open=false" />
+    <details><summary>业务表单与多窗口恢复日志</summary><WorkflowJournals v-if="open" /></details>
     <p class="muted">
       {{ rows.length }} 项 · 草稿估算 {{ formatBytes(bytes)
       }}<span v-if="estimate !== undefined">

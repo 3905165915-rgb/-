@@ -16,6 +16,14 @@ export const emptyTaskFilters = (): TaskFilters => ({
   q: '',
   sort: 'source',
 })
+
+// Legacy task responses omit contentType; those rows remain follow-up tasks.
+export function isFollowupTask(task: Pick<Task, 'contentType'>): boolean {
+  return (
+    task.contentType === undefined || task.contentType === 'followup_task'
+  )
+}
+
 export function taskDeadline(value: string, today = new Date()) {
   const relative = /^(今天|昨天|明天) (\d{2}):(\d{2})(?::(\d{2}))?$/.exec(value)
   let absolute = value
@@ -42,6 +50,7 @@ export function filterTasks(
   const q = filters.q.trim().toLowerCase()
   const filtered = rows.filter(
     (task) =>
+      isFollowupTask(task) &&
       (!filters.elder || task.elderId === filters.elder) &&
       (!filters.shift || task.shift === filters.shift) &&
       (!filters.assignee || task.assignee === filters.assignee) &&
