@@ -2128,7 +2128,7 @@ onMounted(async () => {
               class="wf-notice wf-urgent-guidance"
               role="note"
             >
-              紧急情况先联系现场护士、主管并按机构应急流程处置。填写已知事实和已采取措施后立即上报，系统向管理人员发送紧急通知。
+              紧急情况先联系现场工作人员和主管，并按机构应急流程处置。填写已知事实和已采取措施后立即上报，系统向管理人员发送紧急通知。
             </p>
             <div
               v-if="recordComposer"

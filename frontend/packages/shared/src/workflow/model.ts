@@ -313,7 +313,7 @@ export const valueLabels: Record<string, string> = {
   admin: '管理员',
   supervisor: '主管',
   caregiver: '护理员',
-  nurse: '护士',
+  nurse: '照护专员',
   family: '家属',
   elder: '老人本人',
   staff: '工作人员',

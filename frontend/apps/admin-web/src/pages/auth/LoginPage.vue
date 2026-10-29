@@ -37,7 +37,7 @@ const roleCards: {
   },
   {
     role: 'supervisor',
-    title: '护士 / 主管',
+    title: '照护主管',
     caption: '审核照护事项并跟进交接',
     icon: HeartHandshake,
   },
