@@ -1,5 +1,12 @@
 import { canAccess, type Role } from '@hulao/shared'
 export const internalRoles: readonly Role[] = ['admin', 'supervisor']
+export const supervisorHiddenPaths = new Set([
+  '/settings',
+  '/demo',
+  '/recovery',
+  '/workflows/staff',
+  '/workflows/memories',
+])
 const navigationGroups = [
   '今日工作',
   '老人',
@@ -164,7 +171,11 @@ export function homeForRole(role: Role | null) {
   return role ? '/403' : '/login'
 }
 export function allowedRoutes(role: Role | null) {
-  return navigation.filter((item) => canAccess(role, item.roles))
+  return navigation.filter(
+    (item) =>
+      canAccess(role, item.roles) &&
+      !(role === 'supervisor' && supervisorHiddenPaths.has(item.path)),
+  )
 }
 export function allowedNavigationGroups(
   role: Role | null,
@@ -181,7 +192,7 @@ export function allowedNavigationGroups(
             '/tasks',
             '/quality',
             '/workflows/reports',
-            '/settings',
+            ...(role === 'admin' ? ['/settings'] : []),
             ...(includeDemo ? ['/demo'] : []),
           ].includes(item.path)),
   )

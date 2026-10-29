@@ -73,7 +73,7 @@ const sources: Record<string, string> = {
 <template>
   <section class="demo-dashboard">
     <div class="page-title-row">
-      <h1>工作台</h1>
+      <h1>{{ session?.role === 'supervisor' ? '照护主管工作台' : '机构管理工作台' }}</h1>
       <el-button
         class="icon-button"
         title="刷新工作台"

@@ -256,8 +256,8 @@ onBeforeUnmount(() => {
   <main v-else class="dashboard-page">
     <header class="dashboard-header">
       <div>
-        <h1>管理看板</h1>
-        <p>照护任务、交接与服务质量，一处掌握</p>
+        <h1>{{ session?.role === 'supervisor' ? '照护主管工作台' : '机构管理看板' }}</h1>
+        <p>{{ session?.role === 'supervisor' ? '今日照护、风险提醒、任务接续和质量跟进' : '机构运营、照护任务、人员与服务质量，一处掌握' }}</p>
       </div>
       <button
         type="button"
