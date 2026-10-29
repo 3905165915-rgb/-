@@ -2187,32 +2187,6 @@ onMounted(async () => {
             <p v-if="isQualityScan(active)" class="wf-muted">
               选择交班单后自动采用其交出班次；更换班次会清除不匹配的交班单。历史已关闭班次也可检查。
             </p>
-            <p v-if="quickQualityScan" class="wf-notice">一键检查规则与模型提示。若模型不可用，会明确提示并提供仅运行规则检查的入口；本次未生成的结果不会显示为已通过。</p>
-            <p
-              v-if="taskCreation && active.path === '/records/manual'"
-              class="wf-notice"
-            >
-              这是旧版任务表单的恢复内容，仍按原记录接口处理。完成核实后，开始新操作可使用独立任务创建入口。
-            </p>
-            <p v-if="taskCreation" class="wf-notice">
-              先选择老人，再核对已有任务，避免重复安排。护理员只能安排给本人；分配他人或调整既有任务由主管办理。截止时间按北京时间输入，请明确核对日期与时刻。执行前提不会因填写此表自动满足。
-            </p>
-            <p
-              v-if="
-                group === 'handovers' &&
-                active.path === '/handovers' &&
-                active.method === 'post'
-              "
-              class="wf-notice"
-            >
-              创建后，系统会带入交出班次的记录和未完成任务。需要补充交班注意事项时，打开“人工审核并提交交班”，在补充说明中填写并核对后提交。
-            </p>
-            <p
-              v-if="group === 'handovers' && active.path.endsWith('/submit')"
-              class="wf-muted"
-            >
-              下方“交班注意事项”用于补充需要接班人员关注的内容；提交前请核对系统带入的未完成事项和记录。
-            </p>
             <p
               v-if="group === 'tasks' && taskSelectionEnabled"
               class="wf-muted"
@@ -2224,12 +2198,6 @@ onMounted(async () => {
               class="wf-notice"
             >
               当前没有分配给你的开放班次，请联系主管在班次管理中安排。已关闭或其他人的班次不能用于当班提交。
-            </p>
-            <p
-              v-if="/extract|ai-summary|quality/.test(active.path)"
-              class="wf-notice"
-            >
-              整理结果仅供核对，原文证据会保留。未经人工确认，不会生成正式记录、执行任务或发布交班。
             </p>
             <fieldset
               :disabled="
