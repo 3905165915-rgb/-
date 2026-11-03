@@ -10,12 +10,26 @@ from app.services import elder_workspace_service as service
 router = APIRouter(tags=['elder-workspace'])
 
 
+@router.get('/work-inbox')
+def work_inbox(current: StaffUser, store: Store,
+               queue: Literal['mine', 'review', 'waiting', 'processed'] | None = None,
+               elder_id: str | None = None, limit: int = Query(100, ge=1, le=200), offset: int = Query(0, ge=0)):
+    from app.services.inbox_service import listing
+    return listing(store, current['sub'], current['role'], queue, elder_id, limit, offset)
+
+
 @router.get('/followups')
 def followups(current: StaffUser, store: Store, elder_id: str | None = None,
               state: Literal['pending', 'review', 'closed'] | None = None,
               limit: int | None = Query(None, ge=1, le=200), offset: int = Query(0, ge=0)):
     from app.services.followup_service import listing
     return listing(store, current['sub'], current['role'], elder_id, state, limit, offset)
+
+
+@router.get('/elders/{elder_id}/workspace')
+def read_workspace(elder_id: str, current: StaffUser, store: Store):
+    from app.services.workspace_read_service import read
+    return read(store, elder_id, current['sub'], current['role'])
 
 
 @router.post('/elders/{elder_id}/followups/check-today')

@@ -80,10 +80,12 @@ def _context(data, item, at):
     }
 
 
-def _view(data, item, at=None):
+def _view(data, item, at=None, user_id=None, role=None):
     at = at or now()
     context = _context(data, item, at)
+    from app.services.workflow_context_service import change_workflow
     return {**copy.deepcopy(item), 'current': context, 'fingerprint': _hash(context),
+            'workflow': change_workflow(item, user_id, role),
             'overdue': bool(item['status'] != 'closed' and item['due_at'] and parse_time(item['due_at']) <= parse_time(at))}
 
 
@@ -157,7 +159,7 @@ def get(store, case_id, user_id, role):
     _actor(data, user_id, role)
     item = find(data, 'change_reviews', case_id, 'change_review_not_found')
     access(item, user_id, role)
-    return _view(data, item)
+    return _view(data, item, user_id=user_id, role=role)
 
 
 def listing(store, user_id, role, status=None, elder_id=None, task_id=None, assigned_to=None, limit=100, offset=0):
@@ -168,7 +170,7 @@ def listing(store, user_id, role, status=None, elder_id=None, task_id=None, assi
             all(value is None or row[field] == value for field, value in (
                 ('status', status), ('elder_id', elder_id), ('task_id', task_id), ('assigned_to', assigned_to)))]
     at = now()
-    return [_view(data, row, at) for row in sorted(rows, key=lambda row: (row['updated_at'], row['id']), reverse=True)[offset:offset+limit]]
+    return [_view(data, row, at, user_id, role) for row in sorted(rows, key=lambda row: (row['updated_at'], row['id']), reverse=True)[offset:offset+limit]]
 
 
 def _check(data, item, payload, at):
@@ -196,7 +198,7 @@ def _write(store, case_id, payload, user_id, role, action, operation, key=None, 
             audit(data, action, item['id'], user_id, elder_id=item['elder_id'], task_id=item['task_id'],
                   detail=getattr(payload, 'note', getattr(payload, 'reason', '')), case_revision=item['revision'],
                   change_action=payload.model_dump(mode='json'))
-            return _view(data, item, at)
+            return _view(data, item, at, user_id, role)
         return replayable(data, user_id, action, key, {'case_id': case_id, **payload.model_dump(mode='json')}, run)
     return store.mutate(mutate)
 

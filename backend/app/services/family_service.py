@@ -280,6 +280,9 @@ def review_summary(store, summary_id, payload, user_id, role, key=None):
                 raise DomainError('summary_transition_invalid')
             if payload.action == 'publish':
                 admission(data, item['elder_id'], item['admission_id'])
+                from app.services.family_workspace_service import recipients
+                if not recipients(data, item['elder_id'], item['admission_id']):
+                    raise DomainError('summary_no_authorized_recipients')
                 if not evidence_service.sources_current(data, item):
                     raise DomainError('summary_evidence_changed')
             item.update(status={'publish': 'published', 'reject': 'rejected', 'withdraw': 'withdrawn'}[payload.action],

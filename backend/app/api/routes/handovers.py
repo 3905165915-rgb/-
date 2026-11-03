@@ -22,12 +22,15 @@ def create_shift(payload: ShiftCreateRequest, current: ManagementUser, store: St
 
 @router.get('/shifts')
 def shifts(_: StaffUser, store: Store, limit: int = Query(100, ge=1, le=200), offset: int = Query(0, ge=0)):
-    return sorted(store.read()['shifts'], key=lambda row: parse_time(row['start_at']), reverse=True)[offset:offset+limit]
+    from app.services.presentation_service import shift_context
+    return [shift_context(row) for row in sorted(store.read()['shifts'],
+            key=lambda row: (parse_time(row['start_at']), row['id']), reverse=True)[offset:offset+limit]]
 
 
 @router.get('/shifts/{shift_id}')
 def shift(shift_id: str, _: StaffUser, store: Store):
-    return find(store.read(), 'shifts', shift_id, 'shift_not_found')
+    from app.services.presentation_service import shift_context
+    return shift_context(find(store.read(), 'shifts', shift_id, 'shift_not_found'))
 
 
 @router.post('/handovers', status_code=201)

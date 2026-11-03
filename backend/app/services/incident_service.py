@@ -30,7 +30,7 @@ def rectification(data, item_id):
     return row, incident
 
 
-def view(data, item):
+def view(data, item, user_id=None, role=None):
     current = evidence_service.sources_current(data, item)
     result = copy.deepcopy(item)
     result['evidence_current'] = current
@@ -42,6 +42,10 @@ def view(data, item):
         pending = rect['submissions'][-1] if rect['submissions'] else None
         result['rectification']['submission_current'] = bool(pending and current and
             pending['incident_revision'] == item['revision'] and evidence_service.sources_current(data, pending))
+    from app.services.workflow_context_service import incident_workflow
+    result['workflow'] = incident_workflow(result, user_id, role)
+    from app.services.presentation_service import incident_display
+    result.update(incident_display(data, item))
     return result
 
 
@@ -56,7 +60,7 @@ def listing(store, user_id, role, elder_id=None, limit=100, offset=0):
             access(data, row, user_id, role)
         except DomainError:
             continue
-        result.append(view(data, row))
+        result.append(view(data, row, user_id, role))
     return result[offset:offset + limit]
 
 
@@ -65,7 +69,7 @@ def get(store, item_id, user_id, role):
     current_staff(data, user_id, role)
     row = find(data, 'incidents', item_id, 'incident_not_found')
     access(data, row, user_id, role)
-    return view(data, row)
+    return view(data, row, user_id, role)
 
 
 def create(store, payload, user_id, role, key=None):
@@ -84,7 +88,7 @@ def create(store, payload, user_id, role, key=None):
             item['evidence'] = evidence(data, item, payload.evidence)
             data['incidents'].append(item)
             audit(data, 'report_incident', item['id'], user_id, elder_id=item['elder_id'], detail='人工上报待主管判断')
-            return view(data, item)
+            return view(data, item, user_id, role)
         return replayable(data, user_id, 'report_incident', key, payload.model_dump(mode='json'), operation)
     return store.mutate(mutate)
 
@@ -146,7 +150,7 @@ def triage(store, item_id, payload, user_id, role, key=None):
             rect.update(status='assigned', assigned_to=payload.assigned_to, due_at=payload.due_at.isoformat(),
                         corrective_plan=payload.corrective_plan, updated_at=now())
             audit(data, 'triage_incident', item_id, user_id, elder_id=item['elder_id'], rectification_id=rect['id'], detail=payload.reason)
-            return view(data, item)
+            return view(data, item, user_id, role)
         return replayable(data, user_id, 'triage_incident', key, {'id': item_id, **payload.model_dump(mode='json')}, operation)
     return store.mutate(mutate)
 
@@ -167,7 +171,7 @@ def assign(store, rect_id, payload, user_id, role, key=None):
             rect.update(assigned_to=payload.assigned_to, due_at=payload.due_at.isoformat(),
                         status='assigned', revision=rect['revision'] + 1, updated_at=now())
             audit(data, 'assign_rectification', item['id'], user_id, elder_id=item['elder_id'], detail=payload.reason)
-            return view(data, item)
+            return view(data, item, user_id, role)
         return replayable(data, user_id, 'assign_rectification', key, {'id': rect_id, **payload.model_dump(mode='json')}, operation)
     return store.mutate(mutate)
 
@@ -191,7 +195,7 @@ def submit(store, rect_id, payload, user_id, role, key=None):
                 'at': now(), 'incident_revision': item['revision'], 'result': payload.result, 'evidence': sources})
             rect.update(status='awaiting_review', revision=rect['revision'] + 1, updated_at=now())
             audit(data, 'submit_rectification', item['id'], user_id, elder_id=item['elder_id'])
-            return view(data, item)
+            return view(data, item, user_id, role)
         return replayable(data, user_id, 'submit_rectification', key, {'id': rect_id, **payload.model_dump(mode='json')}, operation)
     return store.mutate(mutate)
 
@@ -219,7 +223,7 @@ def review(store, rect_id, payload, user_id, role, key=None):
             if payload.decision == 'accept':
                 item.update(status='closed', revision=item['revision'] + 1, closed_at=now(), closed_by=user_id)
             audit(data, 'review_rectification', item['id'], user_id, elder_id=item['elder_id'], decision=payload.decision)
-            return view(data, item)
+            return view(data, item, user_id, role)
         return replayable(data, user_id, 'review_rectification', key, {'id': rect_id, **payload.model_dump()}, operation)
     return store.mutate(mutate)
 
@@ -243,6 +247,6 @@ def reopen(store, item_id, payload, user_id, role, key=None):
                         revision=rect['revision'] + 1, updated_at=now())
             item.update(status='rectifying', revision=item['revision'] + 1, closed_at=None, closed_by=None)
             audit(data, 'reopen_incident', item_id, user_id, elder_id=item['elder_id'], detail=payload.reason)
-            return view(data, item)
+            return view(data, item, user_id, role)
         return replayable(data, user_id, 'reopen_incident', key, {'id': item_id, **payload.model_dump()}, operation)
     return store.mutate(mutate)

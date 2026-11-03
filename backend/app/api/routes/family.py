@@ -1,4 +1,5 @@
 from typing import Annotated, Literal
+from datetime import datetime
 
 from fastapi import APIRouter, Header, Query, HTTPException
 from fastapi.responses import FileResponse
@@ -10,6 +11,26 @@ from app.services.staff_service import staff_view
 
 router = APIRouter(tags=['family'])
 Key = Annotated[str | None, Header(alias='Idempotency-Key', min_length=1, max_length=200)]
+
+
+@router.get('/family/summaries/workspace')
+def summary_workspace(elder_id: str, current: ManagementUser, store: Store,
+                      period_start: datetime | None = None, period_end: datetime | None = None,
+                      limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0)):
+    from app.services import family_workspace_service as workspace
+    return workspace.workspace(store, elder_id, current['sub'], current['role'], period_start, period_end, limit, offset)
+
+
+@router.post('/family/summaries/preview-selection')
+def preview_selected_summary(payload: schema.SummarySelection, current: ManagementUser, store: Store):
+    from app.services import family_workspace_service as workspace
+    return workspace.preview(store, payload, current['sub'], current['role'])
+
+
+@router.post('/family/summaries/from-selection', status_code=201)
+def create_selected_summary(payload: schema.SummarySelectionCreate, current: ManagementUser, store: Store, idempotency_key: Key = None):
+    from app.services import family_workspace_service as workspace
+    return workspace.create(store, payload, current['sub'], current['role'], idempotency_key)
 
 
 @router.post('/family/summaries/suggest', status_code=201)

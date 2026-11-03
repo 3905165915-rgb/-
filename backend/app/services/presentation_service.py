@@ -2,12 +2,41 @@
 from copy import deepcopy
 
 
+def shift_context(shift):
+    from datetime import timedelta, timezone
+    from app.services.report_service import stamp
+    result = deepcopy(shift)
+    start, end = stamp(shift.get('start_at')), stamp(shift.get('end_at'))
+    name = shift.get('name') or '未命名班次'
+    label = name
+    if start and end:
+        start, end = start.astimezone(timezone(timedelta(hours=8))), end.astimezone(timezone(timedelta(hours=8)))
+        label += ' · ' + start.strftime('%Y-%m-%d %H:%M') + '—' + end.strftime('%H:%M' if start.date() == end.date() else '%m-%d %H:%M')
+    result.update(display_label=label, timezone='Asia/Shanghai',
+                  state_label={'open': '开放', 'closed': '已关闭'}.get(shift.get('status'), '状态待核实'))
+    return result
+
+
 def bed_label(data, bed_id):
     bed = next((b for b in data['beds'] if b['id'] == bed_id), None)
     if not bed:
         return ''
     label, room = bed.get('label', ''), bed.get('room', '')
     return f'{room}房·{label}' if room and not label.startswith(room + '房') else label
+
+
+def incident_display(data, item):
+    description = item.get('description') or ''
+    text = ' '.join(description.split())
+    rect = next((r for r in data['rectifications'] if r['incident_id'] == item['id']), {})
+    state = 'closed' if item.get('status') == 'closed' else rect.get('status') or item.get('status')
+    return {'display_label': (text[:100] + '…' if len(text) > 100 else text) or '事件内容待补充',
+            'description_missing': not bool(text),
+            'elder_name': next((e['name'] for e in data['elders'] if e['id'] == item.get('elder_id')), '老人资料已归档'),
+            'state_label': {'reported': '待人工分级', 'assigned': '整改中', 'awaiting_review': '待独立复查',
+                            'closed': '已关闭'}.get(state, '状态待核实'),
+            'severity_label': {'low': '低', 'medium': '中', 'high': '高'}.get(item.get('severity'), '待人工分级'),
+            'timezone': 'Asia/Shanghai'}
 
 
 def task_context(data, task, user_id=None, role=None):
@@ -65,7 +94,18 @@ def task_context(data, task, user_id=None, role=None):
             except DomainError:
                 actions = [a for a in actions if a not in {'start','complete'}]
     result['allowed_actions'] = actions
+    from app.services.workflow_context_service import task_workflow
+    result['workflow'] = task_workflow(task, actions)
+    result['state_label'] = result['workflow']['state_label']
     return result
+
+
+def empty_state(total, offset=0):
+    if total == 0:
+        return {'code': 'no_matches', 'message': '当前范围暂无匹配事项，可调整筛选条件。'}
+    if offset >= total:
+        return {'code': 'page_out_of_range', 'message': '这一页已无内容，请返回上一页或刷新列表。'}
+    return None
 
 
 def capture_new_tasks(data, previous_ids):

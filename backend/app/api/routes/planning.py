@@ -86,6 +86,11 @@ def reissue(plan_id: str, payload: PlanReissue, current: ManagementUser, store: 
     return plans.reissue(store, plan_id, payload, current['sub'], current['role'], idempotency_key)
 
 
+@router.post('/care-plans/{plan_id}/generate-preview')
+def generation_preview(plan_id: str, payload: PlanGenerate, current: ManagementUser, store: Store):
+    return plans.generation_preview(store, plan_id, payload, current['sub'], current['role'])
+
+
 @router.get('/tasks/{task_id}/plan-check')
 def task_plan_check(task_id: str, _: StaffUser, store: Store):
     data = store.read()

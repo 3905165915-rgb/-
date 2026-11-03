@@ -28,7 +28,7 @@ def listing(store, user_id, role, elder_id=None, state=None, limit=None, offset=
     nested=elder_workspace_service.TransactionStore(deepcopy(data))
     for incident in incident_service.listing(nested,user_id,role,elder_id,limit=100000):
         rect=incident.get('rectification') or {}
-        add('incident',incident,incident.get('description') or '照护安全事项',
+        add('incident',incident,incident['display_label'],
             'awaiting_review' if rect.get('status')=='awaiting_review' else incident['status'],
             'incidents','/incidents/'+incident['id'],rect.get('assigned_to'))
         if items and items[-1]['object_id'] == incident['id']:
@@ -88,6 +88,8 @@ def listing(store, user_id, role, elder_id=None, state=None, limit=None, offset=
                 'care_advice': 'today', 'organising': 'records', 'followup': 'records',
             }.get(decision['kind'], 'understanding')
             add('decision',row,decision['reason'],'pending','elder',decision['path'])
+            if items and items[-1]['object_id'] == row['id']:
+                items[-1]['context']['decision_kind'] = decision['kind']
     action_labels={
         '/incidents/{incident_id}/triage':'安排整改',
         '/rectifications/{rectification_id}/submit':'提交整改结果',
@@ -100,6 +102,14 @@ def listing(store, user_id, role, elder_id=None, state=None, limit=None, offset=
     for card in items:
         if card['group']!='elder':
             card['next_action']=action_labels.get(card.get('action_path'),'查看处理结果' if card['state']=='closed' else '查看当前进展')
+        from app.services.workflow_context_service import followup_workflow, incident_workflow, change_workflow
+        card['workflow'] = followup_workflow(card)
+        if card['kind'] == 'incident':
+            incident = next(row for row in data['incidents'] if row['id'] == card['object_id'])
+            card['workflow'] = incident_workflow(incident_service.view(data, incident), user_id, role)
+        elif card['kind'] == 'change':
+            case = next(row for row in data['change_reviews'] if row['id'] == card['object_id'])
+            card['workflow'] = change_workflow(case, user_id, role)
     counts = {s: sum(r['state']==s for r in items) for s in ('pending','review','closed')}
     items = [r for r in items if state is None or r['state'] == state]
     def due_time(row):

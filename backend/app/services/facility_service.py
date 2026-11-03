@@ -9,7 +9,7 @@ TERMINAL_TASKS = {'completed', 'cancelled'}
 
 def version(item, expected):
     if item.get('revision', 1) != expected:
-        raise DomainError('stale_revision')
+        raise DomainError('stale_revision', resource={'id': item['id']} if item.get('id') else None)
 
 
 def care_eligible(data, elder_id):
