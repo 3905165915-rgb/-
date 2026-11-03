@@ -49,6 +49,16 @@ function resetFilters() {
 const dates = defaultWindow(Date.now(), 1)
 const start = ref(dates.start),
   end = ref(dates.end)
+function applyWindow(days: number) {
+  const window = defaultWindow(Date.now(), days)
+  start.value = window.start
+  end.value = window.end
+  void refresh()
+}
+function isWindow(days: number) {
+  const window = defaultWindow(Date.now(), days)
+  return start.value === window.start && end.value === window.end
+}
 const elderId = ref(''),
   shiftId = ref(''),
   status = ref('')
@@ -272,10 +282,21 @@ onBeforeUnmount(() => {
       </button>
     </header>
     <nav class="daily-shortcuts" aria-label="常用办理">
-      <RouterLink to="/elders">查看老人</RouterLink><RouterLink to="/admission">新入住</RouterLink><RouterLink to="/workflows/handovers">交接班</RouterLink><RouterLink to="/family">编写家属简报</RouterLink>
+      <a href="#operations-analysis">数据图表</a><RouterLink to="/elders">查看老人</RouterLink><RouterLink to="/admission">新入住</RouterLink><RouterLink to="/workflows/handovers">交接班</RouterLink><RouterLink to="/family">编写家属简报</RouterLink>
     </nav>
     <WorkInbox compact />
-    <details class="operations-analysis"><summary>运营分析 · 日期筛选、服务进展与统计口径</summary>
+    <section id="operations-analysis" class="operations-analysis" aria-labelledby="operations-analysis-title">
+      <div class="section-heading">
+        <div>
+          <h2 id="operations-analysis-title">照护数据图表</h2>
+          <p>按所选日期汇总，点击图表可查看明细。</p>
+        </div>
+        <div class="range-shortcuts" role="group" aria-label="统计时间范围">
+          <button type="button" :aria-pressed="isWindow(1)" :disabled="loading" @click="applyWindow(1)">今天</button>
+          <button type="button" :aria-pressed="isWindow(7)" :disabled="loading" @click="applyWindow(7)">近7天</button>
+          <button type="button" :aria-pressed="isWindow(30)" :disabled="loading" @click="applyWindow(30)">近30天</button>
+        </div>
+      </div>
     <form class="filters" @submit.prevent="refresh">
       <label
         >开始日期（含）<CareDateTime v-model="start" type="date" required /></label>
@@ -479,8 +500,8 @@ onBeforeUnmount(() => {
           </p>
         </section>
       </div>
-      <details class="chart-section plan-trend">
-        <summary>计划服务完成率（专项）</summary>
+      <section class="chart-section plan-trend" aria-labelledby="plan-trend-title">
+        <h2 id="plan-trend-title">计划服务完成率</h2>
         <p>仅统计已到服务时间的计划任务，人工任务不计入此完成率。</p>
         <div v-if="hasPlanTrend" class="trend-chart">
           <button
@@ -509,7 +530,7 @@ onBeforeUnmount(() => {
         <p v-else class="muted">
           当前范围没有到服务时间的计划任务，暂无可计算的计划完成率；上方仍展示人工任务安排。
         </p>
-      </details>
+      </section>
       <details class="chart-section">
         <summary>查看上一周期对比</summary>
         <div class="filters">
@@ -694,15 +715,20 @@ onBeforeUnmount(() => {
         </p>
       </details>
     </template>
-    </details>
+    </section>
   </main>
 </template>
 
 <style scoped>
 .daily-shortcuts { display:flex; flex-wrap:wrap; gap:10px; margin:18px 0 24px; }
 .daily-shortcuts a { display:flex; align-items:center; min-height:44px; padding:10px 18px; border:1px solid #d0dfd3; border-radius:12px; background:#f5f8f1; color:#315b42; text-decoration:none; }
-.operations-analysis { margin-top:28px; border-top:1px solid var(--hl-border); padding-top:12px; }
-.operations-analysis>summary { cursor:pointer; padding:16px 0; color:var(--hl-muted); }
+.operations-analysis { margin-top:28px; border-top:1px solid var(--hl-border); padding-top:20px; scroll-margin-top:90px; }
+.operations-analysis > .section-heading { flex-wrap:wrap; margin-bottom:20px; }
+.operations-analysis > .section-heading h2 { margin:0; }
+.operations-analysis > .section-heading p { margin:8px 0 0; color:var(--hl-muted); }
+.range-shortcuts { display:flex; flex-wrap:wrap; gap:8px; }
+.range-shortcuts button { min-height:44px; padding:8px 14px; border:1px solid var(--hl-border); border-radius:10px; background:#fff; color:var(--hl-ink); }
+.range-shortcuts button[aria-pressed="true"] { border-color:var(--hl-primary); background:var(--hl-primary); color:#fff; }
 
 .dashboard-page {
   min-width: 0;
