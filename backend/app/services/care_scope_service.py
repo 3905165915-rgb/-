@@ -113,11 +113,15 @@ def require_elder_access(data, elder_id, user_id, role):
 
 
 def worklist(store, user_id, role):
-    from app.services.presentation_service import bed_label, task_context
+    from app.services.presentation_service import bed_label, task_context, shift_context
     data = store.read()
     current_staff(data, user_id, role)
     scope = elder_ids(data, user_id, role)
     shifts = _open_shift_ids(data, user_id) if role in {'caregiver', 'nurse'} else set()
+    from datetime import datetime, timezone
+    from app.services.report_service import stamp
+    def task_order(task):
+        return (task['status'] != 'overdue', stamp(task.get('due_at')) or datetime.max.replace(tzinfo=timezone.utc), task['id'])
     elders = {row['id']: row for row in data['elders'] if row['id'] in scope}
     rows = []
     for elder_id in sorted(scope):
@@ -128,6 +132,9 @@ def worklist(store, user_id, role):
                  and row.get('status', 'pending') not in TERMINAL
                  and (role in {'admin', 'supervisor'} or row.get('assigned_to') == user_id or row.get('shift_id') in shifts)]
         assignments = [row for row in _assignments(data, user_id) if row['elder_id'] == elder_id]
+        tasks.sort(key=task_order)
+        my_tasks = [task for task in tasks if task.get('assigned_to') == user_id or
+                    (not task.get('assigned_to') and task.get('shift_id') in shifts)]
         rows.append({
             'elder': {'id': elder['id'], 'name': elder['name'], 'bed_id': elder.get('bed_id'),
                       'bed_label': bed_label(data, elder.get('bed_id')), 'admission_id': elder.get('current_admission_id'),
@@ -137,12 +144,16 @@ def worklist(store, user_id, role):
                 for task in tasks
             }) if role in {'caregiver', 'nurse'} else ['management_access'],
             'open_tasks': tasks,
+            'my_tasks': my_tasks,
+            'current_shift_task_ids': [task['id'] for task in my_tasks if task.get('shift_id') in shifts],
             'assignment_ids': [row['id'] for row in assignments],
             'pending_count': sum(task['status'] in {'pending', 'in_progress', 'overdue'} for task in tasks),
             'overdue_count': sum(task['status'] == 'overdue' for task in tasks),
         })
     return {'scope_rule': '这里是您当前负责的老人和待办。' if role in {'caregiver', 'nurse'} else '查看机构老人的当前照护事项。',
-            'timezone': 'Asia/Shanghai', 'items': rows}
+            'timezone': 'Asia/Shanghai', 'items': rows, 'as_of': now(),
+            'current_shifts': [{key: shift_context(shift).get(key) for key in ('id', 'name', 'start_at', 'end_at', 'status', 'display_label', 'timezone')}
+                               for shift in data['shifts'] if shift['id'] in _open_shift_ids(data, user_id)]}
 
 
 def assign(store, payload, user_id, role, key=None):

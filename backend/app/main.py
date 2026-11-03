@@ -12,10 +12,12 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.api.routes import auth, elders, records, tasks, handovers, timeline, quality, staff, speech, memories, change_reviews, beds, admissions, planning
 from app.core.config import settings
 from app.schemas.api import HealthResponse
+from app.schemas.errors import ERROR_RESPONSES
 from app.storage.json_store import CURRENT_SCHEMA_VERSION, JsonStore
 from app.services.workflow import DomainError
+from app.services.error_contract import body as error_body, HTTP_MESSAGES, STATUS_MESSAGES, validation_message, request_fields
 from app.api.routes import family, incidents, reports, insights, impressions
-from app.api.routes import notifications, photos, governance, care_advice, elder_workspace
+from app.api.routes import notifications, photos, governance, care_advice, elder_workspace, lookups
 
 
 @asynccontextmanager
@@ -58,7 +60,7 @@ async def lifespan(_: FastAPI):
             worker.join(timeout=1)
 
 
-app = FastAPI(title="护老智交 Backend", version="0.6.0", lifespan=lifespan)
+app = FastAPI(title="护老智交 Backend", version="0.6.0", lifespan=lifespan, responses=ERROR_RESPONSES)
 
 
 @app.middleware('http')
@@ -69,8 +71,8 @@ async def private_api_responses(request: Request, call_next):
         batch = JsonStore(settings.data_dir).read().get('demo_batch_id')
         supplied = request.headers.get('X-Demo-Batch')
         if batch and supplied and supplied != batch:
-            return JSONResponse(status_code=409, content={'detail': 'demo_batch_changed',
-                'safe_message': '演示资料已重建，请刷新页面后继续。'}, headers={'X-Demo-Batch': batch})
+            return JSONResponse(status_code=409, content=error_body('demo_batch_changed', 409,
+                '演示资料已重建，请刷新页面后继续。'), headers={'X-Demo-Batch': batch})
         token = expected_demo_batch.set(batch or '')
     try:
         response = await call_next(request)
@@ -89,34 +91,25 @@ async def private_api_responses(request: Request, call_next):
 async def validation_error_handler(request: Request, exc: RequestValidationError):
     # Validation errors can echo complete clinical narratives or credentials in
     # input/ctx. Keep field locations and messages; do not return the submitted body.
-    errors = [{field: row[field] for field in ('type', 'loc', 'msg')} for row in exc.errors()]
-    return JSONResponse(status_code=422, content={'detail': errors, 'error_code': 'invalid_request',
-                        'safe_message': '请检查必填内容、字段类型和时间格式', 'retryable': False})
+    errors = [{'type': row['type'], 'loc': row['loc'], 'msg': validation_message(row['type'])} for row in exc.errors()]
+    result = error_body('invalid_request', 422, '请检查标注的必填内容、字段类型和时间格式。', detail=errors)
+    result['field_paths'] = ['.'.join(str(p) for p in row['loc']) for row in errors]
+    result['field_errors'] = [{'path': path, 'error_code': row['type'], 'safe_message': row['msg']}
+                              for path, row in zip(result['field_paths'], errors)]
+    return JSONResponse(status_code=422, content=result)
 
 
 @app.exception_handler(StarletteHTTPException)
-async def http_error_handler(_, exc: StarletteHTTPException):
-    messages = {
-        400: '请求未完成，请检查填写内容后重试。',
-        401: '登录已失效，请重新选择身份或登录。',
-        403: '当前账号无权办理此事项，请核对身份或联系主管。',
-        404: '未找到相关资料，请刷新列表后重试。',
-        405: '当前操作方式不可用，请刷新页面后重试。',
-        409: '资料或状态已变化，请刷新并核对后重试。',
-        413: '文件或录音过大，请缩小后重试。',
-        429: '操作较频繁，请稍后重试；已有记录不会因此被删除。',
-        503: '服务暂不可用，请稍后重试或使用人工方式办理。',
-        504: '处理等待超时，请先核实是否已保存，再重试整理。',
-    }
-    detail = exc.detail
-    safe = detail if isinstance(detail, str) and any('\u4e00' <= c <= '\u9fff' for c in detail) else messages.get(exc.status_code, '操作未完成，请刷新后核对当前状态。')
+async def http_error_handler(request, exc: StarletteHTTPException):
+    known = HTTP_MESSAGES.get(exc.detail) if isinstance(exc.detail, str) else None
+    code, safe = known or ('http_' + str(exc.status_code), STATUS_MESSAGES.get(exc.status_code, '操作未完成，请刷新后核对当前状态。'))
+    detail = exc.detail if known else code
     return JSONResponse(status_code=exc.status_code, headers=exc.headers,
-                        content={'detail': detail, 'error_code': 'http_' + str(exc.status_code),
-                                 'safe_message': safe, 'retryable': exc.status_code in {429, 503, 504}})
+                        content=error_body(code, exc.status_code, safe, detail=detail, request=request))
 
 
 @app.exception_handler(DomainError)
-async def domain_error_handler(_, exc: DomainError):
+async def domain_error_handler(request, exc: DomainError):
     messages = {
         'guidance_idempotency_required': '缺少提交凭证，请刷新页面后重试。',
         'guidance_service_date_expired': '本次提醒的日期已过去，请核对服务日期。',
@@ -132,6 +125,7 @@ async def domain_error_handler(_, exc: DomainError):
         'quality_sources_changed_retry_scan': '检查依据已变化，请重新检查后核对。',
         'task_time_change_reason_required': '最终时间与原文建议不同，请补充调整原因后重试',
         'task_service_time_invalid': '执行时间需在班次内且不晚于截止时间',
+        'record_happened_at_in_future': '发生时间不能晚于当前时间，请核对日期和时区。',
         'demo_batch_changed': '演示资料已重建，请刷新页面后继续。',
         'arrangement_context_changed': '相关资料或任务已变化，请重新预览安排后确认。',
         'arrangement_no_service_in_shift': '所选日期与班次没有待安排服务，请核对服务日期、时间和班次。',
@@ -190,10 +184,15 @@ async def domain_error_handler(_, exc: DomainError):
         'assessment_evidence_admission_changed': '原文不属于本次入住，请补充本次观察依据',
         'assessment_not_editable': '当前评估状态不可修改，请刷新查看最新版本',
     }
-    return JSONResponse(status_code=exc.status_code, content={
-        'detail': exc.code, 'error_code': exc.code, 'retryable': False,
-        'safe_message': messages.get(exc.code, '操作未完成，请核对当前状态、权限和提交内容'),
-    })
+    from app.services.error_catalog import ERROR_MESSAGES, ERROR_FIELDS
+    return JSONResponse(status_code=exc.status_code, content=error_body(exc.code, exc.status_code,
+        messages.get(exc.code) or ERROR_MESSAGES.get(exc.code), fields=request_fields(request, ERROR_FIELDS.get(exc.code, [])),
+        request=request, resource=exc.resource))
+
+
+@app.exception_handler(Exception)
+async def unexpected_error_handler(request, exc: Exception):
+    return JSONResponse(status_code=500, content=error_body('internal_error', 500))
 
 app.add_middleware(
     CORSMiddleware,
@@ -212,6 +211,7 @@ def health() -> HealthResponse:
 
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(elders.router, prefix="/api/v1")
+app.include_router(lookups.router, prefix="/api/v1")
 app.include_router(records.router, prefix="/api/v1")
 app.include_router(tasks.router, prefix="/api/v1")
 app.include_router(handovers.router, prefix="/api/v1")

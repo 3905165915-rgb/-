@@ -1,5 +1,7 @@
 # 护老智交后端
 
+当前源码使用 **JSON schema 10** 的 `JsonStore`：写入持有 `FileLock`，通过临时文件和 `os.replace` 提交；部署模板限定一个 Uvicorn worker。源码和依赖未使用 SQLAlchemy、Alembic 或事务数据库。线上实际进程、存储与备份状态需由运维核对。事务边界、停机备份、数据库迁移和回滚安排见[事务存储迁移与恢复方案](deploy/TRANSACTION_STORAGE_PLAN.md)；下文旧版本、发布和验收记录保留供查阅，当前存储事实以本段及方案为准。
+
 这是参赛演示版后端，使用 FastAPI 和 JSON 文件存储，不使用数据库。JSON 存储适用于单服务器、低并发演示；正式生产部署前应替换为事务数据库并重新进行安全与隐私评估。AI适配层支持 DeepSeek OpenAI兼容接口，当前默认仍为 Mock，配置真实密钥后再切换。
 
 当前 API 版本 0.6.0，JSON schema 9。2026-10-27 已完成前后端联调、线上备份及 schema 8→9 迁移，并部署到 https://sdau.fun/ 。修复内容、最终测试结果、备份位置与验证边界见[本次发布记录](RELEASE_2026-10-27_RECORD_HANDOVER_TIMELINE.md)。旧版本必须停服备份并显式迁移，不能删除数据文件重新初始化。主动照护建议的历史接口见[照护建议接口说明](CARE_ADVICE_API_2026-10-25.md)。

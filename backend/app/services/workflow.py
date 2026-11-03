@@ -8,9 +8,10 @@ from uuid import uuid4
 
 
 class DomainError(ValueError):
-    def __init__(self, code: str, status_code: int = 409):
+    def __init__(self, code: str, status_code: int = 409, *, resource: dict | None = None):
         self.code = code
         self.status_code = status_code
+        self.resource = resource
         super().__init__(code)
 
 

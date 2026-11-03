@@ -252,6 +252,8 @@ def manual(store: JsonStore, payload: ManualRecordRequest, user_id: str, role: s
             if not values:
                 raise DomainError('observations_required', 422)
             stamp = now()
+            if payload.happened_at and payload.happened_at > parse_time(stamp):
+                raise DomainError('record_happened_at_in_future', 422)
             record = CareRecord(id=identifier('REC'), elder_id=payload.elder_id, shift_id=payload.shift_id,
                                 admission_id=elder.get('current_admission_id'),
                                 raw_text=payload.raw_text, observations=values, created_by=user_id,

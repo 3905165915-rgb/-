@@ -1,6 +1,7 @@
 from typing import Annotated, Literal
 from fastapi import APIRouter, HTTPException, Header, Query
 from fastapi.responses import JSONResponse
+from app.services.error_contract import body as error_body
 
 from app.api.deps import ManagementUser, StaffUser, Store
 from app.schemas.api import AIDraft, CareRecord, RecordConfirmRequest, RecordExtractRequest, ManualRecordRequest, CorrectRecordRequest, RejectDraftRequest
@@ -67,9 +68,8 @@ def extract(payload: RecordExtractRequest, current: StaffUser, store: Store) -> 
         draft = record_service.save_failed_draft(store, payload.elder_id, payload.shift_id, payload.text,
                                                   current['sub'], current['role'], expected_state=original_state)
         return JSONResponse(status_code=503, content={
-            'detail': 'AI provider unavailable; use manual entry',
-            'error_code': 'ai_unavailable', 'safe_message': 'AI暂不可用，请使用人工录入',
-            'retryable': True, 'draft_preserved': True, 'draft_id': draft.id,
+            **error_body('ai_unavailable', 503, 'AI暂不可用，请使用人工录入', detail='AI provider unavailable; use manual entry'),
+            'draft_preserved': True, 'draft_id': draft.id,
         })
 
 
@@ -89,9 +89,8 @@ def context_extract(payload: ContextExtractRequest, current: StaffUser, store: S
         draft = record_service.save_failed_draft(store, payload.elder_id, payload.shift_id, payload.text,
                                                   current['sub'], current['role'], 'context_record', original_state)
         return JSONResponse(status_code=503, content={
-            'detail': 'AI provider unavailable; use manual entry',
-            'error_code': 'ai_unavailable', 'safe_message': 'AI暂不可用，请使用人工录入',
-            'retryable': True, 'draft_preserved': True, 'draft_id': draft.id,
+            **error_body('ai_unavailable', 503, 'AI暂不可用，请使用人工录入', detail='AI provider unavailable; use manual entry'),
+            'draft_preserved': True, 'draft_id': draft.id,
         })
 
 

@@ -231,6 +231,30 @@ def generate(store, plan_id, payload, user_id, role, key=None):
     return store.mutate(mutate)
 
 
+def generation_preview(store, plan_id, payload, user_id, role):
+    from app.services.elder_workspace_service import TransactionStore
+    data = store.read()
+    current_staff(data, user_id, role, management=True)
+    preview_data = copy.deepcopy(data)
+    result = generate(TransactionStore(preview_data), plan_id, payload, user_id, role)
+    plan = find(data, 'care_plans', plan_id, 'plan_not_found')
+    selected = {t.get('occurrence_key') for t in preview_data['care_tasks']
+                if t['id'] in set(result['existing_task_ids']) | {r['id'] for r in result['created_tasks']}}
+    retained = {t.get('occurrence_key'): t['id'] for t in data['care_tasks'] if t.get('occurrence_key')}
+    unassigned = [{'title': line['title'], 'scheduled_at': instant.isoformat(),
+                   'reason_code': 'outside_selected_shift', 'reason': '所选班次未覆盖此服务时间'}
+                  for line, instant, occurrence in occurrences(plan, payload.service_date)
+                  if occurrence not in selected and occurrence not in retained]
+    return {'preview': True, 'plan_id': plan_id, 'expected_revision': plan['revision'],
+            'service_date': payload.service_date.isoformat(),
+            'items': [{k: t.get(k) for k in ('title', 'scheduled_at', 'due_at', 'assigned_to', 'shift_id', 'completion_criteria')}
+                      for t in result['created_tasks']],
+            'existing_task_ids': result['existing_task_ids'], 'unassigned_items': unassigned,
+            'retained_task_ids': [retained[occurrence] for _, _, occurrence in occurrences(plan, payload.service_date)
+                                  if occurrence not in selected and occurrence in retained],
+            'timezone': 'Asia/Shanghai', 'notice': '预览未创建任务或授权；确认生成仍需当前版本和人工提交。'}
+
+
 def task_state(data, task, at=None):
     if not task.get('source_plan_id'):
         return {'required': False, 'ready': True, 'blocked_reasons': []}

@@ -197,6 +197,8 @@ def timeline(store, item_id, limit=200, offset=0, user_id=None, role='supervisor
     handover_objects = {row['id']: row['id'] for row in data['handovers']}
     handover_objects.update({row['id']: row['handover_id'] for row in data['handover_items']})
     visible_handovers = set()
+    source_collections = collections + ['handover_items', 'elder_impressions', 'attachments', 'image_analyses', 'care_assignments']
+    object_kinds = {obj['id']: name for name in source_collections for obj in data[name]}
     if role in {'caregiver', 'nurse'}:
         from app.services.handover_service import access as handover_access
         for handover in data['handovers']:
@@ -236,16 +238,17 @@ def timeline(store, item_id, limit=200, offset=0, user_id=None, role='supervisor
         event = {
             'id': row['id'], 'label': LABELS.get(row['action'], '业务操作'),
             'action': row['action'], 'event_type': event_type(row['action']), 'detail': row.get('detail', ''),
-            'actor': users.get(row['user_id'], row['user_id']), 'actor_id': row['user_id'],
-            'source_id': row['object_id'], 'recorded_at': row['created_at'], 'happened_at': None,
+            'actor': users.get(row['user_id'], '历史人员待核实'), 'actor_id': row['user_id'],
+            'source_id': row['object_id'], 'recorded_at': row.get('created_at'), 'happened_at': None,
         }
-        try:
-            from app.services.workflow import parse_time
-            parse_time(event['recorded_at'])
-            event['recorded_at_status'] = 'verified'
-        except (TypeError, ValueError):
+        from app.services.report_service import stamp
+        registered = stamp(event['recorded_at'])
+        if registered is None:
             event['recorded_at'] = None
-            event['recorded_at_status'] = 'unverified'
+        event['recorded_at_status'] = 'verified' if registered else 'unverified'
+        event['time_group'] = 'registered' if registered else 'needs_verification'
+        event['source_kind'] = object_kinds.get(row['object_id'], 'audit_object')
+        event['recorded_state'] = (row.get('after') or {}).get('status') if isinstance(row.get('after'), dict) else None
         if row['action'] == 'create_ai_draft' and row['object_id'] in drafts:
             draft = drafts[row['object_id']]
             event.update(raw_text=draft['raw_text'], evidence=draft.get('evidence', []), provider=draft['provider'])
@@ -269,7 +272,7 @@ def timeline(store, item_id, limit=200, offset=0, user_id=None, role='supervisor
             # action metadata, never a whole-hand-over summary/snapshot here.
             event = {key: value for key, value in event.items() if key in {
                 'id', 'label', 'action', 'event_type', 'actor', 'actor_id', 'source_id',
-                'recorded_at', 'recorded_at_status', 'happened_at'}}
+                'recorded_at', 'recorded_at_status', 'time_group', 'source_kind', 'recorded_state', 'happened_at'}}
             event['detail'] = '关联交班操作，请在授权交班详情中查看相关事项'
         events.append(event)
     if event_types:
@@ -289,6 +292,22 @@ def timeline(store, item_id, limit=200, offset=0, user_id=None, role='supervisor
     return sorted(events, key=lambda row: (row['recorded_at'] is None,
         -parse_time(row['recorded_at']).timestamp() if row['recorded_at'] is not None else 0,
         row['id']))[offset:offset+limit]
+
+
+def item_timeline(store, item_id, user_id, role, limit=200, offset=0, event_types=None, start=None, end=None):
+    from app.services.workflow import current_staff
+    data = store.read()
+    current_staff(data, user_id, role)
+    events = timeline(store, item_id, len(data['audit_logs']), 0, user_id, role, event_types, start, end, _data=data)
+    selected = events[offset:offset + limit]
+    return {'items': selected, 'total': len(events), 'limit': limit, 'offset': offset,
+            'has_more': offset + limit < len(events), 'timezone': 'Asia/Shanghai',
+            'unverified_total': sum(e['recorded_at'] is None for e in events),
+            'groups': {'registered': [e['id'] for e in selected if e['recorded_at'] is not None],
+                       'needs_verification': [e['id'] for e in selected if e['recorded_at'] is None]},
+            'filters': {'event_types': sorted(set(event_types or [])),
+                        'start_inclusive': start.isoformat() if start else None,
+                        'end_exclusive': end.isoformat() if end else None}}
 
 
 def elder_timeline(store, elder_id, user_id, role, limit=200, offset=0,

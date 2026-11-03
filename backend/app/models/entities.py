@@ -107,6 +107,8 @@ class CareTask(BaseModel):
     assignee_name: str = ''
     shift_name: str = ''
     allowed_actions: list[str] = Field(default_factory=list)
+    workflow: dict | None = None
+    state_label: str = ''
     display_snapshot: dict | None = None
     id: str
     elder_id: str

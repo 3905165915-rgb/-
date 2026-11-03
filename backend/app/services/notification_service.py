@@ -45,7 +45,8 @@ def _pending(data, kind, row):
         if _view(data, row)['review_state'] == 'pending':
             return managers, 'memory_review', '个性化信息待复核'
     if kind == 'change_reviews' and status != 'closed':
-        return (managers if status == 'awaiting_review' or not row.get('assigned_to') else {row['assigned_to']}), status, '照护变更待核验'
+        reviewers = managers - {(row.get('submissions') or [{}])[-1].get('submitted_by')}
+        return (reviewers if status == 'awaiting_review' else managers if not row.get('assigned_to') else {row['assigned_to']}), status, '照护变更待核验'
     if kind == 'family_cases':
         if row.get('kind') == 'summary' and status == 'draft':
             return managers, 'summary_review', '家属简报待审核'
@@ -120,7 +121,7 @@ def _visible(data, item, user_id, role):
     return False
 
 
-def listing(store, user_id, role, unread=False, pending=False, limit=100, offset=0):
+def listing(store, user_id, role, unread=False, pending=False, limit=100, offset=0, *, materialize=True):
     data = store.read()
     current_staff(data, user_id, role)
     # Calendar-based reminders have no user mutation to trigger audit projection.
@@ -171,7 +172,7 @@ def listing(store, user_id, role, unread=False, pending=False, limit=100, offset
                 result.append({'id': event_id, 'action': 'care_advice_review_reminder', 'object_id': advice['id'],
                                'elder_id': advice['elder_id'], 'user_id': 'system', 'created_at': now()})
         return result
-    if missing_notifications(data) or pending_reminders(data):
+    if materialize and (missing_notifications(data) or pending_reminders(data)):
         def refresh(fresh):
             current_staff(fresh, user_id, role)
             for event in missing_notifications(fresh):
@@ -195,6 +196,9 @@ def listing(store, user_id, role, unread=False, pending=False, limit=100, offset
             rect = next((r for r in data['rectifications'] if r['incident_id'] == row['object_id']), {})
             row.update(incident_status=incident.get('status'), occurred_at=incident.get('occurred_at'),
                        rectification_id=rect.get('id'), severity=incident.get('severity'))
+            if incident:
+                from app.services.presentation_service import incident_display
+                row.update(incident_display(data, incident), description=incident.get('description', ''))
     # Stable sorting retains newest-first ordering within each priority.
     # Apply before pagination so emergencies cannot be hidden on later pages.
     rows.sort(key=lambda n: n['priority'] != 'urgent')

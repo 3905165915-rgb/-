@@ -71,6 +71,7 @@ class ChangeReviewResponse(BaseModel):
     current: dict
     fingerprint: str
     overdue: bool
+    workflow: dict | None = None
 
 
 class ChangeScanResponse(BaseModel):
