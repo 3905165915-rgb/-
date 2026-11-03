@@ -6,9 +6,9 @@
 
 部署模板指定一个 Uvicorn worker，后台整理线程也在应用进程内启动。当前源码和依赖未使用 SQLAlchemy、Alembic 或事务数据库。文件锁和原子替换保证当前写入方式的完整性，但整份文件读写、内存过滤和单机附件目录限制了扩展方式。增加 worker 或复制应用实例前，需要先完成存储和后台作业协调改造。
 
-以上是仓库事实。线上进程数、实际数据目录、文件系统、备份计划及恢复记录需由运维提供证据；公网健康接口只能说明该接口当时的响应，不能证明这些部署条件成立。仓库中的历史发布说明不代替本次核对。
+2026-11-03通过SSH核实线上服务active，代码位于`/opt/hulaozhijiao/app/backend`，单Uvicorn worker监听`127.0.0.1:8100`，实际数据位于`/var/lib/hulaozhijiao/store.json`且schema为10。`nginx -t`通过；备份timer已启用，最近一次自动备份成功。恢复核验另见本轮发布记录。
 
-本轮取得的证据：2026-11-03 公开只读访问 [`/api/v1/health`](https://sdau.fun/api/v1/health) 返回 HTTP 200，内容为 `status: ok`、`environment: demo`、`schema_version: 10`。该响应不包含源码提交、进程数、存储路径或备份记录。本地存储、备份和照片恢复相关17项测试通过；这些结果未覆盖事务数据库导入和线上恢复。
+同日公开只读访问 [`/api/v1/health`](https://sdau.fun/api/v1/health) 返回HTTP 200，内容为`status: ok`、`environment: demo`、`schema_version: 10`。本地存储、备份和照片恢复相关17项测试通过，最终常规回归822项通过。事务数据库导入未实施。
 
 源码依据：[`json_store.py`](../app/storage/json_store.py)、[`workflow.py`](../app/services/workflow.py)、[`attachment_service.py`](../app/services/attachment_service.py)、[`main.py`](../app/main.py)、[服务模板](hulaozhijiao.service)、[依赖清单](../requirements.txt)。
 
@@ -94,4 +94,4 @@ python backend/scripts/storage_manifest.py /secure/backup/store-snapshot.json \
 
 交接包包括：源码和依赖标识、停写与开放时间、运维部署证据、源快照清单、附件摘要、备份与恢复记录、数据库迁移文件、导入导出结果、差异处理批准、业务核对结果、回滚演练记录及负责人签认。报告只呈现核对结论和受控证据位置。
 
-本方案尚未执行停机、导入、恢复或数据库切换。本轮核对限于公开健康响应、仓库代码和上述本地结果，未登录服务器；线上存储状态与实际恢复能力仍需相应运维证据和演练结果。
+本方案的数据库导入与切换尚未执行。当前部署继续使用schema10 JSON及单worker；本轮代码更新、备份与隔离恢复的实际结果另记，不等同于数据库迁移验收。

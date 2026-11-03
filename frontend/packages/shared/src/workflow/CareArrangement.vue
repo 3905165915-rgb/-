@@ -480,15 +480,14 @@ onBeforeUnmount(() => epoch++)
               v-if="contentType === 'followup_task'"
               class="arrangement-grid"
             >
-              <label>开始日期<input v-model="starts" type="date" /></label>
-              <label>结束日期<input v-model="ends" type="date" /></label>
+              <label>开始日期<CareDateTime v-model="starts" type="date" /></label>
+              <label>结束日期<CareDateTime v-model="ends" type="date" /></label>
             </div>
             <label v-if="contentType === 'one_off_reminder'"
-              >本次服务日期（北京时间）<input
+              >本次服务日期（北京时间）<CareDateTime
                 v-model="serviceDate"
                 type="date"
-                required
-              />只用于所选日期的这一次照护。</label
+                required />只用于所选日期的这一次照护。</label
             >
             <article
               v-for="(line, index) in lines"
@@ -499,7 +498,7 @@ onBeforeUnmount(() => epoch++)
                 >服务内容<input v-model="line.title" maxlength="200"
               /></label>
               <label v-if="contentType === 'routine_hint'"
-                  >适用场景<select v-model="line.scene" aria-label="适用场景">
+                  >适用场景<CareSelect v-model="line.scene" aria-label="适用场景">
                   <option
                     v-for="(name, key) in careHintScenes"
                     :key="key"
@@ -507,10 +506,10 @@ onBeforeUnmount(() => epoch++)
                   >
                     {{ name }}
                   </option>
-                </select></label
+                </CareSelect></label
               >
               <label v-else-if="contentType === 'one_off_reminder'"
-                  >本次发生在<select v-model="line.occasion" aria-label="本次发生在">
+                  >本次发生在<CareSelect v-model="line.occasion" aria-label="本次发生在">
                   <option
                     v-for="(name, key) in careReminderOccasions"
                     :key="key"
@@ -518,10 +517,10 @@ onBeforeUnmount(() => epoch++)
                   >
                     {{ name }}
                   </option>
-                </select></label
+                </CareSelect></label
               >
               <label v-else
-                >服务场景<select v-model="line.scene">
+                >服务场景<CareSelect v-model="line.scene">
                   <option
                     v-for="(name, key) in careScenes"
                     :key="key"
@@ -529,12 +528,11 @@ onBeforeUnmount(() => epoch++)
                   >
                     {{ name }}
                   </option>
-                </select></label
+                </CareSelect></label
               >
               <template v-if="contentType === 'followup_task'">
                 <label v-for="(time, timeIndex) in line.times" :key="timeIndex"
-                  >服务时间<input v-model="line.times[timeIndex]" type="time"
-                /></label>
+                  >服务时间<CareDateTime v-model="line.times[timeIndex]" type="time" /></label>
                 <button
                   v-if="line.times.length > 1"
                   type="button"
@@ -586,7 +584,7 @@ onBeforeUnmount(() => epoch++)
               class="arrangement-grid"
             >
               <label
-                >今日班次<select v-model="shiftId" aria-label="今日班次">
+                >今日班次<CareSelect v-model="shiftId" aria-label="今日班次">
                   <option value="">待排班</option>
                   <option
                     v-for="shift in shifts"
@@ -595,10 +593,10 @@ onBeforeUnmount(() => epoch++)
                   >
                     {{ shift.name }} · {{ workspaceDate(shift.start_at) }}
                   </option>
-                </select></label
+                </CareSelect></label
               >
               <label
-                >负责人<select v-model="assignedTo" aria-label="负责人">
+                >负责人<CareSelect v-model="assignedTo" aria-label="负责人">
                   <option value="">待分配</option>
                   <option
                     v-for="person in staff"
@@ -607,7 +605,7 @@ onBeforeUnmount(() => epoch++)
                   >
                     {{ person.display_name }}
                   </option>
-                </select></label
+                </CareSelect></label
               >
             </div>
             <p v-if="contentType === 'routine_hint'" class="muted">

@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   compactReference,
   formatBusinessTime,
   groupTimelineEvents,
 } from '@hulao/shared'
-import { useTasks, useTimeline } from '../../services/data'
+import { useTasks, useTimeline, mode } from '../../services/data'
+import ItemTimeline from '../../../../../packages/shared/src/workflow/ItemTimeline.vue'
 import QueryFeedback from '../../components/QueryFeedback.vue'
 const route = useRoute()
 const router = useRouter()
@@ -15,6 +16,8 @@ const search = ref('')
 const itemId = computed(() =>
   typeof route.params.id === 'string' ? route.params.id : '',
 )
+const subjectTitle = ref('')
+watch(itemId, () => { subjectTitle.value = '' })
 const items = computed(() => [
   ...new Map(
     (tasks.data.value ?? [])
@@ -24,7 +27,7 @@ const items = computed(() => [
 ])
 const recentItems = computed(() => items.value.filter(item => !search.value.trim() ||
   (item.title+' '+item.id).toLowerCase().includes(search.value.trim().toLowerCase())))
-const timeline = useTimeline(() => itemId.value)
+const timeline = useTimeline(() => mode === 'demo' ? itemId.value : '')
 const timelineGroups = computed(() => {
   const events = (timeline.data.value ?? []).map((event) => ({
     ...event,
@@ -49,7 +52,10 @@ function select(value: string) {
   <section>
     <h1>过程回放</h1>
     <div class="data-section timeline-content">
-      <el-form label-position="top" class="timeline-filter">
+      <el-form
+        label-position="top"
+        class="timeline-filter"
+      >
         <el-form-item label="事项">
           <el-select
             :model-value="itemId"
@@ -60,7 +66,7 @@ function select(value: string) {
           >
             <el-option
               v-if="itemId && !items.some((item) => item.id === itemId)"
-              :label="compactReference(itemId)"
+              :label="subjectTitle || '事项办理过程'"
               :value="itemId"
             /><el-option
               v-for="item in items"
@@ -69,37 +75,61 @@ function select(value: string) {
               :label="item.title"
             />
           </el-select>
-        </el-form-item> </el-form
-      ><QueryFeedback
+        </el-form-item>
+      </el-form><QueryFeedback
         :loading="tasks.isPending.value"
         :error="tasks.error.value"
         @retry="tasks.refetch()"
-      /><section v-if="!itemId && !tasks.isPending.value && !tasks.error.value" aria-label="可回放事项">
+      /><section
+        v-if="!itemId && !tasks.isPending.value && !tasks.error.value"
+        aria-label="可回放事项"
+      >
         <h2>可回放事项</h2><p>从已载入且具有明确事项关联的任务进入；事件顺序以服务器登记时间为准。</p>
-        <el-input v-model="search" placeholder="搜索事项标题或编号" clearable />
-        <p v-if="!recentItems.length">{{items.length ? '没有匹配事项，请调整搜索。' : '尚无可回放的关联事项。'}}</p>
-        <ul><li v-for="item in recentItems.slice(0, 20)" :key="item.id"><RouterLink :to="'/timeline/'+encodeURIComponent(item.id)">{{item.title}}</RouterLink></li></ul>
-        <p v-if="recentItems.length > 20">显示前 20 项，共 {{recentItems.length}} 项；可输入标题缩小范围。</p>
+        <el-input
+          v-model="search"
+          placeholder="搜索事项标题或编号"
+          clearable
+        />
+        <p v-if="!recentItems.length">
+          {{ items.length ? '没有匹配事项，请调整搜索。' : '尚无可回放的关联事项。' }}
+        </p>
+        <ul>
+          <li
+            v-for="item in recentItems.slice(0, 20)"
+            :key="item.id"
+          >
+            <RouterLink :to="'/timeline/'+encodeURIComponent(item.id)">
+              {{ item.title }}
+            </RouterLink>
+          </li>
+        </ul>
+        <p v-if="recentItems.length > 20">
+          显示前 20 项，共 {{ recentItems.length }} 项；可输入标题缩小范围。
+        </p>
       </section><template v-if="itemId">
         <details>
           <summary>事项标识</summary>
           <p>{{ compactReference(itemId) }}</p>
         </details>
         <QueryFeedback
+          v-if="mode === 'demo'"
           :loading="timeline.isPending.value"
           :error="timeline.error.value"
           :empty="
             !timeline.isPending.value &&
-            !timeline.error.value &&
-            !timeline.data.value?.length
+              !timeline.error.value &&
+              !timeline.data.value?.length
           "
           @retry="timeline.refetch()"
         />
         <section
-          v-if="!timeline.isPending.value && !timeline.error.value"
+          v-if="mode === 'demo' && !timeline.isPending.value && !timeline.error.value"
           class="timeline-groups"
         >
-          <section v-for="group in timelineGroups" :key="group.date">
+          <section
+            v-for="group in timelineGroups"
+            :key="group.date"
+          >
             <h2>{{ group.date }}</h2>
             <el-timeline>
               <el-timeline-item
@@ -107,14 +137,17 @@ function select(value: string) {
                 :key="event.id"
                 :timestamp="
                   '登记：' +
-                  (event.recordedAt
-                    ? formatBusinessTime(event.recordedAt, true)
-                    : '时间待核实')
+                    (event.recordedAt
+                      ? formatBusinessTime(event.recordedAt, true)
+                      : '时间待核实')
                 "
               >
                 <h3>{{ event.label }}</h3>
                 <p>{{ event.detail }}</p>
-                <p v-if="event.happenedAt" class="muted">
+                <p
+                  v-if="event.happenedAt"
+                  class="muted"
+                >
                   实际发生：{{ formatBusinessTime(event.happenedAt, true) }}
                 </p>
                 <p class="muted">
@@ -123,13 +156,20 @@ function select(value: string) {
                     v-if="event.source === 'demo'"
                     type="warning"
                     size="small"
-                    >演示</el-tag
                   >
+                    演示
+                  </el-tag>
                 </p>
               </el-timeline-item>
             </el-timeline>
           </section>
         </section>
+        <ItemTimeline
+          v-if="mode === 'api'"
+          :item-id="itemId"
+          :title="items.find(item => item.id === itemId)?.title"
+          @subject="subjectTitle = $event"
+        />
       </template>
     </div>
   </section>

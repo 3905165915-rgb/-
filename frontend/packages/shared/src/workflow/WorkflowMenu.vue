@@ -38,7 +38,7 @@ const emit = defineEmits<{ choose: [Operation] }>()
       >
         {{ area.title }}
       </button>
-      <details v-else class="wf-menu-group" :open="activeArea === area.id">
+      <details v-else class="wf-menu-group">
         <summary>{{ area.title }}</summary>
         <button
           v-for="op in area.actions"

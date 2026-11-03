@@ -66,7 +66,7 @@ onBeforeUnmount(() => { ticket++; unsubscribe() })
       <p v-if="!localDrafts.length && !candidates.length && !error">暂无待核对草稿。</p>
     </section>
     <section v-else class="record-list"><h2>已保存历史</h2>
-      <div class="filters"><label>搜索内容<input v-model="search" type="search" /></label><label>记录类型<select v-model="category"><option value="">全部类型</option><option>本人表达</option><option>护理观察</option><option>家属补充</option></select></label><label>时间范围<select v-model="period"><option value="7">近7天</option><option value="30">近30天</option><option value="all">全部</option></select></label><button type="button" @click="search = category = ''; period = 'all'">重置筛选</button></div>
+      <div class="filters"><label>搜索内容<input v-model="search" type="search" /></label><label>记录类型<CareSelect v-model="category"><option value="">全部类型</option><option>本人表达</option><option>护理观察</option><option>家属补充</option></CareSelect></label><label>时间范围<CareSelect v-model="period"><option value="7">近7天</option><option value="30">近30天</option><option value="all">全部</option></CareSelect></label><button type="button" @click="search = category = ''; period = 'all'">重置筛选</button></div>
       <article v-for="record in records" :key="record.id"><strong>{{ record.title }}</strong><p>{{ record.content }}</p><span>{{ record.category }} · {{ formatBusinessTime(record.happenedAt) }}</span><details><summary>完整时间与登记信息</summary><p>发生：{{ formatBusinessTime(record.happenedAt, true) }}</p><p>登记：{{ formatBusinessTime(record.enteredAt, true) }} · {{ record.actor }}</p></details></article>
       <p v-if="!records.length && !error">当前筛选没有记录，可调整时间或类型。</p>
     </section>

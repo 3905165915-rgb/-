@@ -99,7 +99,7 @@ async function openDraft(row: LocalDraftRow) {
       placeholder="搜索草稿内容或编号"
     />
     <div class="filter-grid">
-      <label class="select-field">类型<select v-model="type">
+      <label class="select-field">类型<CareSelect v-model="type">
         <option value="">全部</option>
         <option
           v-for="name in ['记录', '任务', '交班草稿', '交班版本']"
@@ -107,8 +107,8 @@ async function openDraft(row: LocalDraftRow) {
         >
           {{ name }}
         </option>
-      </select></label>
-      <label class="select-field">状态<select v-model="state">
+      </CareSelect></label>
+      <label class="select-field">状态<CareSelect v-model="state">
         <option value="">全部</option>
         <option
           v-for="(label, key) in phases"
@@ -117,7 +117,7 @@ async function openDraft(row: LocalDraftRow) {
         >
           {{ label }}
         </option>
-      </select></label>
+      </CareSelect></label>
     </div>
     <p
       v-if="error"

@@ -274,7 +274,7 @@ watch(
         </p>
         <label v-if="history.length > 1"
           >查看整理版本
-          <select :value="report.id" :disabled="busy" @change="chooseVersion">
+          <CareSelect :value="report.id" :disabled="busy" @change="chooseVersion">
             <option
               v-for="version in history"
               :key="version.id"
@@ -285,7 +285,7 @@ watch(
                 version.id === latestId ? '（最新）' : '（历史）'
               }}
             </option>
-          </select>
+          </CareSelect>
         </label>
       </div>
       <p class="impression-tip">
@@ -412,10 +412,10 @@ watch(
               <fieldset :disabled="busy"><legend>在哪些服务中提示 *</legend>
                 <label v-for="(title, scene) in sceneNames" :key="scene" class="impression-scene"><input v-model="memoryScenes" type="checkbox" :value="scene" />{{ title }}</label>
               </fieldset>
-              <label>已核实的信息表达者<select v-model="memoryAttribution" :disabled="busy"><option value="elder">老人本人</option><option value="family">家属</option><option value="staff">工作人员观察</option><option value="unknown">表达者未明确</option></select></label>
-              <label>选用的原文依据<select v-model.number="memoryCitation" :disabled="busy"><option v-for="(citation, i) in point.citations" :key="i" :value="i">{{ date(source(citation.source_id)!.happened_at) }} · {{ citation.quote }}</option></select></label>
+              <label>已核实的信息表达者<CareSelect v-model="memoryAttribution" :disabled="busy"><option value="elder">老人本人</option><option value="family">家属</option><option value="staff">工作人员观察</option><option value="unknown">表达者未明确</option></CareSelect></label>
+              <label>选用的原文依据<CareSelect v-model.number="memoryCitation" :disabled="busy"><option v-for="(citation, i) in point.citations" :key="i" :value="i">{{ date(source(citation.source_id)!.happened_at) }} · {{ citation.quote }}</option></CareSelect></label>
               <p>记录版本已自动关联；所有引用依据仍保留，来源更正后会提示复核。</p>
-              <label>建议复核日期（可选）<input v-model="memoryReviewDate" type="date" :min="new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Shanghai' })" :disabled="busy" /></label>
+              <label>建议复核日期（可选）<CareDateTime v-model="memoryReviewDate" type="date" :min="new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Shanghai' })" :disabled="busy" /></label>
               <label>确认依据及适用限制<textarea v-model="memoryReason" maxlength="1000" rows="2" required placeholder="例如：已与本人核实；活动前仍需询问当次意愿" :disabled="busy" /></label>
               <div class="impression-actions"><button type="submit" :disabled="busy || !memoryScenes.length || !memoryReason.trim() || !memoryContent.trim()">确认加入并用于场景提示</button><button type="button" :disabled="busy" @click="memoryPointId = ''">取消</button></div>
             </form>

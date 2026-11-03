@@ -303,11 +303,10 @@ defineExpose({ refresh: load })
             </details>
             <template v-if="management">
               <label v-if="row.can_adopt === true && needsEndTime(row)">
-                本次适用到（北京时间）<input
+                本次适用到（北京时间）<CareDateTime
                   v-model="endsAt[String(row.id)]"
                   type="datetime-local"
-                  :disabled="busy || !!pending"
-                />
+                  :disabled="busy || !!pending" />
               </label>
               <label v-if="editing === row.id"
                 >核对后的内容<textarea

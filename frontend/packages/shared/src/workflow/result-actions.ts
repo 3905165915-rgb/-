@@ -1,4 +1,5 @@
 import type { Operation, Row } from './model'
+import { workflowHint, workflowOperation } from './workflow-presentation'
 
 export interface ResultAction {
   path: string
@@ -35,10 +36,18 @@ export function resultAction(
       autoRead: true,
     }
   }
+  if (group === 'tasks' && typeof row.id === 'string' && typeof row.title === 'string') {
+    return { path: '/tasks/{task_id}', context: { task_id: row.id, elder_id: row.elder_id }, autoRead: true }
+  }
   return null
 }
 
 export function incidentActions(row: Row, allowed: Operation[]) {
+  const hint = workflowHint(row)
+  if (hint) {
+    const primary = hint.primary_action && workflowOperation(hint.primary_action, allowed)
+    return primary ? [primary] : []
+  }
   if (!row.id || !row.status || row.status === 'closed') return []
   const rect = row.rectification as Row | null
   const paths = !rect

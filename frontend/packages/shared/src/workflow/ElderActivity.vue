@@ -195,7 +195,7 @@ onBeforeUnmount(() => {
     <fieldset class="activity-filters" :aria-describedby="filterId">
       <legend>筛选老人动态</legend>
       <label
-        >类型<select v-model="filter.type">
+        >类型<CareSelect v-model="filter.type">
           <option value="">全部类型</option>
           <option
             v-for="(label, type) in activityTypes"
@@ -204,20 +204,18 @@ onBeforeUnmount(() => {
           >
             {{ label }}
           </option>
-        </select></label
+        </CareSelect></label
       >
       <label
-        >开始日期<input
+        >开始日期<CareDateTime
           v-model="filter.start"
           type="date"
-          :aria-invalid="!!filterError"
-      /></label>
+          :aria-invalid="!!filterError" /></label>
       <label
-        >结束日期<input
+        >结束日期<CareDateTime
           v-model="filter.end"
           type="date"
-          :aria-invalid="!!filterError"
-      /></label>
+          :aria-invalid="!!filterError" /></label>
       <button type="button" @click="reset">重置筛选</button>
     </fieldset>
     <p :id="filterId" class="activity-scope">
@@ -361,6 +359,7 @@ onBeforeUnmount(() => {
               {{ display(item.status, 'status') }}
             </p>
             <h3>{{ item.title }}</h3>
+            <p v-if="item.recordedState" class="activity-scope">当时状态：{{ display(item.recordedState, 'status') }}</p>
             <p v-if="item.actor" class="activity-scope">
               操作人：{{ item.actor }}
             </p>
@@ -369,7 +368,7 @@ onBeforeUnmount(() => {
               }}{{ item.text.length > 240 ? '…' : '' }}
             </p>
             <p v-if="!item.times.length" class="activity-scope">
-              活动时间未提供
+              登记时间待核实
             </p>
             <p
               v-for="stamp in item.times"

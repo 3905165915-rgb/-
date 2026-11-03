@@ -268,6 +268,7 @@ svg {
   background: transparent;
   font-size: 13px;
 }
+.account-avatar { flex-shrink: 0; }
 .account-avatar {
   width: 32px;
   height: 32px;
@@ -1271,13 +1272,17 @@ input[type='file']::file-selector-button {
   .breadcrumb {
     gap: 4px;
     font-size: 13px;
+    flex: 1 1 0;
+    overflow: hidden;
   }
+  .breadcrumb strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .breadcrumb > span,
   .breadcrumb > svg {
     display: none;
   }
   .header-actions {
     gap: 8px;
+    flex: 0 0 auto;
   }
   .drafts-trigger.el-button > span > span {
     display: none;
@@ -1776,7 +1781,7 @@ input[type='file']::file-selector-button {
 /* Reference-inspired workspace: quiet lavender, readable translucent surfaces. */
 .admin-layout {
   background:
-    radial-gradient(ellipse at 90% 0%, #e8e2f7 0%, transparent 50%),
+    radial-gradient(ellipse at 90% 0%, #e7f0f4 0%, transparent 50%),
     radial-gradient(ellipse at 10% 85%, #e6f1eb 0%, transparent 48%),
     var(--hl-canvas);
   background-attachment: fixed;
@@ -1858,7 +1863,7 @@ input[type='file']::file-selector-button {
 .role-login {
   background:
     radial-gradient(ellipse at 5% 5%, #e0eee4, transparent 62%),
-    radial-gradient(ellipse at 95% 95%, #e5ddf4, transparent 60%), #f4f5f1;
+    radial-gradient(ellipse at 95% 95%, #e9f0f2, transparent 60%), #f4f5f1;
 }
 .role-login::before {
   display: none;
@@ -1970,4 +1975,12 @@ input[type='file']::file-selector-button {
     width: 100%;
     flex-basis: auto;
   }
+}
+
+@media (max-width: 400px) {
+  .page-header { padding-inline: 10px; gap: 4px; }
+  .header-actions { gap: 4px; }
+  .header-actions .mode-label:not(.is-demo) { display: none; }
+  .header-actions .identity-switch > span { display: none; }
+  .header-actions .account-button { min-width: 44px; min-height: 44px; justify-content: center; }
 }

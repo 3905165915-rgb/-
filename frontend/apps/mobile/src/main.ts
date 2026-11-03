@@ -17,6 +17,7 @@ import {
   Steps,
   Step,
   Loading,
+  Icon,
   Tabs,
   Tab,
   Checkbox,
@@ -29,11 +30,13 @@ import 'vant/lib/index.css'
 import '@hulao/shared/theme.css'
 import { applyUiPreferences } from '@hulao/shared'
 import App from './App.vue'
+import { installCareControls } from '../../../packages/shared/src/ui/controls'
 import router from './router'
 import { queryClient } from './services/data'
 import './styles/main.css'
 applyUiPreferences()
 const app = createApp(App)
+  .use(installCareControls)
   .use(createPinia())
   .use(VueQueryPlugin, { queryClient })
   .use(router)
@@ -53,6 +56,7 @@ for (const component of [
   Steps,
   Step,
   Loading,
+  Icon,
   Tabs,
   Tab,
   Checkbox,

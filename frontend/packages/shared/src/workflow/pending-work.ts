@@ -308,7 +308,7 @@ export function validateNotifications(value: unknown) {
 }
 
 export function notificationLocation(
-  item: ServerNotification,
+  item: Pick<ServerNotification, 'object_type' | 'object_id' | 'stage'> & Row,
   mobile: boolean,
 ) {
   const id = encodeURIComponent(item.object_id)

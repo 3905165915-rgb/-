@@ -734,12 +734,11 @@ onBeforeUnmount(() => {
           支持JPEG、PNG、WebP，单张不超过4MB；系统按实际图片内容识别格式。
         </p>
         <label
-          >观察时间<input
+          >观察时间<CareDateTime
             v-model="occurredAt"
             type="datetime-local"
             :disabled="locked"
-            required
-        /></label>
+            required /></label>
         <label
           >照片说明<input
             v-model="caption"

@@ -431,14 +431,14 @@ onBeforeUnmount(() => {
     </p>
     <div class="workspace-actions">
       <label
-        >生活场景<select
+        >生活场景<CareSelect
           v-model="scene"
           :disabled="generating || busy || !!pending"
         >
           <option v-for="(label, key) in careScenes" :key="key" :value="key">
             {{ label }}
           </option>
-        </select></label
+        </CareSelect></label
       ><button
         type="button"
         :disabled="generating || loading || busy || !!pending"
@@ -615,7 +615,7 @@ onBeforeUnmount(() => {
                 class="workspace-form-grid"
               >
                 <label
-                  >实际班次<select v-model="shift" required>
+                  >实际班次<CareSelect v-model="shift" required>
                     <option value="">请选择开放班次</option>
                     <option
                       v-for="item in shifts"
@@ -625,9 +625,9 @@ onBeforeUnmount(() => {
                       {{ item.name || item.id }} ·
                       {{ workspaceDate(item.start_at) }}
                     </option>
-                  </select></label
+                  </CareSelect></label
                 ><label
-                  >实际责任人<select v-model="assignee" required>
+                  >实际责任人<CareSelect v-model="assignee" required>
                     <option value="">请选择班次成员</option>
                     <option
                       v-for="person in people"
@@ -636,13 +636,12 @@ onBeforeUnmount(() => {
                     >
                       {{ person.display_name }}
                     </option>
-                  </select></label
+                  </CareSelect></label
                 ><label
-                  >截止时间（北京时间）<input
+                  >截止时间（北京时间）<CareDateTime
                     v-model="due"
                     type="datetime-local"
-                    required
-                /></label>
+                    required /></label>
               </div>
               <label v-if="adoptType === 'followup_task'"
                 >执行要求<textarea
@@ -653,7 +652,7 @@ onBeforeUnmount(() => {
               </label>
               <template v-else-if="adoptType === 'routine_hint'">
                 <label
-                  >适用场景<select v-model="hintScene">
+                  >适用场景<CareSelect v-model="hintScene">
                     <option
                       v-for="(label, key) in careHintScenes"
                       :key="key"
@@ -661,7 +660,7 @@ onBeforeUnmount(() => {
                     >
                       {{ label }}
                     </option>
-                  </select></label
+                  </CareSelect></label
                 >
                 <label
                   >照护提示<textarea
@@ -674,7 +673,7 @@ onBeforeUnmount(() => {
               </template>
               <template v-else-if="adoptType === 'one_off_reminder'">
                 <label
-                  >本次发生在<select v-model="occasion">
+                  >本次发生在<CareSelect v-model="occasion">
                     <option
                       v-for="(label, key) in careReminderOccasions"
                       :key="key"
@@ -682,7 +681,7 @@ onBeforeUnmount(() => {
                     >
                       {{ label }}
                     </option>
-                  </select></label
+                  </CareSelect></label
                 >
                 <label
                   >需要记录什么<textarea
@@ -693,23 +692,22 @@ onBeforeUnmount(() => {
                   />
                 </label>
                 <label
-                  >本次服务日期（北京时间）<input
+                  >本次服务日期（北京时间）<CareDateTime
                     v-model="serviceDate"
                     type="date"
-                    required
-                /></label>
+                    required /></label>
                 <p>一次性意愿不会自动成为长期习惯。</p>
               </template>
             </template>
           </template>
           <template v-if="mode === 'feedback'">
             <label
-              >本人回应<select v-model="response">
+              >本人回应<CareSelect v-model="response">
                 <option value="accepted">愿意／接受</option>
                 <option value="declined">不愿意／拒绝</option>
                 <option value="unclear">表达不清</option>
                 <option value="not_obtained">未取得回应</option>
-              </select></label
+              </CareSelect></label
             ><label
               >实际观察<textarea
                 v-model="observation"
@@ -718,20 +716,19 @@ onBeforeUnmount(() => {
                 placeholder="写清发生了什么、本人如何表达，不推断效果"
               /></label
             ><label
-              >发生时间（北京时间）<input
+              >发生时间（北京时间）<CareDateTime
                 v-model="happened"
                 type="datetime-local"
                 step="0.001"
-                required
-            /></label>
+                required /></label>
           </template>
           <label v-if="mode === 'review'"
-            >复核结论<select v-model="decision">
+            >复核结论<CareSelect v-model="decision">
               <option value="insufficient_evidence">证据不足，继续观察</option>
               <option value="continue_trial">继续尝试</option>
               <option value="adjust">需调整安排</option>
               <option value="stop">停止此尝试</option>
-            </select></label
+            </CareSelect></label
           ><label
             v-if="mode !== 'feedback' && (mode !== 'adopt' || !!adoptType)"
             >{{ mode === 'adopt' ? '采用说明' : '核对说明'

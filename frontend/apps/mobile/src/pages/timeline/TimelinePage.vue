@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   compactReference,
@@ -7,6 +7,7 @@ import {
   groupTimelineEvents,
 } from '@hulao/shared'
 import { useTasks, useTimeline, mode } from '../../services/data'
+import ItemTimeline from '../../../../../packages/shared/src/workflow/ItemTimeline.vue'
 import FeedbackState from '../../components/FeedbackState.vue'
 const route = useRoute()
 const router = useRouter()
@@ -14,6 +15,8 @@ const tasks = useTasks()
 const itemId = computed(() =>
   typeof route.params.id === 'string' ? route.params.id : '',
 )
+const subjectTitle = ref('')
+watch(itemId, () => { subjectTitle.value = '' })
 const items = computed(() => [
   ...new Map(
     (tasks.data.value ?? [])
@@ -21,7 +24,7 @@ const items = computed(() => [
       .map((task) => [task.itemId!, { id: task.itemId!, title: task.title }]),
   ).values(),
 ])
-const timeline = useTimeline(() => itemId.value)
+const timeline = useTimeline(() => mode === 'demo' ? itemId.value : '')
 const timelineGroups = computed(() => {
   const events = (timeline.data.value ?? []).map((event) => ({
     ...event,
@@ -45,24 +48,26 @@ function select(value: string) {
 <template>
   <section class="timeline-page">
     <h1>过程回放</h1>
-    <label class="select-field"
-      >事项<select
+    <label class="select-field">事项<CareSelect
+      :value="itemId"
+      :disabled="tasks.isPending.value || !!tasks.error.value"
+      @change="select(($event.target as HTMLSelectElement).value)"
+    >
+      <option value="">请选择事项</option>
+      <option
+        v-if="itemId && !items.some((item) => item.id === itemId)"
         :value="itemId"
-        :disabled="tasks.isPending.value || !!tasks.error.value"
-        @change="select(($event.target as HTMLSelectElement).value)"
       >
-        <option value="">请选择事项</option>
-        <option
-          v-if="itemId && !items.some((item) => item.id === itemId)"
-          :value="itemId"
-        >
-          {{ compactReference(itemId) }}
-        </option>
-        <option v-for="item in items" :key="item.id" :value="item.id">
-          {{ item.title }}
-        </option>
-      </select></label
-    ><FeedbackState
+        {{ subjectTitle || '事项办理过程' }}
+      </option>
+      <option
+        v-for="item in items"
+        :key="item.id"
+        :value="item.id"
+      >
+        {{ item.title }}
+      </option>
+    </CareSelect></label><FeedbackState
       :loading="tasks.isPending.value"
       :error="tasks.error.value"
       @retry="tasks.refetch()"
@@ -75,20 +80,21 @@ function select(value: string) {
         <p>{{ compactReference(itemId) }}</p>
       </details>
       <FeedbackState
+        v-if="mode === 'demo'"
         :loading="timeline.isPending.value"
         :error="timeline.error.value"
         :empty="
-          !timeline.isPending.value &&
-          !timeline.error.value &&
-          !timeline.data.value?.length
+          mode === 'demo' && !timeline.isPending.value &&
+            !timeline.error.value &&
+            !timeline.data.value?.length
         "
         @retry="timeline.refetch()"
       />
       <ol
         v-if="
           !timeline.isPending.value &&
-          !timeline.error.value &&
-          timelineGroups.length
+            !timeline.error.value &&
+            timelineGroups.length
         "
         class="timeline-events"
         aria-label="事项时间线"
@@ -100,25 +106,40 @@ function select(value: string) {
         >
           <h2>{{ group.date }}</h2>
           <ol>
-            <li v-for="event in group.events" :key="event.id">
+            <li
+              v-for="event in group.events"
+              :key="event.id"
+            >
               <h3>{{ event.label }}</h3>
-              <p class="timeline-detail">{{ event.detail }}</p>
+              <p class="timeline-detail">
+                {{ event.detail }}
+              </p>
               <p class="muted">
                 登记：{{ event.recordedAt || '时间待核实' }} ·
                 {{ event.actor || '操作者未提供' }}
               </p>
-              <p v-if="event.happenedAt" class="muted">
+              <p
+                v-if="event.happenedAt"
+                class="muted"
+              >
                 实际发生：{{ formatBusinessTime(event.happenedAt, true) }}
               </p>
               <van-tag
                 v-if="mode === 'demo' && event.source === 'demo'"
                 type="warning"
-                >演示</van-tag
               >
+                演示
+              </van-tag>
             </li>
           </ol>
         </li>
       </ol>
+      <ItemTimeline
+        v-if="mode === 'api'"
+        :item-id="itemId"
+        :title="items.find(item => item.id === itemId)?.title"
+        @subject="subjectTitle = $event"
+      />
     </template>
   </section>
 </template>

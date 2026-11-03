@@ -13,6 +13,13 @@ function tx() {
   return newPlanExecution('manager', prepared(), () => `request-${++count}`)
 }
 const receipt = (revision: number): Row => ({ id: 'plan-1', elder_id: 'elder-1', revision })
+const previewOptions = {
+  previewGeneration: async (_path: string, payload: Row) => ({ preview: true, plan_id: 'plan-1', expected_revision: payload.expected_revision, service_date: payload.service_date, items: [], existing_task_ids: [], retained_task_ids: [], unassigned_items: [], timezone: 'Asia/Shanghai' }),
+}
+async function runReviewed(execution: ReturnType<typeof tx>, write: (path: string, payload: Row, key: string) => Promise<unknown>, save: (tx: ReturnType<typeof tx>) => void) {
+  await runPlanExecution(execution, write, save, { ...previewOptions, generationConfirmed: false })
+  if (execution.generationPreview && !execution.steps[2].receipt) await runPlanExecution(execution, write, save, { ...previewOptions, generationConfirmed: true })
+}
 
 describe('plan preview and context', () => {
   it('keeps an explicit elder context and only auto-selects a sole elder', () => {
@@ -57,11 +64,23 @@ describe('plan preview and context', () => {
 })
 
 describe('plan API partial execution and recovery', () => {
+  it('stops after approval for the server preview and waits for explicit generation confirmation', async () => {
+    const execution = tx()
+    const write = vi.fn().mockResolvedValueOnce(receipt(1)).mockResolvedValueOnce(receipt(2)).mockResolvedValueOnce({ created_tasks: [{ id: 'task-1' }] })
+    const preview = vi.fn(previewOptions.previewGeneration)
+    await runPlanExecution(execution, write, () => {}, { previewGeneration: preview })
+    expect(write).toHaveBeenCalledTimes(2)
+    expect(preview).toHaveBeenCalledWith('/care-plans/plan-1/generate-preview', { ...execution.generate, expected_revision: 2 })
+    expect(execution.steps[2].pending).toBeUndefined()
+    await runPlanExecution(execution, write, () => {}, { previewGeneration: preview, generationConfirmed: true })
+    expect(write).toHaveBeenCalledTimes(3)
+    expect(execution.steps[2].receipt).toEqual({ created_tasks: [{ id: 'task-1' }] })
+  })
   it('does not call an arbitrary successful response or partial generation complete', async () => {
     for (const value of [{ message: 'ok' }, { tasks: [{ id: 'task-1' }], failed: ['task-2'] }, { tasks: [{ id: '' }] }, []]) {
       const execution = tx()
       const write = vi.fn().mockResolvedValueOnce(receipt(1)).mockResolvedValueOnce(receipt(2)).mockResolvedValueOnce(value)
-      await expect(runPlanExecution(execution, write, () => {})).rejects.toThrow('生成任务')
+      await expect(runReviewed(execution, write, () => {})).rejects.toThrow('生成任务')
       expect(execution.steps[0].receipt).toBeDefined(); expect(execution.steps[1].receipt).toBeDefined(); expect(execution.steps[2].receipt).toBeUndefined()
     }
   })
@@ -70,9 +89,9 @@ describe('plan API partial execution and recovery', () => {
     let saved: unknown
     const save = () => { saved = structuredClone(execution) }
     const write = vi.fn().mockRejectedValueOnce(new Error('connection lost')).mockResolvedValueOnce(receipt(1)).mockResolvedValueOnce(receipt(2)).mockResolvedValueOnce({ tasks: [{ id: 'task-1' }] })
-    await expect(runPlanExecution(execution, write, save)).rejects.toThrow('connection lost')
+    await expect(runReviewed(execution, write, save)).rejects.toThrow('connection lost')
     const restored = restorePlanExecution(saved, 'manager', 'elder-1')
-    await runPlanExecution(restored, write, () => {})
+    await runReviewed(restored, write, () => {})
     expect(write.mock.calls.map(call => call[0])).toEqual(['/care-plans', '/care-plans', '/care-plans/plan-1/review', '/care-plans/plan-1/generate'])
     expect(write.mock.calls[0]).toEqual(write.mock.calls[1])
     expect(restored.steps.every(step => step.receipt !== undefined)).toBe(true)
@@ -80,35 +99,35 @@ describe('plan API partial execution and recovery', () => {
   it('does not repeat creation or approval when task generation fails', async () => {
     const execution = tx()
     const write = vi.fn().mockResolvedValueOnce(receipt(1)).mockResolvedValueOnce(receipt(2)).mockRejectedValueOnce(new Error('server unavailable')).mockResolvedValueOnce({ created: [] })
-    await expect(runPlanExecution(execution, write, () => {})).rejects.toThrow('server unavailable')
+    await expect(runReviewed(execution, write, () => {})).rejects.toThrow('server unavailable')
     const restored = restorePlanExecution(JSON.parse(JSON.stringify(execution)), 'manager', 'elder-1')
-    await runPlanExecution(restored, write, () => {})
+    await runReviewed(restored, write, () => {})
     expect(write.mock.calls.map(call => call[0])).toEqual(['/care-plans', '/care-plans/plan-1/review', '/care-plans/plan-1/generate', '/care-plans/plan-1/generate'])
     expect(write.mock.calls[2]).toEqual(write.mock.calls[3])
     expect(write.mock.calls[3][1].expected_revision).toBe(2)
   })
   it('does not send writes if persistence fails before dispatch', async () => {
     const write = vi.fn()
-    await expect(runPlanExecution(tx(), write, () => { throw new Error('disk full') })).rejects.toThrow('disk full')
+    await expect(runReviewed(tx(), write, () => { throw new Error('disk full') })).rejects.toThrow('disk full')
     expect(write).not.toHaveBeenCalled()
   })
   it('does not advance on malformed or mismatched receipts', async () => {
     for (const value of [null, {}, { ...receipt(1), elder_id: 'other' }]) {
       const execution = tx()
       const write = vi.fn().mockResolvedValue(value)
-      await expect(runPlanExecution(execution, write, () => {})).rejects.toThrow('回执')
+      await expect(runReviewed(execution, write, () => {})).rejects.toThrow('回执')
       expect(write).toHaveBeenCalledTimes(1)
       expect(execution.steps[0].receipt).toBeUndefined()
     }
   })
   it('refuses an invalid approval receipt and does not generate tasks', async () => {
     const write = vi.fn().mockResolvedValueOnce(receipt(1)).mockResolvedValueOnce(receipt(1))
-    await expect(runPlanExecution(tx(), write, () => {})).rejects.toThrow('版本未更新')
+    await expect(runReviewed(tx(), write, () => {})).rejects.toThrow('版本未更新')
     expect(write).toHaveBeenCalledTimes(2)
   })
   it('refuses recovery under another account/elder or altered pending payload', async () => {
     const execution = tx()
-    await expect(runPlanExecution(execution, vi.fn().mockRejectedValue(new Error('offline')), () => {})).rejects.toThrow()
+    await expect(runReviewed(execution, vi.fn().mockRejectedValue(new Error('offline')), () => {})).rejects.toThrow()
     expect(() => restorePlanExecution(execution, 'other-manager', 'elder-1')).toThrow('恢复日志')
     expect(() => restorePlanExecution(execution, 'manager', 'other-elder')).toThrow('恢复日志')
     execution.steps[0].pending!.payload.title = 'changed body'

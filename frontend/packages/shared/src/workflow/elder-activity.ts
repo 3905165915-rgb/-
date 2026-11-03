@@ -37,6 +37,8 @@ export interface ActivityItem {
   detailUrl?: string
   replayUrl?: string
   detailAvailable?: boolean
+  recordedState?: string | null
+  sourceKind?: string
 }
 export interface ActivityFilter {
   type: ActivityType | ''
@@ -558,7 +560,7 @@ function timelineItem(value: unknown, elderId: string): ActivityItem {
     throw new Error('老人时间线数据格式异常')
   const type = row.event_type as ActivityType
   if (type === 'task' && !isTaskContent(row)) throw new Error('时间线将提示或提醒标成任务，请核实服务端分类。')
-  const recordedAt =
+  const recordedAt = row.recorded_at === null ? null :
     typeof row.recorded_at === 'string' ? row.recorded_at : row.entered_at
   const happenedAt = row.happened_at
   const times = [
@@ -619,6 +621,8 @@ function timelineItem(value: unknown, elderId: string): ActivityItem {
     title: row.label,
     text: row.detail,
     status: row.action,
+    recordedState: typeof row.recorded_state === 'string' ? row.recorded_state : null,
+    sourceKind: typeof row.source_kind === 'string' ? row.source_kind : undefined,
     actor: row.actor,
     times,
     timestamp: times[0]?.timestamp ?? null,
@@ -739,8 +743,7 @@ export function createElderTimeline(deps: {
       const rows = response.events.map((row) => timelineItem(row, elderId))
       if (
         rows.length > 100 ||
-        offset + rows.length > Number(response.total) ||
-        rows.some((row) => row.times[0]?.label !== '登记')
+        offset + rows.length > Number(response.total)
       )
         throw new Error('老人时间线缺少登记时间或分页异常')
       if (response.has_more !== offset + rows.length < Number(response.total))

@@ -152,7 +152,7 @@
   margin: 12px 0;
 }
 .workspace-panel summary {
-  min-height: 32px;
+  min-height: 44px;
   padding: 7px 0;
   cursor: pointer;
   color: var(--hl-primary, #356b56);
@@ -182,12 +182,12 @@
   min-width: 150px;
 }
 .workspace-warning {
-  color: #795715;
+  color: var(--hl-warning, #865600);
 }
 .workspace-error {
-  color: #a12a2a;
+  color: var(--hl-danger, #ad363b);
   padding: 10px;
-  background: #fff0ed;
+  background: var(--hl-danger-soft, #fff0ee);
   border-radius: 6px;
 }
 .workspace-badge {

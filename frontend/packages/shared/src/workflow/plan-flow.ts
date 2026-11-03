@@ -1,4 +1,5 @@
 import { requestBody, schemas, type Row } from './model'
+import { generationSignature, validateGenerationPreview } from './plan-generation'
 
 export interface PlanItemDraft {
   key: string
@@ -107,6 +108,7 @@ export interface PlanExecution {
   generate: Row
   reason: string
   steps: PlanStep[]
+  generationPreview?: { signature: string; value: Row }
 }
 export function newPlanExecution(account: string, prepared: Pick<ReturnType<typeof preparePlan>, 'create' | 'generate' | 'reason'>, key: () => string): PlanExecution {
   return structuredClone({ version: 1, account, create: prepared.create, generate: prepared.generate, reason: prepared.reason,
@@ -155,7 +157,7 @@ function validateReceipt(tx: PlanExecution, index: number, value: unknown) {
     // identities; an arbitrary 200 response is not evidence of task creation.
     if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('生成任务回执格式异常，请保留原请求重试核实。')
     const row = value as Row
-    const tasks = row.tasks ?? row.created ?? row.task_ids
+    const tasks = row.created_tasks ?? row.tasks ?? row.created ?? row.task_ids
     if ('error' in row || ['failed', 'partial', 'pending'].includes(String(row.status)) || Number(row.failed_count || 0) > 0 || (Array.isArray(row.failed) && row.failed.length) || !Array.isArray(tasks) || tasks.some(task => typeof task === 'string' ? !task.trim() : !task || typeof task !== 'object' || typeof task.id !== 'string' || !task.id.trim()))
       throw new Error('生成任务结果待核实，请保留原请求，查看失败明细后接续。')
   }
@@ -163,10 +165,23 @@ function validateReceipt(tx: PlanExecution, index: number, value: unknown) {
 export async function runPlanExecution(tx: PlanExecution,
   write: (path: string, payload: Row, key: string) => Promise<unknown>,
   save: (tx: PlanExecution) => void,
+  options?: { previewGeneration: (path: string, payload: Row) => Promise<unknown>; generationConfirmed?: boolean },
 ): Promise<void> {
   for (const [index, step] of tx.steps.entries()) {
     if (step.receipt !== undefined) continue
-    if (!step.pending) step.pending = structuredClone(pendingStep(tx, index))
+    const next = step.pending || pendingStep(tx, index)
+    if (index === 2 && !step.pending) {
+      if (!options) throw new Error('请先读取服务器任务预览，再明确确认生成任务。')
+      const signature = generationSignature(next.path, next.payload)
+      if (!tx.generationPreview || tx.generationPreview.signature !== signature || !options.generationConfirmed) {
+        const value = validateGenerationPreview(await options.previewGeneration(next.path + '-preview', next.payload), next.path, next.payload)
+        tx.generationPreview = { signature, value }
+        save(tx)
+        return
+      }
+      validateGenerationPreview(tx.generationPreview.value, next.path, next.payload)
+    }
+    if (!step.pending) step.pending = structuredClone(next)
     // Persist the exact body and key BEFORE sending any write, including retries.
     save(tx)
     const receipt = await write(step.pending.path, step.pending.payload, step.key)

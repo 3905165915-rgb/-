@@ -212,7 +212,7 @@ defineExpose({ save, persist, dirty, busy })
           </header>
           <div class="sheet-body">
             <div class="filter-grid">
-              <label class="select-field">老人<select
+              <label class="select-field">老人<CareSelect
                 v-model="elderFilter"
                 aria-label="老人"
               >
@@ -224,8 +224,8 @@ defineExpose({ save, persist, dirty, busy })
                 >
                   {{ elder.name }} · {{ elder.bedLabel }}
                 </option>
-              </select></label>
-              <label class="select-field">来源班次<select
+              </CareSelect></label>
+              <label class="select-field">来源班次<CareSelect
                 v-model="shiftFilter"
                 aria-label="来源班次"
               >
@@ -236,8 +236,8 @@ defineExpose({ save, persist, dirty, busy })
                 >
                   {{ name }}
                 </option>
-              </select></label>
-              <label class="select-field">责任人<select
+              </CareSelect></label>
+              <label class="select-field">责任人<CareSelect
                 v-model="assigneeFilter"
                 aria-label="责任人"
               >
@@ -248,7 +248,7 @@ defineExpose({ save, persist, dirty, busy })
                 >
                   {{ name }}
                 </option>
-              </select></label>
+              </CareSelect></label>
             </div>
             <div class="action-row">
               <label class="selection-toggle">仅看已选 <van-switch

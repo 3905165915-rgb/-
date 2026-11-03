@@ -13,6 +13,7 @@ import { request } from '../../../../../packages/shared/src/workflow/model'
 import { RefreshCw } from 'lucide-vue-next'
 import { mode, session } from '../../services/data'
 import DemoDashboard from './DemoDashboard.vue'
+import WorkInbox from '../../../../../packages/shared/src/workflow/WorkInbox.vue'
 import {
   captureDashboardRequest,
   createRequestGuard,
@@ -45,7 +46,7 @@ function resetFilters() {
   end.value = dates.end
   void refresh()
 }
-const dates = defaultWindow(Date.now(), 7)
+const dates = defaultWindow(Date.now(), 1)
 const start = ref(dates.start),
   end = ref(dates.end)
 const elderId = ref(''),
@@ -256,8 +257,8 @@ onBeforeUnmount(() => {
   <main v-else class="dashboard-page">
     <header class="dashboard-header">
       <div>
-        <h1>管理看板</h1>
-        <p>照护任务、交接与服务质量，一处掌握</p>
+        <h1>今日工作</h1>
+        <p>先处理风险和待办，再查看照护进展</p>
       </div>
       <button
         type="button"
@@ -270,15 +271,18 @@ onBeforeUnmount(() => {
         <RefreshCw :size="18" aria-hidden="true" />
       </button>
     </header>
+    <nav class="daily-shortcuts" aria-label="常用办理">
+      <RouterLink to="/elders">查看老人</RouterLink><RouterLink to="/admission">新入住</RouterLink><RouterLink to="/workflows/handovers">交接班</RouterLink><RouterLink to="/family">编写家属简报</RouterLink>
+    </nav>
+    <WorkInbox compact />
+    <details class="operations-analysis"><summary>运营分析 · 日期筛选、服务进展与统计口径</summary>
     <form class="filters" @submit.prevent="refresh">
       <label
-        >开始日期（含）<input v-model="start" type="date" required
-      /></label>
+        >开始日期（含）<CareDateTime v-model="start" type="date" required /></label>
       <label
-        >结束日期（不含）<input v-model="end" type="date" required
-      /></label>
+        >结束日期（不含）<CareDateTime v-model="end" type="date" required /></label>
       <label
-        >老人<select v-model="elderId" aria-label="老人">
+        >老人<CareSelect v-model="elderId" aria-label="老人">
           <option value="">全部授权老人</option>
           <option
             v-for="elder in elders"
@@ -290,10 +294,10 @@ onBeforeUnmount(() => {
               · {{ elder.bed_label }}</template
             >
           </option>
-        </select></label
+        </CareSelect></label
       >
       <label
-        >班次<select v-model="shiftId">
+        >班次<CareSelect v-model="shiftId">
           <option value="">所有班次</option>
           <option
             v-for="shift in shifts"
@@ -302,15 +306,15 @@ onBeforeUnmount(() => {
           >
             {{ shift.name }}
           </option>
-        </select></label
+        </CareSelect></label
       >
       <label
-        >状态<select v-model="status">
+        >状态<CareSelect v-model="status">
           <option value="">全部状态</option>
           <option v-for="value in statusOptions" :key="value" :value="value">
             {{ statusLabels[value] || '状态待核实' }}
           </option>
-        </select></label
+        </CareSelect></label
       >
       <button type="submit" :disabled="loading">应用筛选</button>
       <button
@@ -690,10 +694,16 @@ onBeforeUnmount(() => {
         </p>
       </details>
     </template>
+    </details>
   </main>
 </template>
 
 <style scoped>
+.daily-shortcuts { display:flex; flex-wrap:wrap; gap:10px; margin:18px 0 24px; }
+.daily-shortcuts a { display:flex; align-items:center; min-height:44px; padding:10px 18px; border:1px solid #d0dfd3; border-radius:12px; background:#f5f8f1; color:#315b42; text-decoration:none; }
+.operations-analysis { margin-top:28px; border-top:1px solid var(--hl-border); padding-top:12px; }
+.operations-analysis>summary { cursor:pointer; padding:16px 0; color:var(--hl-muted); }
+
 .dashboard-page {
   min-width: 0;
   max-width: 1440px;

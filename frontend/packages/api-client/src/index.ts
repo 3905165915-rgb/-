@@ -15,6 +15,7 @@ import {
 } from './validators'
 import type { InlineRecordEnvelope, RecordAnalysisConfirmation } from './types'
 export { toUiError, ContractError } from './errors'
+export type { UiError } from './errors'
 
 export interface LoginPayload {
   username: string

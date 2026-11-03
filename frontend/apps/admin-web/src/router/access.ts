@@ -94,8 +94,8 @@ export const navigation: NavigationItem[] = [
   },
   {
     path: '/notifications',
-    label: '消息',
-    group: '质量与安全',
+    label: '工作收件箱',
+    group: '今日工作',
     roles: internalRoles,
   },
   {
@@ -146,7 +146,7 @@ export const navigation: NavigationItem[] = [
   },
   {
     path: '/followups',
-    label: '照护跟进',
+    label: '工作收件箱',
     group: '质量与安全',
     roles: internalRoles,
   },
@@ -177,6 +177,7 @@ export function allowedNavigationGroups(
         ? item.path === '/family'
         : [
             '/dashboard',
+            '/notifications',
             '/elders',
             '/tasks',
             '/quality',

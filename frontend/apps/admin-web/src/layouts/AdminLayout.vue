@@ -160,7 +160,7 @@ function leaveAccount(event: FocusEvent) {
             :key="item.path"
             :to="item.path"
             class="nav-link"
-            :class="{ 'is-active': activeItem?.path === item.path || (item.path !== '/demo' && activeGroup === group.label) }"
+            :class="{ 'is-active': activeItem?.path === item.path || (activeGroup === group.label && !group.items.some(main => main.path === activeItem?.path) && group.items[0]?.path === item.path) }"
             :aria-current="activeItem?.path === item.path ? 'page' : undefined"
             :title="item.label"
           >

@@ -388,7 +388,7 @@ onBeforeUnmount(() => {
               </footer>
             </blockquote>
           </details>
-          <select
+          <CareSelect
             :id="'assessment-' + elderId + '-' + item.key"
             :value="answers.scores[item.key] ?? ''"
             @change="changeScore(item.key, $event)"
@@ -401,7 +401,7 @@ onBeforeUnmount(() => {
             >
               {{ option.label }}
             </option>
-          </select>
+          </CareSelect>
           <p
             v-if="
               previous &&
@@ -445,7 +445,7 @@ onBeforeUnmount(() => {
             />已核对本次答案及依据</label
           >
         </article>
-        <label>下次复评日期<input v-model="due" type="date" required /></label
+        <label>下次复评日期<CareDateTime v-model="due" type="date" required /></label
         ><label
           >本次说明（可选）<textarea v-model="note" rows="2" maxlength="2000" />
         </label>

@@ -40,6 +40,7 @@ describe('route and menu policy', () => {
       )
       expect(paths).toEqual([
         '/dashboard',
+        '/notifications',
         '/elders',
         '/tasks',
         '/quality',

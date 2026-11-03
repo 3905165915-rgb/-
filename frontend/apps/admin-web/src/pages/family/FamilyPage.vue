@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import WorkflowPanel from '@hulao/shared/workflow'
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useQuery } from '@tanstack/vue-query'
 import { loadDemoState } from '@hulao/shared'
 import { RefreshCw } from 'lucide-vue-next'
@@ -11,7 +11,9 @@ import {
 import { useFamilyCases, mode, queryKey, session } from '../../services/data'
 import QueryFeedback from '../../components/QueryFeedback.vue'
 import StatusLabel from '../../components/StatusLabel.vue'
+import FamilySummaryWorkspace from '../../../../../packages/shared/src/workflow/FamilySummaryWorkspace.vue'
 const cases = useFamilyCases()
+const summaryWorkspace = ref<InstanceType<typeof FamilySummaryWorkspace>>()
 const demo = useQuery({
   queryKey: computed(() => queryKey('family-life-preview')),
   queryFn: loadDemoState,
@@ -29,7 +31,9 @@ const fetching = computed(() =>
   mode === 'demo' ? demo.isFetching.value : cases.isFetching.value,
 )
 function refresh() {
-  return mode === 'demo' ? demo.refetch() : cases.refetch()
+  return mode === 'demo'
+    ? demo.refetch()
+    : Promise.all([cases.refetch(), summaryWorkspace.value?.refresh()])
 }
 </script>
 <template>
@@ -85,44 +89,48 @@ function refresh() {
       </ol>
     </template>
     <template v-else>
-      <div class="data-section">
-        <QueryFeedback
-          :loading="cases.isPending.value"
-          :error="cases.error.value"
-          @retry="cases.refetch()"
-        /><el-table
-          v-if="!cases.isPending.value && !cases.error.value"
-          :data="cases.data.value ?? []"
-          empty-text="暂无公开内容"
-        >
-          <el-table-column
-            prop="subject"
-            label="诉求"
-            min-width="200"
-          /><el-table-column
-            label="状态"
-            min-width="100"
+      <FamilySummaryWorkspace ref="summaryWorkspace" />
+      <details class="family-management">
+        <summary>家属问题与公开回复</summary>
+        <div class="data-section">
+          <QueryFeedback
+            :loading="cases.isPending.value"
+            :error="cases.error.value"
+            @retry="cases.refetch()"
+          /><el-table
+            v-if="!cases.isPending.value && !cases.error.value"
+            :data="cases.data.value ?? []"
+            empty-text="暂无公开内容"
           >
-            <template #default="{ row }">
-              <StatusLabel
-                :status="row.status"
-                kind="family"
-              />
-            </template>
-          </el-table-column><el-table-column
-            prop="reply"
-            label="公开回复"
-            min-width="280"
-          />
-        </el-table>
-      </div>
-      <p class="muted">
-        在下方新建家属账号、授权老人、编写并审核简报，以及回复家属问题。
-      </p>
-      <WorkflowPanel
-        group="family"
-        title="家属账号、授权与服务沟通"
-      />
+            <el-table-column
+              prop="subject"
+              label="诉求"
+              min-width="200"
+            /><el-table-column
+              label="状态"
+              min-width="100"
+            >
+              <template #default="{ row }">
+                <StatusLabel
+                  :status="row.status"
+                  kind="family"
+                />
+              </template>
+            </el-table-column><el-table-column
+              prop="reply"
+              label="公开回复"
+              min-width="280"
+            />
+          </el-table>
+        </div>
+      </details>
+      <details class="family-management">
+        <summary>家属账号、授权与其他办理</summary>
+        <WorkflowPanel
+          group="family"
+          title="家属账号与授权管理"
+        />
+      </details>
     </template>
   </section>
 </template>
@@ -130,6 +138,25 @@ function refresh() {
 .family-page {
   min-width: 0;
   overflow-wrap: anywhere;
+}
+.family-management {
+  margin-top: 20px;
+  padding: 16px 20px;
+  border: 1px solid var(--hl-border, #dce5df);
+  border-radius: 12px;
+  background: #fffefa;
+}
+.family-management > summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  color: #285f4c;
+  font-weight: 600;
+}
+.family-management > summary:focus-visible {
+  outline: 3px solid #4282b5;
+  outline-offset: 3px;
 }
 .life-timeline {
   list-style: none;

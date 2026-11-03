@@ -23,6 +23,7 @@ import {
 } from '../../composables/useTaskFilters'
 import FeedbackState from '../../components/FeedbackState.vue'
 import { elderWorkbench } from './elder-workbench'
+import { personalWork } from '../../../../../packages/shared/src/workflow/care-worklist'
 import { taskPrimaryLabel, taskTime } from '../../composables/task-presentation'
 const tasks = useTasks()
 const elders = useElders()
@@ -33,6 +34,8 @@ const { filters, filtered, shifts, assignees, sync, reset } = useTaskFilters(
   () => tasks.data.value ?? [],
   () => elders.data.value ?? [],
 )
+const allWorkOpen = ref(mode === 'demo')
+const myWork = computed(() => personalWork(worklist.data.value))
 const filterOpen = ref(false)
 const limit = ref(30)
 const elderLimit = ref(12)
@@ -49,7 +52,7 @@ const elderCards = computed(() => {
     elder: byId.get(item.elder.id) ?? {
       id: item.elder.id,
       name: item.elder.name,
-      bedLabel: '床位信息未提供',
+      bedLabel: item.elder.bed_label || '床位信息未提供',
       status: item.elder.status,
       notes: undefined,
       lastUpdate: undefined,
@@ -128,6 +131,7 @@ function refresh() {
   if (mode === 'api') void worklist.refetch()
 }
 async function scrollToTasks() {
+  allWorkOpen.value = true
   await nextTick()
   const heading = document.getElementById('care-task-list')
   heading?.focus({ preventScroll: true })
@@ -139,7 +143,7 @@ async function scrollToTasks() {
   })
 }
 async function focusElderTasks(elderId: string) {
-  // The shortcut means all tasks for this elder, regardless of earlier filters.
+  allWorkOpen.value = true
   await router.push({ path: '/caregiver', query: { elder: elderId } })
   await scrollToTasks()
 }
@@ -186,11 +190,19 @@ watch(
         <ShieldAlert :size="18" aria-hidden="true" />照护安全与事件上报
         <ChevronRight :size="18" aria-hidden="true" />
       </RouterLink>
-      <p class="scope-label">
+      <section v-if="mode === 'api'" class="personal-work" aria-label="本人当班任务">
+        <h2>我的当班任务 <span>{{ ready ? myWork.current.length : '—' }} 项</span></h2>
+        <p v-for="shift in worklist.data.value?.current_shifts || []" :key="String(shift.id)" class="scope-label">{{ shift.display_label || shift.name }}</p>
+        <FeedbackState :loading="pending" :error="queryError" :empty="ready && !myWork.current.length" empty-text="当前班次没有待执行任务。" @retry="refresh" />
+        <ul v-if="ready" class="personal-task-list"><li v-for="task in myWork.current" :key="task.id"><RouterLink :to="'/tasks/' + encodeURIComponent(task.id)"><span class="personal-task-meta">{{ task.elder_name }} · {{ task.bed_label || '床位待补充' }}<b :class="{'personal-overdue':task.status==='overdue'}">{{ taskStatusLabels[task.status] || '状态待核实' }}</b></span><strong>{{ task.title }}</strong><span>截止 {{ taskTime(task.due_at || '') }}</span><span class="personal-action">{{ task.status === 'in_progress' ? '反馈执行结果' : '查看任务并开始' }} →</span></RouterLink></li></ul>
+        <section v-if="ready && myWork.other.length" class="other-responsibilities"><h3>其他未结责任 · {{ myWork.other.length }} 项</h3><p class="scope-label">包含旧班次、未来安排和未归入当前班次的本人任务。</p><ul class="personal-task-list"><li v-for="task in myWork.other.slice(0, 3)" :key="task.id"><RouterLink :to="'/tasks/' + encodeURIComponent(task.id)"><strong>{{ task.elder_name }} · {{ task.title }}</strong><span :class="{'personal-overdue':task.status==='overdue'}">{{ taskStatusLabels[task.status] }} · 截止 {{ taskTime(task.due_at || '') }}</span></RouterLink></li></ul><details v-if="myWork.other.length > 3"><summary>查看其余 {{ myWork.other.length - 3 }} 项责任</summary><ul class="personal-task-list"><li v-for="task in myWork.other.slice(3)" :key="task.id"><RouterLink :to="'/tasks/' + encodeURIComponent(task.id)"><strong>{{ task.elder_name }} · {{ task.title }}</strong><span>{{ taskStatusLabels[task.status] }} · 截止 {{ taskTime(task.due_at || '') }}</span></RouterLink></li></ul></details></section>
+        <button type="button" class="all-work-toggle" :aria-expanded="allWorkOpen" @click="allWorkOpen = !allWorkOpen">{{ allWorkOpen ? '收起全部任务与筛选' : '查看全部可见任务与筛选' }}</button>
+      </section>
+      <p v-if="allWorkOpen" class="scope-label">
         <RouterLink to="/followups">查看需要跟进的事项</RouterLink>
         已载入任务统计
       </p>
-      <dl class="work-summary" aria-label="已载入任务统计">
+      <dl v-if="allWorkOpen" class="work-summary" aria-label="已载入任务统计">
         <div>
           <dd>{{ ready ? statistics.total : '—' }}</dd>
           <dt>全部任务</dt>
@@ -204,6 +216,7 @@ watch(
           <dt>已完成</dt>
         </div>
       </dl>
+      <details class="elder-context-list"><summary>按老人查看与记录</summary>
       <section class="elder-workbench" aria-labelledby="workbench-elders-title">
         <h2 id="workbench-elders-title">先看老人</h2>
         <p class="scope-label">
@@ -305,7 +318,8 @@ watch(
           显示更多老人
         </button>
       </section>
-      <div class="search-tools">
+      </details>
+      <div v-if="allWorkOpen" class="search-tools">
         <van-search
           v-model="filters.q"
           aria-label="搜索任务、老人或床位"
@@ -329,6 +343,7 @@ watch(
         </button>
       </div>
       <van-tabs
+        v-if="allWorkOpen"
         :active="
           tabs.some((tab) => tab.value === filters.status)
             ? filters.status
@@ -349,7 +364,7 @@ watch(
         />
       </van-tabs>
     </div>
-    <div id="care-task-list" class="list-heading" tabindex="-1">
+    <div v-show="allWorkOpen" id="care-task-list" class="list-heading" tabindex="-1">
       <span role="status">{{
         ready && selectedElder
           ? `${selectedElder.name}的相关任务 · 当前 ${filtered.length} 项`
@@ -362,13 +377,14 @@ watch(
       </button>
     </div>
     <FeedbackState
+      v-if="allWorkOpen"
       :loading="pending"
       :error="queryError"
       :empty="ready && !filtered.length"
       :empty-text="statistics.total ? '没有匹配任务，请调整筛选' : '暂无任务'"
       @retry="refresh"
     />
-    <div v-if="ready && visible.length" class="task-list">
+    <div v-if="allWorkOpen && ready && visible.length" class="task-list">
       <RouterLink
         v-for="task in visible"
         :key="task.id"
@@ -421,7 +437,7 @@ watch(
       </RouterLink>
     </div>
     <van-button
-      v-if="ready && visible.length < filtered.length"
+      v-if="allWorkOpen && ready && visible.length < filtered.length"
       block
       plain
       icon="arrow-down"
@@ -458,7 +474,7 @@ watch(
       <div class="sheet-body">
         <div class="filter-grid">
           <label class="select-field"
-            >老人<select
+            >老人<CareSelect
               v-model="filters.elder"
               aria-label="老人"
               @change="sync"
@@ -471,30 +487,30 @@ watch(
               >
                 {{ item.name }} · {{ item.bedLabel }}
               </option>
-            </select></label
+            </CareSelect></label
           >
           <label class="select-field"
-            >班次<select
+            >班次<CareSelect
               v-model="filters.shift"
               aria-label="班次"
               @change="sync"
             >
               <option value="">全部班次</option>
               <option v-for="item in shifts" :key="item">{{ item }}</option>
-            </select></label
+            </CareSelect></label
           >
           <label class="select-field"
-            >责任人<select
+            >责任人<CareSelect
               v-model="filters.assignee"
               aria-label="责任人"
               @change="sync"
             >
               <option value="">全部责任人</option>
               <option v-for="item in assignees" :key="item">{{ item }}</option>
-            </select></label
+            </CareSelect></label
           >
           <label class="select-field"
-            >状态<select
+            >状态<CareSelect
               v-model="filters.status"
               aria-label="状态"
               @change="sync"
@@ -507,15 +523,15 @@ watch(
               >
                 {{ label }}
               </option>
-            </select></label
+            </CareSelect></label
           >
         </div>
         <label class="select-field"
-          >排序<select v-model="filters.sort" aria-label="排序" @change="sync">
+          >排序<CareSelect v-model="filters.sort" aria-label="排序" @change="sync">
             <option value="source">原始顺序</option>
             <option value="due_asc">截止时间从早到晚</option>
             <option value="due_desc">截止时间从晚到早</option>
-          </select></label
+          </CareSelect></label
         >
       </div>
       <footer class="sheet-footer">
@@ -529,6 +545,9 @@ watch(
   </section>
 </template>
 <style scoped>
+.personal-work { padding-top:6px; }.personal-work h2 { font-size:20px; }.personal-work h2 span { color:#627467; font-size:14px; font-weight:400; }
+.personal-task-list { list-style:none; padding:0; margin:12px 0; display:grid; gap:10px; }.personal-task-list a { display:flex; flex-direction:column; gap:9px; padding:16px; background:#fffef9; border:1px solid #d7e3d7; border-radius:14px; color:#293d31; text-decoration:none; }.personal-task-meta { display:flex; flex-wrap:wrap; gap:8px; font-size:13px; }.personal-task-meta b { margin-left:auto; font-weight:500; }.personal-task-list strong { font-size:17px; line-height:1.5; }.personal-task-list a>span:not(.personal-task-meta) { font-size:13px; }.personal-task-list .personal-action { color:#31654c; font-weight:600; }.personal-overdue { color:#ad3128; }.other-responsibilities { border-top:1px solid #e0dfd5; padding-top:12px; }.other-responsibilities h3 { font-size:16px; }.all-work-toggle,.elder-context-list>summary { min-height:44px; padding:12px 0; color:#3b6650; }.all-work-toggle { border:0; background:none; font:inherit; }.elder-context-list { margin-top:10px; }.elder-context-list summary { cursor:pointer; }
+
 .task-primary-action {
   display: inline-flex;
   align-items: center;

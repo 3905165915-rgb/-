@@ -2,7 +2,7 @@ import contract from './contract.json'
 import { acceptDemoBatch, demoBatch } from '../demo-batch'
 import { clearSession, readSession, type Role } from '../session'
 import { sameCareSession } from './task-care-context'
-import { date as businessDateInput } from './workspace-time'
+import { date as businessDateInput, localTime } from './workspace-time'
 
 export type Row = Record<string, unknown>
 export interface Schema {
@@ -701,7 +701,9 @@ export async function request(
         draft_already_confirmed_refresh_record:
           '该AI草稿已经确认，本次内容未覆盖原记录。请查看正式记录，需修改时使用追加更正。',
       }
-      const message = Array.isArray(detail)
+      const message = typeof data?.safe_message === 'string'
+        ? data.safe_message
+        : Array.isArray(detail)
         ? detail
             .map(
               (x: Row) =>
@@ -716,8 +718,9 @@ export async function request(
           : '服务返回异常，请重试或联系主管核对。'
       throw new WorkflowRequestError(
         res.status,
-        `${res.status === 409 && !errors[String(detail)] ? '资料或状态已变化，请刷新后核对。' : res.status === 503 ? 'AI暂不可用，可重试或转人工记录。' : ''}${message}`,
-        typeof detail === 'string' ? detail : undefined,
+        `${!data?.safe_message && res.status === 409 && !errors[String(detail)] ? '资料或状态已变化，请刷新后核对。' : !data?.safe_message && res.status === 503 ? 'AI暂不可用，可重试或转人工记录。' : ''}${message}`,
+        typeof data?.error_code === 'string' ? data.error_code : typeof detail === 'string' ? detail : undefined,
+        data,
       )
     }
     if (data === null && res.status !== 204)
@@ -726,6 +729,16 @@ export async function request(
         '服务器响应格式异常，写入结果待核实，不能重新创建操作。',
       )
     return data
+  } catch (failure) {
+    if (failure instanceof WorkflowRequestError) throw failure
+    throw new WorkflowRequestError(
+      0,
+      method.toLowerCase() === 'get'
+        ? '未能读取服务器资料，请检查连接后重试。'
+        : '服务器尚未确认保存结果。输入已保留，请先查看最新状态；需要重试时沿用本次请求编号。',
+      controller.signal.aborted ? 'request_timeout' : 'network_unconfirmed',
+      { retryable: true },
+    )
   } finally {
     clearTimeout(timeout)
   }
@@ -775,8 +788,9 @@ async function authorizedRequest<T>(
             : '请求未完成，请核对后重试。'
       throw new WorkflowRequestError(
         response.status,
-        `${response.status === 409 ? '资料或状态已变化，请刷新后核对。' : ''}${message}`,
+        `${!data?.safe_message && response.status === 409 ? '资料或状态已变化，请刷新后核对。' : ''}${message}`,
         typeof data?.error_code === 'string' ? data.error_code : undefined,
+        data,
       )
     }
     return await consume(response)
@@ -834,13 +848,38 @@ export async function requestBlob(
 }
 
 export class WorkflowRequestError extends Error {
+  readonly fieldErrors: Record<string, string>
+  readonly fieldPaths: string[]
+  readonly retryable: boolean
+  readonly conflictType: string | null
+  readonly reloadResource: { id: string; path: string | null; method: 'GET' } | null
   constructor(
     readonly status: number,
     message: string,
     readonly code?: string,
+    metadata?: unknown,
   ) {
     super(message)
+    this.name = 'WorkflowRequestError'
+    const data = metadata && typeof metadata === 'object' ? metadata as Row : {}
+    this.fieldErrors = {}
+    if (Array.isArray(data.field_errors)) {
+      for (const item of data.field_errors) {
+        if (item && typeof item === 'object' && typeof item.path === 'string' && typeof item.safe_message === 'string') this.fieldErrors[item.path] = item.safe_message
+      }
+    }
+    this.fieldPaths = Array.isArray(data.field_paths) ? data.field_paths.filter((path): path is string => typeof path === 'string') : Object.keys(this.fieldErrors)
+    this.retryable = data.retryable === true
+    this.conflictType = typeof data.conflict_type === 'string' ? data.conflict_type : null
+    const resource = data.reload_resource as Row | undefined
+    // Reload is deliberately read-only and stays inside the same API namespace.
+    const path = typeof resource?.path === 'string' && /^\/(?!\/)[\w%/-]+(?:\?[\w%=&.,:~-]*)?$/.test(resource.path) ? resource.path.replace(/^\/api\/v1(?=\/)/, '') : null
+    this.reloadResource = resource && typeof resource.id === 'string' && resource.method === 'GET' ? { id: resource.id, path, method: 'GET' } : null
   }
+}
+export function fieldError(errors: Record<string, string> | undefined, path: string): string {
+  if (!errors) return ''
+  return errors[path] || errors['body.' + path] || errors['query.' + path] || errors['path.' + path] || ''
 }
 export async function listAll(path: string): Promise<Row[]> {
   const result: Row[] = []
@@ -923,6 +962,18 @@ export function optionLabel(
     choices.findIndex((item) => item.id === row.id),
   )
   const name = raw && raw !== row.id ? raw : `${label(field)}${index + 1}`
+  if (resourceFor[field] === 'shifts') {
+    const stamp = (value: unknown) => typeof value === 'string' && /(Z|[+-]\d\d:\d\d)$/.test(value) && Number.isFinite(Date.parse(value)) ? localTime(new Date(value)).slice(0, 16).replace('T', ' ') : ''
+    const start = stamp(row.start_at), end = stamp(row.end_at)
+    const timing = start && end ? `${start}—${start.slice(0, 10) === end.slice(0, 10) ? end.slice(11) : end}` : '时间待核实'
+    const title = typeof row.display_label === 'string' && row.display_label ? row.display_label : `${name} · ${timing}`
+    return title + (row.state_label || row.status ? ` · ${String(row.state_label || display(row.status))}` : '')
+  }
+  if (resourceFor[field] === 'staff') return name + (row.role ? ` · ${display(row.role)}` : '')
+  if (resourceFor[field] === 'incidents') {
+    const title = typeof row.display_label === 'string' && row.display_label || typeof row.description === 'string' && row.description.trim().slice(0, 100) || '事件内容待补充'
+    return [title, row.elder_name, row.state_label || (row.status ? display(row.status) : '')].filter(Boolean).join(' · ')
+  }
   if (resourceFor[field] === 'elders') {
     const sameName = choices.filter((item) => rowName(item) === raw)
     if (sameName.length < 2) return name

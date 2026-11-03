@@ -1,5 +1,7 @@
 <script setup lang="ts">
-withDefaults(
+import { computed } from 'vue'
+import { toUiError } from '@hulao/api-client'
+const props = withDefaults(
   defineProps<{
     loading?: boolean
     error?: unknown
@@ -9,7 +11,8 @@ withDefaults(
   { emptyText: '暂无数据', error: undefined },
 )
 defineEmits<{ retry: [] }>()
-import { errorMessage } from '../services/data'
+const failure = computed(() => toUiError(props.error))
+const fieldMessages = computed(() => [...new Set(Object.values(failure.value.fieldErrors || {}))])
 </script>
 <template>
   <div
@@ -24,14 +27,23 @@ import { errorMessage } from '../services/data'
     />
     <p>加载失败</p>
     <p class="muted">
-      {{ errorMessage(error) }}
+      {{ failure.message }}
     </p>
+    <ul v-if="fieldMessages.length">
+      <li
+        v-for="message in fieldMessages"
+        :key="message"
+      >
+        {{ message }}
+      </li>
+    </ul>
     <van-button
+      v-if="failure.canRetry || failure.status === 409"
       size="small"
       icon="replay"
       @click="$emit('retry')"
     >
-      重新加载
+      {{ failure.status === 409 ? '读取最新资料' : '重新加载' }}
     </van-button>
   </div>
   <div

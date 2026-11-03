@@ -4,7 +4,8 @@
 - Android：Vue 3 + Vant + Capacitor
 - 管理网站：Vue 3 + Element Plus
 - 后端：Python + FastAPI
-- 数据库：SQLAlchemy + Alembic
+- 持久化：schema 10 JSON 文件、FileLock 与原子替换；部署只运行一个 Uvicorn worker。
+- 事务数据库迁移尚未实施，迁移与回滚方案见 backend/deploy/TRANSACTION_STORAGE_PLAN.md。
 
 ## 人员分工
 - 成员A：frontend/

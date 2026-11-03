@@ -317,7 +317,7 @@ onBeforeUnmount(() => {
     <div v-if="managing" class="workspace-actions">
       <label>搜索提示<input v-model="query" type="search" /></label>
       <label
-        >提示状态<select v-model="status">
+        >提示状态<CareSelect v-model="status">
           <option value="">全部</option>
           <option
             v-for="(name, key) in {
@@ -329,7 +329,7 @@ onBeforeUnmount(() => {
           >
             {{ name }}
           </option>
-        </select></label
+        </CareSelect></label
       >
     </div>
     <p v-if="loading" role="status">正在读取生活照护提示…</p>
@@ -414,13 +414,13 @@ onBeforeUnmount(() => {
         <fieldset :disabled="busy || !!pending || loading">
           <template v-if="kind === 'record'">
             <label
-              >老人本次回应<select v-model="response" aria-label="老人本次回应">
+              >老人本次回应<CareSelect v-model="response" aria-label="老人本次回应">
                 <option value="willing">本人愿意参加</option>
                 <option value="alternative">选择其他活动</option>
                 <option value="rest">想休息</option>
                 <option value="declined">不愿意参加</option>
                 <option value="unclear">暂未得到明确回应</option>
-              </select></label
+              </CareSelect></label
             >
             <label
               >实际询问与回应<textarea
@@ -432,11 +432,10 @@ onBeforeUnmount(() => {
               />
             </label>
             <label
-              >实际发生时间（北京时间）<input
+              >实际发生时间（北京时间）<CareDateTime
                 v-model="happened"
                 type="datetime-local"
-                required
-            /></label>
+                required /></label>
           </template>
           <label v-else
             >处理说明<textarea

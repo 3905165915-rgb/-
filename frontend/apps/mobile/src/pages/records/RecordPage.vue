@@ -305,7 +305,7 @@ async function restoreDraft() {
         恢复本机草稿 <span class="muted">{{ drafts.length }} 项</span>
       </summary>
       <label class="select-field"
-        >恢复草稿<select v-model="restoreId" :disabled="busy">
+        >恢复草稿<CareSelect v-model="restoreId" :disabled="busy">
           <option value="">请选择</option>
           <option
             v-for="draft in drafts"
@@ -317,7 +317,7 @@ async function restoreDraft() {
             {{ phaseLabels[draft.phase] }} ·
             {{ formatBusinessTime(draft.updatedAt) }}
           </option>
-        </select></label
+        </CareSelect></label
       ><van-button
         size="small"
         :disabled="!restoreId || busy"
@@ -342,7 +342,7 @@ async function restoreDraft() {
       <div class="form-band">
         <h2>护理记录</h2>
         <label class="select-field"
-          >老人<select
+          >老人<CareSelect
             :value="editor.elderId"
             :disabled="frozen"
             @change="switchElder"
@@ -364,7 +364,7 @@ async function restoreDraft() {
             >
               {{ elder.name }} · {{ elder.bedLabel }}
             </option>
-          </select></label
+          </CareSelect></label
         >
         <van-field
           v-model="editor.text"

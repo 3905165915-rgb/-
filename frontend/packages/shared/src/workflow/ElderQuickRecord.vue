@@ -529,7 +529,7 @@ onBeforeUnmount(() => {
           : '服务器未提供当前入住关联'
       }}</span>
       <label
-        >班次<select v-model="shiftId" :disabled="busy">
+        >班次<CareSelect v-model="shiftId" :disabled="busy">
           <option value="">不关联班次</option>
           <option
             v-for="shift in shifts"
@@ -538,14 +538,13 @@ onBeforeUnmount(() => {
           >
             {{ shift.name }} · {{ workspaceDate(shift.start_at) }}
           </option>
-        </select></label
+        </CareSelect></label
       >
       <label
-        >实际发生时间<input
+        >实际发生时间<CareDateTime
           v-model="happenedAt"
           type="datetime-local"
-          :disabled="busy"
-      /></label>
+          :disabled="busy" /></label>
     </div>
     <p>先保存本次观察，稍后核对整理出的偏好和跟进建议。</p>
     <p
@@ -561,7 +560,7 @@ onBeforeUnmount(() => {
     <CareGuidance :elder-id="elderId" :scene="scene" />
     <form @submit.prevent="save">
       <label
-        >照护场景<select v-model="scene" :disabled="busy || !!pending">
+        >照护场景<CareSelect v-model="scene" :disabled="busy || !!pending">
           <option
             v-for="(label, value) in careScenes"
             :key="value"
@@ -569,7 +568,7 @@ onBeforeUnmount(() => {
           >
             {{ label }}
           </option>
-        </select></label
+        </CareSelect></label
       >
       <label
         >本次记录<textarea
@@ -735,11 +734,11 @@ onBeforeUnmount(() => {
             }}
           </p>
           <label
-            >核对决定<select v-model="item.decision" :disabled="confirmLocked">
+            >核对决定<CareSelect v-model="item.decision" :disabled="confirmLocked">
               <option value="">请选择</option>
               <option value="adopt">加入个人印象</option>
               <option value="reject">暂不加入</option>
-            </select></label
+            </CareSelect></label
           >
           <label v-if="item.decision === 'adopt'"
             >确认展示的个人特性<input
@@ -748,12 +747,11 @@ onBeforeUnmount(() => {
               :disabled="confirmLocked"
           /></label>
           <label v-if="item.decision === 'adopt' && item.needsTimeConfirmation"
-            >本次适用到（北京时间）<input
+            >本次适用到（北京时间）<CareDateTime
               v-model="item.expiresAt"
               type="datetime-local"
               :disabled="confirmLocked"
-              required
-          /></label>
+              required /></label>
         </article>
         <h5 v-if="tasks.length">待办建议</h5>
         <article
@@ -794,7 +792,7 @@ onBeforeUnmount(() => {
                 :disabled="confirmLocked"
             /></label>
             <label
-              >班次<select v-model="item.shiftId" :disabled="confirmLocked">
+              >班次<CareSelect v-model="item.shiftId" :disabled="confirmLocked">
                 <option value="">选择开放班次</option>
                 <option
                   v-for="shift in shifts"
@@ -803,10 +801,10 @@ onBeforeUnmount(() => {
                 >
                   {{ shift.name }} · {{ workspaceDate(shift.start_at) }}
                 </option>
-              </select></label
+              </CareSelect></label
             >
             <label
-              >责任人<select
+              >责任人<CareSelect
                 v-model="item.assignedTo"
                 :disabled="confirmLocked || !item.shiftId"
               >
@@ -825,20 +823,18 @@ onBeforeUnmount(() => {
                 >
                   {{ person.display_name }}
                 </option>
-              </select></label
+              </CareSelect></label
             >
             <label
-              >服务时间（如已确定）<input
+              >服务时间（如已确定）<CareDateTime
                 v-model="item.scheduledAt"
                 type="datetime-local"
-                :disabled="confirmBusy"
-            /></label>
+                :disabled="confirmBusy" /></label>
             <label
-              >截止时间<input
+              >截止时间<CareDateTime
                 v-model="item.dueAt"
                 type="datetime-local"
-                :disabled="confirmLocked"
-            /></label>
+                :disabled="confirmLocked" /></label>
             <label v-if="analysis.taskSuggestions[index]?.suggestedAt"
               >调整时间的说明（如有调整请填写）<input
                 v-model="item.timeChangeReason"

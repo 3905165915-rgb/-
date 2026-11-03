@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { resultActionLabel } from './result-actions'
+import { incidentTitle } from './workflow-presentation'
 import { label, display, optionLabel, resourceFor, type Row } from './model'
 const props = withDefaults(
   defineProps<{
@@ -26,6 +27,7 @@ const omit = new Set([
   'password_hash',
   'access_token',
   'token_version',
+  'workflow',
 ])
 const task = computed(
   () =>
@@ -36,6 +38,7 @@ const task = computed(
     typeof object.value.status === 'string' &&
     ('assigned_to' in object.value || 'due_at' in object.value),
 )
+const incident = computed(() => object.value && typeof object.value.id === 'string' && object.value.id.startsWith('INCIDENT-') && 'description' in object.value)
 const primaryKeys = [
   'title',
   'elder_id',
@@ -77,9 +80,21 @@ function readable(value: unknown, field: string) {
 }
 </script>
 <template>
-  <div v-if="array" class="wf-result-list">
-    <p v-if="!array.length" class="wf-muted">暂无记录</p>
-    <article v-for="(item, index) in array" :key="index" class="wf-result-item">
+  <div
+    v-if="array"
+    class="wf-result-list"
+  >
+    <p
+      v-if="!array.length"
+      class="wf-muted"
+    >
+      暂无记录
+    </p>
+    <article
+      v-for="(item, index) in array"
+      :key="index"
+      class="wf-result-item"
+    >
       <WorkflowResult
         :value="item"
         :depth="depth + 1"
@@ -88,7 +103,21 @@ function readable(value: unknown, field: string) {
       />
     </article>
   </div>
-  <div v-else-if="object" class="wf-result-object">
+  <div
+    v-else-if="object"
+    class="wf-result-object"
+  >
+    <template v-if="incident">
+      <h3 class="wf-event-title">
+        {{ incidentTitle(object) }}
+      </h3>
+      <p class="wf-muted">
+        {{ object.elder_name || readable(object.elder_id, 'elder_id') }} · {{ object.state_label || display(object.status, 'status') }} · {{ display(object.occurred_at, 'occurred_at') }}
+      </p>
+      <details v-if="object.description && object.display_label && object.display_label !== object.description">
+        <summary>展开现场描述</summary><p>{{ object.description }}</p>
+      </details>
+    </template>
     <button
       v-if="object.id || object.occurrence_key"
       class="wf-secondary wf-select-row"
@@ -118,23 +147,27 @@ function readable(value: unknown, field: string) {
         />
       </details>
     </template>
-    <template v-for="(item, key) in task ? {} : object" :key="key">
+    <template
+      v-for="(item, key) in task ? {} : object"
+      :key="key"
+    >
       <details
         v-if="
           !omit.has(String(key)) &&
-          item &&
-          typeof item === 'object' &&
-          (!Array.isArray(item) || item.length > 0)
+            !(incident && ['display_label', 'elder_name', 'elder_id', 'status', 'state_label', 'occurred_at', 'description'].includes(String(key))) &&
+            item &&
+            typeof item === 'object' &&
+            (!Array.isArray(item) || item.length > 0)
         "
         :open="
           depth < 2 ||
-          [
-            'evidence',
-            'citations',
-            'issues',
-            'warnings',
-            'memory_candidates',
-          ].includes(String(key))
+            [
+              'evidence',
+              'citations',
+              'issues',
+              'warnings',
+              'memory_candidates',
+            ].includes(String(key))
         "
         class="wf-result-details"
       >
@@ -149,9 +182,11 @@ function readable(value: unknown, field: string) {
           @select="emit('select', $event)"
         />
       </details>
-      <div v-else-if="!omit.has(String(key))" class="wf-result-line">
-        <span>{{ label(String(key)) }}</span
-        ><strong
+      <div
+        v-else-if="!omit.has(String(key)) && !(incident && ['display_label', 'elder_name', 'elder_id', 'status', 'state_label', 'occurred_at', 'description'].includes(String(key)))"
+        class="wf-result-line"
+      >
+        <span>{{ label(String(key)) }}</span><strong
           :class="{
             'wf-evidence': [
               'quote',
@@ -160,12 +195,14 @@ function readable(value: unknown, field: string) {
               'snapshot_text',
             ].includes(String(key)),
           }"
-          >{{ readable(item, String(key)) }}</strong
-        >
+        >{{ readable(item, String(key)) }}</strong>
       </div>
     </template>
   </div>
-  <p v-else class="wf-result-scalar">
+  <p
+    v-else
+    class="wf-result-scalar"
+  >
     {{ display(value) }}
   </p>
 </template>

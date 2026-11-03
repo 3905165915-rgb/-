@@ -17,7 +17,7 @@ watch(() => props.elderId, () => { scene.value = 'communication'; expanded.value
       <ul><li v-for="task in (expanded ? related : related.slice(0, 3))" :key="String(task.id)">{{ task.title }} · {{ display(task.status) }} · {{ display(task.due_at, 'due_at') }}</li></ul>
       <button v-if="related.length > 3" type="button" class="wf-secondary" :aria-expanded="expanded" @click="expanded = !expanded">{{ expanded ? '收起已有任务' : '查看其余 ' + (related.length - 3) + ' 项任务' }}</button>
     </template>
-    <label class="wf-field"><span>照护提示场景</span><select v-model="scene"><option value="communication">沟通</option><option value="dining">饮食</option><option value="bathing">洗浴</option><option value="activity">活动</option><option value="rest">休息</option><option value="other">其他</option></select></label>
+    <label class="wf-field"><span>照护提示场景</span><CareSelect v-model="scene"><option value="communication">沟通</option><option value="dining">饮食</option><option value="bathing">洗浴</option><option value="activity">活动</option><option value="rest">休息</option><option value="other">其他</option></CareSelect></label>
     <ServiceCareHints :elder-id="elderId" :scene="scene" />
   </section>
 </template>

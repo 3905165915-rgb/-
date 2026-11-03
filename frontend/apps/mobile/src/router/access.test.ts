@@ -41,7 +41,7 @@ describe('route and menu policy', () => {
         { path: '/records', label: '记录' },
         { path: '/elders', label: '老人' },
         { path: '/handover', label: '交班' },
-        { path: '/notifications', label: '照护跟进' },
+        { path: '/notifications', label: '待办' },
         { path: '/account', label: '我的' },
       ])
       expect(homeForRole(role)).toBe('/caregiver')

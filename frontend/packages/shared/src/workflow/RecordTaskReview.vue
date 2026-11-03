@@ -43,12 +43,12 @@ function add() {
       <p v-if="row.include_task === false" class="wf-muted">本项不创建，原文仍随记录保存；可重新勾选。</p>
       <template v-else>
         <label class="wf-field"><span>要做的事<b> *</b></span><input :aria-label="'第' + (index + 1) + '项要做的事'" :value="row.title || ''" maxlength="300" @input="update(index, 'title', ($event.target as HTMLInputElement).value)" /></label>
-        <label class="wf-field"><span>负责人<b> *</b></span><select :aria-label="'第' + (index + 1) + '项负责人'" :value="row.assigned_to || ''" @change="update(index, 'assigned_to', ($event.target as HTMLSelectElement).value)">
+        <label class="wf-field"><span>负责人<b> *</b></span><CareSelect :aria-label="'第' + (index + 1) + '项负责人'" :value="row.assigned_to || ''" @change="update(index, 'assigned_to', ($event.target as HTMLSelectElement).value)">
           <option value="">请选择负责人</option><option v-for="person in owners" :key="String(person.id)" :value="String(person.id)">{{ person.display_name || '工作人员' }}</option>
-        </select></label>
+        </CareSelect></label>
         <button v-if="me && row.assigned_to !== me.id" type="button" class="wf-secondary" @click="update(index, 'assigned_to', me.id)">本项由我负责</button>
         <p v-if="!owners.length" class="wf-notice">当前没有可安排的负责人，请核对班次；护理员只能安排给本人，其他分工由主管处理。</p>
-        <label class="wf-field"><span>截止时间<b> *</b></span><input type="datetime-local" step="1" :aria-label="'第' + (index + 1) + '项截止时间'" :value="localTime(row.due_at)" @input="update(index, 'due_at', ($event.target as HTMLInputElement).value)" /></label>
+        <label class="wf-field"><span>截止时间<b> *</b></span><CareDateTime type="datetime-local" step="1" :aria-label="'第' + (index + 1) + '项截止时间'" :value="localTime(row.due_at)" @input="update(index, 'due_at', ($event.target as HTMLInputElement).value)" /></label>
         <p class="wf-muted">时间选择器按当前设备时区填写；带时区的识别结果会自动换算。</p>
         <label class="wf-field"><span>执行前提</span><textarea :aria-label="'第' + (index + 1) + '项执行前提'" :value="String(row.condition || '')" rows="2" placeholder="没有前提可留空；如本人同意后" @input="update(index, 'condition', ($event.target as HTMLTextAreaElement).value)" /></label>
         <p v-if="row.condition" class="wf-notice">创建不代表前提已满足，执行前仍需按任务流程核验。</p>

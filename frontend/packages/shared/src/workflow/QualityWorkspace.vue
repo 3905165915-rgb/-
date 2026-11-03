@@ -2,7 +2,6 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import WorkflowPanel from './WorkflowPanel.vue'
-import CareFollowups from './CareFollowups.vue'
 import { listAll, request, type Row } from './model'
 import { object, rows, workspaceDate } from './workspace-action'
 import { useWorkspaceScope } from './workspace-scope'
@@ -10,11 +9,11 @@ import { qualityFeedback } from './quality-check'
 const scope = useWorkspaceScope(), route = useRoute()
 const context = computed(() => ({ ...route.query, elder_id: route.query.elder_id || route.query.elder }))
 const report = ref<Row|null>(null), history = ref<Row[]>([]), historyError = ref(''), reportError = ref('')
-const historyOpen = ref(false), loading = ref(false), selectedIssue = ref(''), revision = ref(0)
+const historyOpen = ref(false), loading = ref(false), selectedIssue = ref('')
 let epoch = 0
 function accept(value:unknown) { qualityFeedback(value); return object(value) }
 async function updated(value?:unknown) {
-  try {if(value) report.value=accept(value); selectedIssue.value=''; revision.value++; if(historyOpen.value)await loadHistory()}
+  try {if(value) report.value=accept(value); selectedIssue.value=''; if(historyOpen.value)await loadHistory()}
   catch(failure){reportError.value=(failure as Error).message}
 }
 async function loadHistory() {
@@ -59,6 +58,6 @@ onBeforeUnmount(()=>epoch++)
       <p v-if="!loading&&!historyError&&!history.length">当前范围没有历史检查报告。</p>
       <ul><li v-for="entry in history" :key="String(entry.id)"><button type="button" @click="selectReport(String(entry.id))">{{workspaceDate(entry.created_at)}} · {{Array.isArray(entry.issues)?entry.issues.length:'未提供'}} 条提示</button></li></ul>
     </details>
-    <CareFollowups :key="revision" :elder-id="typeof context.elder_id==='string'?context.elder_id:undefined" />
+    <RouterLink :to="{path:'/notifications',query:{elder:context.elder_id}}">到工作收件箱处理待办与复查</RouterLink>
   </section>
 </template>

@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, useId } from 'vue'
+import CareSelect from '../ui/CareSelect.vue'
+import CareDateTime from '../ui/CareDateTime.vue'
+import type { OptionKind, OptionScope } from '../ui/remote-options'
 import RecordEvidencePicker from './RecordEvidencePicker.vue'
 import { localTime } from './workspace-time'
 import {
@@ -11,6 +14,7 @@ import {
   display,
   resourceFor,
   optionLabel,
+  fieldError,
 } from './model'
 const props = defineProps<{
   schema: Schema
@@ -20,10 +24,19 @@ const props = defineProps<{
   catalogs: Record<string, Row[]>
   optionOverrides?: Record<string, Row[]>
   path?: string
+  fieldErrors?: Record<string, string>
+  optionScope?: OptionScope
 }>()
 const emit = defineEmits<{ 'update:modelValue': [unknown] }>()
 const schema = computed(() => resolveSchema(props.schema))
 const fieldPath = computed(() => props.path || props.field)
+const errorId = useId()
+const errorMessage = computed(() => fieldError(props.fieldErrors, fieldPath.value))
+const remoteKind = computed(() => {
+  const kind = resourceFor[props.field]
+  return !props.optionOverrides?.[props.field] && ['elders', 'staff', 'shifts', 'incidents'].includes(kind) ? kind as OptionKind : undefined
+})
+const childScope = computed(() => ({ ...props.optionScope, ...(object.value.elder_id ? { elder_id: object.value.elder_id } : {}), ...(object.value.shift_id ? { shift_id: object.value.shift_id } : {}) }))
 const readonlyVersion = computed(() => /^(expected_.*(?:revision|fingerprint)|source_revision|revision)$/.test(props.field))
 const inputValue = computed(() => {
   const value = props.modelValue
@@ -119,25 +132,30 @@ const primitiveOptions = computed(
     :data-field="fieldPath"
   >
     <legend>{{ schema.properties?.severity && schema.properties?.category ? '事件分级' : label(field) }}<span v-if="required"> *</span></legend>
-    <template v-for="(child, key) in schema.properties" :key="key">
-    <RecordEvidencePicker
-      v-if="memoryEvidence && key === 'source_record_id'"
-      :model-value="object"
-      :records="catalogs.records || []"
-      :path="fieldPath"
-      @update:model-value="emit('update:modelValue', $event)"
-    />
-    <WorkflowField
-      v-else-if="!memoryEvidence || !evidenceFields.has(String(key))"
-      :schema="child"
-      :field="String(key)"
-      :path="fieldPath + '.' + key"
-      :required="schema.required?.includes(String(key))"
-      :model-value="object[key]"
-      :catalogs="catalogs"
-      :option-overrides="optionOverrides"
-      @update:model-value="updateField(String(key), $event)"
-    />
+    <template
+      v-for="(child, key) in schema.properties"
+      :key="key"
+    >
+      <RecordEvidencePicker
+        v-if="memoryEvidence && key === 'source_record_id'"
+        :model-value="object"
+        :records="catalogs.records || []"
+        :path="fieldPath"
+        @update:model-value="emit('update:modelValue', $event)"
+      />
+      <WorkflowField
+        v-else-if="!memoryEvidence || !evidenceFields.has(String(key))"
+        :schema="child"
+        :field="String(key)"
+        :path="fieldPath + '.' + key"
+        :required="schema.required?.includes(String(key))"
+        :model-value="object[key]"
+        :catalogs="catalogs"
+        :option-overrides="optionOverrides"
+        :field-errors="fieldErrors"
+        :option-scope="childScope"
+        @update:model-value="updateField(String(key), $event)"
+      />
     </template>
   </fieldset>
   <fieldset
@@ -146,7 +164,11 @@ const primitiveOptions = computed(
     :data-field="fieldPath"
   >
     <legend>{{ label(field) }}<span v-if="required"> *</span></legend>
-    <div v-for="(item, index) in array" :key="index" class="wf-array-item">
+    <div
+      v-for="(item, index) in array"
+      :key="index"
+      class="wf-array-item"
+    >
       <WorkflowField
         :schema="schema.items || {}"
         :field="field"
@@ -155,6 +177,8 @@ const primitiveOptions = computed(
         :required="true"
         :catalogs="catalogs"
         :option-overrides="optionOverrides"
+        :field-errors="fieldErrors"
+        :option-scope="optionScope"
         @update:model-value="setItem(index, $event)"
       />
       <button
@@ -175,11 +199,17 @@ const primitiveOptions = computed(
       添加{{ label(field) }}
     </button>
   </fieldset>
-  <label v-else class="wf-field" :data-field="fieldPath">
+  <label
+    v-else
+    class="wf-field"
+    :data-field="fieldPath"
+  >
     <span>{{ field === 'category' && primitiveOptions.includes('fall') ? '事件类别' : label(field) }}{{ schema.format === 'date-time' ? '（北京时间）' : '' }}<b v-if="required"> *</b></span>
-    <select
+    <CareSelect
       v-if="primitiveOptions.length"
       :value="modelValue ?? ''"
+      :aria-invalid="!!errorMessage || undefined"
+      :aria-describedby="errorMessage ? errorId : undefined"
       @change="input"
     >
       <option value="">请选择</option>
@@ -190,10 +220,14 @@ const primitiveOptions = computed(
       >
         {{ display(value) }}
       </option>
-    </select>
-    <select
+    </CareSelect>
+    <CareSelect
       v-else-if="resourceFor[field] || optionOverrides?.[field]"
       :value="modelValue ?? ''"
+      :option-kind="remoteKind"
+      :scope="optionScope"
+      :aria-invalid="!!errorMessage || undefined"
+      :aria-describedby="errorMessage ? errorId : undefined"
       @change="input"
     >
       <option value="">请选择{{ label(field) }}</option>
@@ -202,24 +236,42 @@ const primitiveOptions = computed(
         :value="String(modelValue)"
         disabled
       >原选项不可用于本次操作，请重新选择</option>
-      <option v-for="row in options" :key="String(row.id)" :value="row.id">
+      <option
+        v-for="row in options"
+        :key="String(row.id)"
+        :value="row.id"
+      >
         {{ optionLabel(field, row, options, catalogs) }}
       </option>
-    </select>
-    <select
+    </CareSelect>
+    <CareSelect
       v-else-if="schema.type === 'boolean'"
       :value="modelValue === '' || modelValue == null ? '' : String(modelValue)"
+      :aria-invalid="!!errorMessage || undefined"
+      :aria-describedby="errorMessage ? errorId : undefined"
       @change="input"
     >
       <option value="">请选择（不修改）</option>
       <option value="true">是</option>
       <option value="false">否</option>
-    </select>
+    </CareSelect>
     <textarea
       v-else-if="longText"
       :value="String(modelValue ?? '')"
       :maxlength="schema.maxLength"
       rows="3"
+      :aria-invalid="!!errorMessage || undefined"
+      :aria-describedby="errorMessage ? errorId : undefined"
+      @input="input"
+    />
+    <CareDateTime
+      v-else-if="schema.format === 'date-time' || schema.format === 'date'"
+      :type="schema.format === 'date-time' ? 'datetime-local' : 'date'"
+      :value="inputValue"
+      :required="required"
+      :step="schema.format === 'date-time' ? 1 : undefined"
+      :aria-invalid="!!errorMessage || undefined"
+      :aria-describedby="errorMessage ? errorId : undefined"
       @input="input"
     />
     <input
@@ -230,12 +282,20 @@ const primitiveOptions = computed(
       :min="schema.minimum"
       :max="schema.maximum"
       :maxlength="schema.maxLength"
+      :aria-invalid="!!errorMessage || undefined"
+      :aria-describedby="errorMessage ? errorId : undefined"
       :step="
         schema.type === 'integer' || schema.format === 'date-time'
           ? 1
           : undefined
       "
       @input="input"
-    />
+    >
+    <small
+      v-if="errorMessage"
+      :id="errorId"
+      class="wf-field-error"
+      role="alert"
+    >{{ errorMessage }}</small>
   </label>
 </template>
