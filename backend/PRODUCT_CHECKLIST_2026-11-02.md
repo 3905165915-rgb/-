@@ -97,13 +97,13 @@ GET /items/{id}/timeline 保留旧数组，可选envelope=true返回分页总数
 ## 18 可靠性与存储
 
 核实源码schema10、JSON+FileLock+原子替换，以及服务模板单worker。新增离线storage_manifest.py，校验源文件、集合及被引用照片摘要，不初始化或改写源数据。事务数据库的停机、备份、完整导入和分阶段回滚方案见deploy/TRANSACTION_STORAGE_PLAN.md；当前没有实现或执行数据库迁移。
-2026-11-03通过SSH核实服务active：代码位于/opt/hulaozhijiao/app/backend，单Uvicorn worker监听127.0.0.1:8100，实际存储/var/lib/hulaozhijiao/store.json为schema10，Nginx配置检查通过。备份timer已启用，最近一次自动备份成功。公网健康接口HTTP200，environment=demo、schema_version=10。新提交部署与恢复核验按实际发布结果记录。
+2026-11-03通过SSH核实服务active：代码位于/opt/hulaozhijiao/app/backend，单Uvicorn worker监听127.0.0.1:8100，实际存储/var/lib/hulaozhijiao/store.json为schema10，Nginx配置检查通过。备份timer已启用。本轮发布已备份代码、网页、配置及含照片的数据，隔离文件恢复manifest一致、恢复副本健康检查通过，实际代码替换前后store字节摘要与配置保持不变。详见[正式发布记录](RELEASE_PRODUCT_CHECKLIST_2026-11-03.md)。
 验证：17项离线清单、存储写入、备份和照片恢复测试通过。
 
 ## 19 常规业务验收与发布准备
 
 使用pytest隔离临时目录、虚构账号和Mock模型跑最终常规业务回归，822项通过、6项筛除；真实模型用例未执行。覆盖本轮契约、状态、并发、幂等、审计、版本和离线恢复。最终JUnit结果保存在工作区task_tmp/product-final-results.xml；第20项已纳入。前端862项单测、两端类型检查与部署构建通过，lint为0错误。
-截至本项完成未推送、合并或部署。用户随后已授权在前后端任务与联调通过后上传仓库及线上部署，发布须另记真实结果。
+前后端已分别上传feat/backend与feat/frontend并完成服务器部署。服务器Python3.10回归807项通过、1个模块跳过、6项筛除，无测试失败；跳过模块中的15项已在Windows通过。发布源码、备份与运行核验见[正式发布记录](RELEASE_PRODUCT_CHECKLIST_2026-11-03.md)。
 
 ## 20 家属简报选记录、预览与发布
 
@@ -112,4 +112,4 @@ GET /items/{id}/timeline 保留旧数组，可选envelope=true返回分页总数
 
 ## 前后端集成验收
 
-真实本地HTTP与隔离合成数据：核心流程58项、控件82项、家属简报生命周期22项、入住/事件/回放/排期24项检查通过。294次授权页面读取巡检通过，覆盖管理、主管、护理员及护士。逐页索引与测试范围见frontend/docs/逐页验收索引_2026-11-03.md，20项接入见frontend/docs/产品清单验收_2026-11-03.md。正式部署结果在发布记录中补记。
+真实本地HTTP与隔离合成数据：核心流程58项、控件82项、家属简报生命周期22项、入住/事件/回放/排期24项检查通过。按最新主管入口范围，最终252次常规与32次补充授权页面读取巡检全部通过，共284次。逐页索引与测试范围见前端分支frontend/docs/逐页验收索引_2026-11-03.md，20项接入见frontend/docs/产品清单验收_2026-11-03.md。服务器发布结果见[正式发布记录](RELEASE_PRODUCT_CHECKLIST_2026-11-03.md)。
