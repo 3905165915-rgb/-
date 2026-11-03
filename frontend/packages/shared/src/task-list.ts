@@ -1,3 +1,4 @@
+import { businessDay } from './business-time'
 import type { Elder, Task } from './types'
 export interface TaskFilters {
   elder: string
@@ -15,21 +16,28 @@ export const emptyTaskFilters = (): TaskFilters => ({
   q: '',
   sort: 'source',
 })
+
+// Legacy task responses omit contentType; those rows remain follow-up tasks.
+export function isFollowupTask(task: Pick<Task, 'contentType'>): boolean {
+  return (
+    task.contentType === undefined || task.contentType === 'followup_task'
+  )
+}
+
 export function taskDeadline(value: string, today = new Date()) {
   const relative = /^(今天|昨天|明天) (\d{2}):(\d{2})(?::(\d{2}))?$/.exec(value)
+  let absolute = value
   if (relative) {
-    const day = new Date(
-      today.getFullYear(),
-      today.getMonth(),
-      today.getDate() + ({ 今天: 0, 昨天: -1, 明天: 1 }[relative[1]!] ?? 0),
-      Number(relative[2]),
-      Number(relative[3]),
-      Number(relative[4] ?? 0),
+    const day = new Date(businessDay(today) + 'T00:00:00Z')
+    day.setUTCDate(
+      day.getUTCDate() + ({ 今天: 0, 昨天: -1, 明天: 1 }[relative[1]!] ?? 0),
     )
-    return day.getTime()
+    absolute = `${day.toISOString().slice(0, 10)}T${relative[2]}:${relative[3]}:${relative[4] || '00'}+08:00`
+  } else if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?$/.test(value)) {
+    // Legacy domestic display values have Beijing clock semantics.
+    absolute = value + '+08:00'
   }
-  const parsed = /^\d{4}-\d{2}-\d{2}/.test(value) ? Date.parse(value) : NaN
-  return Number.isFinite(parsed) ? parsed : undefined
+  return businessDay(absolute) ? Date.parse(absolute) : undefined
 }
 export function filterTasks(
   rows: Task[],
@@ -42,6 +50,7 @@ export function filterTasks(
   const q = filters.q.trim().toLowerCase()
   const filtered = rows.filter(
     (task) =>
+      isFollowupTask(task) &&
       (!filters.elder || task.elderId === filters.elder) &&
       (!filters.shift || task.shift === filters.shift) &&
       (!filters.assignee || task.assignee === filters.assignee) &&

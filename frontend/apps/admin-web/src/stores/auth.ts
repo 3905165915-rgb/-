@@ -13,6 +13,7 @@ export const roleLabels: Record<Role, string> = {
   admin: '管理员',
   supervisor: '主管',
   caregiver: '护理员',
+  nurse: '护士',
   family: '家属',
 }
 export const useAuthStore = defineStore('auth', () => {
@@ -23,11 +24,32 @@ export const useAuthStore = defineStore('auth', () => {
     const next: FrontendSession = {
       mode,
       accountKey: username.trim(),
+      userId: result.user_id,
       role: normalizeRole(result.role),
       accessToken: mode === 'api' ? result.access_token : undefined,
     }
     if (mode === 'api' && !next.accessToken)
       throw new Error('登录响应缺少凭证。')
+    if (!next.role) throw new Error('登录响应缺少有效角色，请重新登录。')
+    saveSession(next)
+    session.value = next
+    queryClient.clear()
+  }
+  async function demoRoleLogin(selected: Role) {
+    if (mode === 'demo') {
+      demoLogin(selected)
+      return
+    }
+    const result = await gateway.demoLogin(selected)
+    const next: FrontendSession = {
+      mode,
+      accountKey: result.display_name || roleLabels[selected],
+      userId: result.user_id,
+      role: normalizeRole(result.role),
+      accessToken: result.access_token,
+    }
+    if (!next.accessToken || next.role !== selected)
+      throw new Error('演示登录响应与所选身份不一致，请重试。')
     saveSession(next)
     session.value = next
     queryClient.clear()
@@ -48,5 +70,5 @@ export const useAuthStore = defineStore('auth', () => {
     session.value = null
     queryClient.clear()
   }
-  return { session, role, login, demoLogin, logout }
+  return { session, role, login, demoLogin, demoRoleLogin, logout }
 })

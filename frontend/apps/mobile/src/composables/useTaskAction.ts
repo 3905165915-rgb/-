@@ -24,6 +24,7 @@ import {
   snapshotTaskEditor,
 } from '@hulao/shared'
 import { toUiError } from '@hulao/api-client'
+import { taskActionAllowed } from './task-presentation'
 import {
   accountKey,
   mode,
@@ -40,6 +41,7 @@ import {
 export function useTaskAction(
   taskId: () => string,
   draftId: () => string | undefined = () => undefined,
+  enabled: () => boolean = () => true,
 ) {
   const form = ref<TaskEditor>()
   const busy = ref(false)
@@ -80,7 +82,7 @@ export function useTaskAction(
       !taskQuery.error.value &&
       taskQuery.data.value?.some(
         (task) =>
-          task.id === taskId() && isKnownStatus(taskStatusMeta, task.status),
+          task.id === taskId() && taskActionAllowed(task, form.value!.action),
       ),
     ),
   )
@@ -90,6 +92,7 @@ export function useTaskAction(
   const operationKey = (id: string) => JSON.stringify([mode, id])
   const snapshot = () => snapshotTaskEditor(toRaw(form.value!))
   async function initialize(fresh = false, durable = false) {
+    if (!enabled()) return
     const current = ++generation
     clearTimeout(timer)
     loading.value = true
@@ -321,6 +324,10 @@ export function useTaskAction(
       if (['completed', 'not_done', 'cancelled'].includes(task.status)) {
         await phase('submitted')
         message.value = '任务已结束，请以最新状态为准。'
+        return
+      }
+      if (!taskActionAllowed(task, form.value.action)) {
+        message.value = '任务状态已变化，请重新选择操作。'
         return
       }
       claimed = await claimWriteAttempt(attemptKey)

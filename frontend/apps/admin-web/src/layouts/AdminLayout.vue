@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import SafetyAlertBar from '@hulao/shared/safety-alert'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   Activity,
   ArrowLeftRight,
   BedDouble,
+  Bell,
   ChevronDown,
   ChevronRight,
   ClipboardCheck,
@@ -20,11 +22,12 @@ import {
   MessagesSquare,
   NotebookPen,
   ShieldCheck,
+  UsersRound,
   X,
 } from 'lucide-vue-next'
 import { getReducedTransparency, setReducedTransparency } from '@hulao/shared'
 import { useAuthStore, roleLabels } from '../stores/auth'
-import { allowedRoutes } from '../router/access'
+import { allowedNavigationGroups, allowedRoutes, homeForRole } from '../router/access'
 import { mode } from '../services/data'
 import ClearLocalDraftsButton from '../components/ClearLocalDraftsButton.vue'
 
@@ -32,44 +35,20 @@ const auth = useAuthStore()
 const router = useRouter()
 const route = useRoute()
 const navigationOpen = ref(false)
+const compactNavigation = ref(false)
+const compactQuery = window.matchMedia('(max-width: 760px)')
+function compactChanged() { compactNavigation.value = compactQuery.matches }
+onMounted(() => { compactChanged(); compactQuery.addEventListener('change', compactChanged) })
+onBeforeUnmount(() => compactQuery.removeEventListener('change', compactChanged))
 const accountOpen = ref(false)
 const accountElement = ref<HTMLElement>()
 const drafts = ref<InstanceType<typeof ClearLocalDraftsButton>>()
 const reducedTransparency = ref(getReducedTransparency())
 const preferenceError = ref('')
-const menu = computed(() =>
-  allowedRoutes(auth.role).filter(
-    (item) => mode === 'demo' || item.path !== '/demo',
-  ),
-)
-const definitions = [
-  {
-    label: '护理业务',
-    paths: [
-      '/dashboard',
-      '/tasks',
-      '/elders',
-      '/admission',
-      '/assessment',
-      '/care-plan',
-    ],
-  },
-  {
-    label: '质量与协作',
-    paths: ['/quality', '/coverage', '/changes', '/family', '/timeline'],
-  },
-  { label: '演示管理', paths: ['/demo'] },
-]
 const groups = computed(() =>
-  definitions
-    .map((group) => ({
-      ...group,
-      items: group.paths.flatMap((path) =>
-        menu.value.filter((item) => item.path === path),
-      ),
-    }))
-    .filter((group) => group.items.length),
+  allowedNavigationGroups(auth.role, mode === 'demo'),
 )
+const menu = computed(() => allowedRoutes(auth.role))
 const activeItem = computed(() =>
   menu.value.find(
     (item) =>
@@ -77,12 +56,31 @@ const activeItem = computed(() =>
   ),
 )
 const activeGroup = computed(
-  () =>
-    groups.value.find((group) =>
-      group.items.some((item) => item.path === activeItem.value?.path),
-    )?.label,
+  () => activeItem.value?.group,
 )
+const relatedMenu = computed(() => menu.value.filter(item =>
+  item.group === activeGroup.value && item.path !== '/demo' &&
+  !groups.value.some(group => group.items.some(main => main.path === item.path)),
+))
+const navigationElement = ref<HTMLElement>()
+const navigationToggle = ref<HTMLButtonElement>()
+watch(navigationOpen, async value => {
+  await nextTick()
+  if (value) navigationElement.value?.querySelector<HTMLElement>('a,button')?.focus()
+  else navigationToggle.value?.focus()
+})
+function navigationKey(event: KeyboardEvent) {
+  if (!navigationOpen.value) return
+  if (event.key === 'Escape') { navigationOpen.value = false; return }
+  if (event.key !== 'Tab') return
+  const targets = Array.from(navigationElement.value?.querySelectorAll<HTMLElement>('a,button:not(:disabled)') || [])
+  const first = targets[0], last = targets[targets.length - 1]
+  if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus() }
+  else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus() }
+}
 const icons = {
+  '/followups': ShieldCheck,
+  '/settings': Menu,
   '/dashboard': LayoutDashboard,
   '/tasks': ListChecks,
   '/elders': ContactRound,
@@ -95,6 +93,15 @@ const icons = {
   '/family': MessagesSquare,
   '/timeline': History,
   '/demo': FlaskConical,
+  '/workflows/records': NotebookPen,
+  '/workflows/shifts': ClipboardCheck,
+  '/workflows/handovers': ClipboardList,
+  '/workflows/memories': ContactRound,
+  '/workflows/staff': UsersRound,
+  '/workflows/incidents': ShieldCheck,
+  '/workflows/reports': LayoutDashboard,
+  '/recovery': History,
+  '/notifications': Bell,
 }
 function changeTransparency(event: Event) {
   const value = (event.target as HTMLInputElement).checked
@@ -129,29 +136,22 @@ function leaveAccount(event: FocusEvent) {
   <div class="admin-layout">
     <aside
       id="admin-navigation"
+      ref="navigationElement"
       class="admin-sidebar"
       :class="{ 'is-open': navigationOpen }"
       aria-label="管理端导航"
+      :inert="compactNavigation && !navigationOpen || undefined"
+      :aria-hidden="compactNavigation && !navigationOpen || undefined"
+      @keydown="navigationKey"
     >
-      <RouterLink
-        :to="menu[0]?.path || '/403'"
-        class="brand"
-      >
-        <span class="brand-mark"><Activity
-          :size="24"
-          aria-hidden="true"
+      <RouterLink :to="homeForRole(auth.role)" class="brand">
+        <span class="brand-mark"
+          ><Activity :size="24" aria-hidden="true"
         /></span>
         <span class="brand-copy">护老智交<small>护理协作管理</small></span>
       </RouterLink>
-      <nav
-        class="side-menu"
-        aria-label="业务导航"
-      >
-        <div
-          v-for="group in groups"
-          :key="group.label"
-          class="nav-group"
-        >
+      <nav class="side-menu" aria-label="业务导航">
+        <div v-for="group in groups" :key="group.label" class="nav-group">
           <p class="nav-group-label">
             {{ group.label }}
           </p>
@@ -160,7 +160,7 @@ function leaveAccount(event: FocusEvent) {
             :key="item.path"
             :to="item.path"
             class="nav-link"
-            :class="{ 'is-active': activeItem?.path === item.path }"
+            :class="{ 'is-active': activeItem?.path === item.path || (item.path !== '/demo' && activeGroup === group.label) }"
             :aria-current="activeItem?.path === item.path ? 'page' : undefined"
             :title="item.label"
           >
@@ -172,25 +172,20 @@ function leaveAccount(event: FocusEvent) {
             <span>{{ item.label }}</span>
           </RouterLink>
         </div>
-        <div class="nav-group">
-          <p class="nav-group-label">
-            本机记录
-          </p>
-          <button
-            class="nav-link"
-            type="button"
-            title="打开本机草稿"
-            @click="showDrafts"
-          >
-            <Files
-              :size="18"
-              aria-hidden="true"
-            /><span>草稿管理</span>
-          </button>
-        </div>
       </nav>
+      <div class="sidebar-tools">
+        <button
+          class="nav-link"
+          type="button"
+          title="打开本机草稿"
+          @click="showDrafts"
+        >
+          <Files :size="18" aria-hidden="true" /><span>草稿管理</span>
+        </button>
+      </div>
       <div class="sidebar-foot">
-        <span class="status-dot" /><span>管理端</span><span>{{ mode === 'demo' ? '演示模式' : '正式模式' }}</span>
+        <span class="status-dot" /><span>管理端</span
+        ><span>{{ mode === 'demo' ? '本机模拟' : '连接服务器' }}</span>
       </div>
     </aside>
     <button
@@ -199,10 +194,11 @@ function leaveAccount(event: FocusEvent) {
       aria-label="收起导航"
       @click="navigationOpen = false"
     />
-    <div class="admin-workspace">
+    <div class="admin-workspace" :inert="navigationOpen || undefined">
       <header class="page-header hl-glass">
         <button
           class="icon-button navigation-toggle"
+          ref="navigationToggle"
           type="button"
           :aria-expanded="navigationOpen"
           aria-controls="admin-navigation"
@@ -216,22 +212,39 @@ function leaveAccount(event: FocusEvent) {
           />
         </button>
         <div class="breadcrumb">
-          <span>{{ activeGroup }}</span><ChevronRight
-            :size="14"
-            aria-hidden="true"
-          /><strong>{{
+          <span>{{ activeGroup }}</span
+          ><ChevronRight :size="14" aria-hidden="true" /><strong>{{
             activeItem?.label || '管理端'
           }}</strong>
         </div>
         <div class="header-actions">
-          <span
-            class="mode-label"
-            :class="{ 'is-demo': mode === 'demo' }"
-          ><FlaskConical
-            v-if="mode === 'demo'"
-            :size="14"
-            aria-hidden="true"
-          />{{ mode === 'demo' ? '虚构演示' : '正式模式' }}</span>
+          <button
+            type="button"
+            class="identity-switch"
+            aria-label="切换身份"
+            title="切换身份"
+            @click="logout"
+          >
+            <ArrowLeftRight :size="17" aria-hidden="true" /><span
+              >切换身份</span
+            >
+          </button>
+          <RouterLink
+            v-if="auth.role && auth.role !== 'family'"
+            to="/notifications"
+            class="icon-button"
+            title="消息"
+            aria-label="消息"
+          >
+            <Bell :size="20" aria-hidden="true" />
+          </RouterLink>
+          <span class="mode-label" :class="{ 'is-demo': mode === 'demo' }"
+            ><FlaskConical
+              v-if="mode === 'demo'"
+              :size="14"
+              aria-hidden="true"
+            />{{ mode === 'demo' ? '本机模拟' : '服务器数据' }}</span
+          >
           <ClearLocalDraftsButton ref="drafts" />
           <div
             ref="accountElement"
@@ -242,7 +255,10 @@ function leaveAccount(event: FocusEvent) {
             <button
               type="button"
               class="account-button"
-              :aria-label="'当前账号 · ' + (auth.role ? roleLabels[auth.role] : '权限未识别')"
+              :aria-label="
+                '当前账号 · ' +
+                (auth.role ? roleLabels[auth.role] : '权限未识别')
+              "
               :aria-expanded="accountOpen"
               aria-controls="account-panel"
               @click="accountOpen = !accountOpen"
@@ -252,10 +268,8 @@ function leaveAccount(event: FocusEvent) {
               }}</span>
               <span class="account-role">{{
                 auth.role ? roleLabels[auth.role] : '权限未识别'
-              }}</span><ChevronDown
-                :size="14"
-                aria-hidden="true"
-              />
+              }}</span
+              ><ChevronDown :size="14" aria-hidden="true" />
             </button>
             <div
               v-if="accountOpen"
@@ -268,12 +282,14 @@ function leaveAccount(event: FocusEvent) {
               <p class="muted">
                 管理端 · {{ auth.role ? roleLabels[auth.role] : '权限未识别' }}
               </p>
-              <label class="preference-toggle"><span>降低透明度</span><input
-                type="checkbox"
-                role="switch"
-                :checked="reducedTransparency"
-                @change="changeTransparency"
-              ></label>
+              <label class="preference-toggle"
+                ><span>降低透明度</span
+                ><input
+                  type="checkbox"
+                  role="switch"
+                  :checked="reducedTransparency"
+                  @change="changeTransparency"
+              /></label>
               <p
                 v-if="preferenceError"
                 class="warning-text preference-error"
@@ -281,23 +297,30 @@ function leaveAccount(event: FocusEvent) {
               >
                 {{ preferenceError }}
               </p>
-              <button
-                type="button"
-                class="account-logout"
-                @click="logout"
-              >
-                <LogOut
-                  :size="17"
-                  aria-hidden="true"
-                />退出登录
+              <button type="button" class="account-logout" @click="logout">
+                <LogOut :size="17" aria-hidden="true" />退出登录
               </button>
             </div>
           </div>
         </div>
       </header>
       <main class="admin-main">
+        <SafetyAlertBar :key="auth.role || 'guest'" />
+        <nav v-if="relatedMenu.length" class="workspace-subnav" aria-label="当前业务相关入口">
+          <RouterLink v-for="item in relatedMenu" :key="item.path" :to="item.path" :aria-current="activeItem?.path === item.path ? 'page' : undefined">{{ item.label }}</RouterLink>
+        </nav>
         <RouterView />
       </main>
     </div>
   </div>
 </template>
+
+<style scoped>
+.workspace-subnav { display:flex; flex-wrap:wrap; gap:8px 16px; margin-bottom:16px; border-bottom:1px solid var(--hl-border); }
+.workspace-subnav a { display:inline-flex; align-items:center; min-height:44px; }
+.workspace-subnav a[aria-current] { font-weight:700; border-bottom:2px solid var(--hl-primary); }
+.sidebar-tools {
+  padding: 8px 12px 0;
+  border-top: 1px solid var(--hl-border, #dce3e7);
+}
+</style>

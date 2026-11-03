@@ -4,17 +4,17 @@
   --hl-surface: #ffffff;
   --hl-ink: #20282e;
   --hl-muted: #5f6b73;
-  --hl-primary: #1767cf;
+  --hl-primary: #14765e;
   --hl-brand: #14765e;
   --hl-success: #14765e;
   --hl-warning: #946000;
   --hl-danger: #be3545;
   --hl-border: #dce3e7;
-  --hl-primary-soft: #edf4ff;
+  --hl-primary-soft: #edf7f2;
   --hl-success-soft: #edf7f2;
   --hl-warning-soft: #fff6e5;
   --hl-danger-soft: #fff0f1;
-  --hl-radius: 8px;
+  --hl-radius: 14px;
   --hl-space-1: 4px;
   --hl-space-2: 8px;
   --hl-space-3: 12px;
@@ -38,12 +38,12 @@
   --van-cell-font-size: 16px;
   --van-field-label-color: var(--hl-ink);
   --el-color-primary: var(--hl-primary);
-  --el-color-primary-light-3: #5d95dd;
-  --el-color-primary-light-5: #8bb3e7;
-  --el-color-primary-light-7: #b9d1f1;
-  --el-color-primary-light-8: #d1e1f8;
-  --el-color-primary-light-9: #edf4ff;
-  --el-color-primary-dark-2: #1252a6;
+  --el-color-primary-light-3: #5b9f8e;
+  --el-color-primary-light-5: #8abbae;
+  --el-color-primary-light-7: #b9d6cf;
+  --el-color-primary-light-8: #d0e4df;
+  --el-color-primary-light-9: #edf7f2;
+  --el-color-primary-dark-2: #105e4b;
   --el-color-success: var(--hl-success);
   --el-color-warning: var(--hl-warning);
   --el-color-danger: var(--hl-danger);
@@ -53,7 +53,7 @@
   --el-bg-color: var(--hl-surface);
   --el-bg-color-page: var(--hl-canvas);
   --el-border-color: var(--hl-border);
-  --el-border-radius-base: 6px;
+  --el-border-radius-base: 10px;
 }
 
 .hl-glass {
@@ -110,4 +110,25 @@
 :focus-visible {
   outline: 2px solid var(--hl-primary);
   outline-offset: 3px;
+}
+
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .metric-card,
+  .elder-work-card {
+    transition:
+      transform var(--hl-duration),
+      box-shadow var(--hl-duration);
+  }
+  .metric-card:hover,
+  .elder-work-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgb(32 40 46 / 8%);
+  }
+}
+@media (hover: none) and (prefers-reduced-motion: no-preference) {
+  .task-row:active,
+  .elder-work-card:active,
+  .metric-card:active {
+    transform: scale(0.995);
+  }
 }

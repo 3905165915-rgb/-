@@ -26,10 +26,23 @@ const router = createRouter({
       component: () => import('../layouts/AdminLayout.vue'),
       meta: { requiresAuth: true },
       children: [
+        { path: 'followups', component: () => import('../pages/workflows/FollowupsPage.vue'), meta: { roles: internalRoles } },
+        { path: 'settings', component: () => import('../pages/workflows/SettingsPage.vue'), meta: { roles: internalRoles } },
+        {
+          path: 'workflows/:group',
+          component: () => import('../pages/workflows/WorkflowsPage.vue'),
+          meta: { roles: internalRoles },
+        },
         { path: '', redirect: () => homeForRole(readSession()?.role ?? null) },
         {
           path: 'dashboard',
           component: () => import('../pages/dashboard/DashboardPage.vue'),
+          meta: { roles: internalRoles },
+        },
+        {
+          path: 'notifications',
+          component: () =>
+            import('../pages/notifications/NotificationsPage.vue'),
           meta: { roles: internalRoles },
         },
         {
@@ -92,22 +105,41 @@ const router = createRouter({
           component: () => import('../pages/demo/DemoPage.vue'),
           meta: { roles: internalRoles },
         },
+        {
+          path: 'recovery',
+          component: () => import('../pages/recovery/RecoveryPage.vue'),
+          meta: { roles: internalRoles },
+        },
       ],
     },
     { path: '/:pathMatch(.*)*', redirect: '/403' },
   ],
 })
 router.beforeEach((to) => {
-  const current = readSession()
-  session.value = current
-  if (current && current.mode !== mode) {
+  let current = readSession()
+  if (
+    !current ||
+    current.mode !== mode ||
+    !current.role ||
+    (mode === 'api' && !current.accessToken?.trim())
+  ) {
     clearSession()
-    session.value = null
+    current = null
     queryClient.clear()
-    return '/login'
+  }
+  session.value = current
+  if (
+    (current?.role === 'caregiver' || current?.role === 'family') &&
+    (to.meta.requiresAuth || ['/login', '/403'].includes(to.path))
+  ) {
+    window.location.replace(
+      current.role === 'family' ? '/mobile/family' : '/mobile/',
+    )
+    return false
   }
   if (to.meta.requiresAuth && !current) return '/login'
   if (to.path === '/login' && current) return homeForRole(current.role)
+  if (to.path === '/403') return homeForRole(current?.role ?? null)
   const roles = to.meta.roles as readonly Role[] | undefined
   if (roles && !canAccess(current?.role ?? null, roles)) return '/403'
 })

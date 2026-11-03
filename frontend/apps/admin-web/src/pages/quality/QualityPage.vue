@@ -1,9 +1,4 @@
 <script setup lang="ts">
-import UnsupportedPreview from '../../components/UnsupportedPreview.vue'
+import QualityWorkspace from '../../../../../packages/shared/src/workflow/QualityWorkspace.vue'
 </script>
-<template>
-  <UnsupportedPreview
-    title="质检台"
-    kind="quality"
-  />
-</template>
+<template><QualityWorkspace /></template>

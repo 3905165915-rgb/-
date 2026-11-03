@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import UnsupportedPreview from '../../components/UnsupportedPreview.vue'
+import { useRoute } from 'vue-router'
+import ChangeReviewCenter from '../../../../../packages/shared/src/workflow/ChangeReviewCenter.vue'
+const route = useRoute()
 </script>
 <template>
-  <UnsupportedPreview
-    title="变化简报"
-    kind="changes"
-  />
+  <ChangeReviewCenter :context="route.query" />
 </template>

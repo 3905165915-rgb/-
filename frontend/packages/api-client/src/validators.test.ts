@@ -209,11 +209,12 @@ describe('optional fields and enums', () => {
     }
   })
 
-  it('does not guess snake_case fields or synthesize absent values', () => {
+  it('maps documented snake_case fields while preserving absent receipt details', () => {
     const { elderId, ...task } = seed.tasks[0]
-    expect(() => parseTask({ ...task, elder_id: elderId }, endpoint)).toThrow(
-      ContractError,
-    )
+    expect(parseTask({ ...task, elder_id: elderId }, endpoint)).toMatchObject({
+      elderId,
+    })
+    expect(() => parseTask(task, endpoint)).toThrow(ContractError)
     const minimal = { ...seed.handover[0] }
     expect(parseHandoverItem(minimal, endpoint)).toBe(minimal)
     expect(Object.hasOwn(minimal, 'receivedAt')).toBe(false)

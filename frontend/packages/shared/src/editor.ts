@@ -31,6 +31,9 @@ export interface RecordEditor {
   }
   discardReason: string
   demoEpoch?: string
+  originalId?: string
+  originalRevision?: number
+  confirmedRecordId?: string
   ai?: {
     draft: RecordDraft
     localId: string

@@ -1,0 +1,171 @@
+import assert from 'node:assert/strict'
+import { chromium } from 'playwright'
+import { mkdir, writeFile } from 'node:fs/promises'
+const base = process.env.FAMILY_API_URL || 'http://127.0.0.1:5177',
+  api = process.env.FAMILY_BACKEND_URL || 'http://127.0.0.1:8769/api/v1'
+const out = 'test-results/family-life'
+await mkdir(out, { recursive: true })
+const login = await fetch(api + '/auth/login', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ username: 'family', password: 'family-browser-test' }),
+})
+assert.equal(login.status, 200, '隔离合成账号应能登录')
+const auth = await login.json()
+assert.equal(typeof auth.access_token, 'string')
+const browser = await chromium.launch({ headless: true, channel: 'msedge' })
+const context = await browser.newContext({
+  viewport: { width: 390, height: 844 },
+  reducedMotion: 'reduce',
+})
+const page = await context.newPage()
+const errors = []
+page.on('pageerror', (e) => errors.push(e.message))
+await context.addInitScript(
+  (token) =>
+    sessionStorage.setItem(
+      'hulao:session:v2',
+      JSON.stringify({
+        mode: 'api',
+        accountKey: 'synthetic-real-family',
+        role: 'family',
+        accessToken: token,
+      }),
+    ),
+  auth.access_token,
+)
+try {
+  await page.goto(base + '/mobile/family')
+  await page.locator('.family-member').filter({ hasText: '张阿姨' }).waitFor()
+  assert.equal(await page.locator('.family-member').count(), 2)
+  await page.getByRole('button', { name: '看看家人的近况' }).click()
+  await page.locator('.story-card').waitFor()
+  await page.locator('.digest-points').waitFor()
+  await page.locator('.story-photo img').waitFor()
+  assert.match(await page.locator('.digest-footnote').textContent(), /演示小结/)
+  await page
+    .getByLabel('给照护团队的留言')
+    .fill('合成联调：探望时想带相册，请确认方便的时段。')
+  await page.getByRole('button', { name: '把心意送达' }).click()
+  await page.getByText('心意已经送达，工作人员回复后会显示在这里。').waitFor()
+  await page.reload()
+  await page.locator('.family-member').first().waitFor()
+  await page.getByRole('button', { name: '看看家人的近况' }).click()
+  await page.locator('.letter-history').waitFor()
+  await page.locator('.letter-history>summary').click()
+  await page
+    .getByText('合成联调：探望时想带相册，请确认方便的时段。', { exact: true })
+    .first()
+    .waitFor()
+  await page.screenshot({
+    path: out + '/real-backend-wang-390.png',
+    fullPage: true,
+  })
+  await page.getByRole('button', { name: '切换家人' }).click()
+  await page.locator('.family-member').filter({ hasText: '李爷爷' }).click()
+  await page.getByRole('button', { name: '看看家人的近况' }).click()
+  await page.locator('.story-card').waitFor()
+  await page.locator('.digest-points').waitFor()
+  assert.equal(await page.locator('.letter-history').count(), 0)
+  assert.equal(
+    await page.locator('.story-card').filter({ hasText: '张阿姨' }).count(),
+    0,
+  )
+  const supervisorLogin = await fetch(api + '/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      username: 'manager',
+      password: 'family-browser-test',
+    }),
+  })
+  assert.equal(supervisorLogin.status, 200)
+  const supervisor = await supervisorLogin.json()
+  const management = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    reducedMotion: 'reduce',
+  })
+  await management.addInitScript(
+    (token) =>
+      sessionStorage.setItem(
+        'hulao:session:v2',
+        JSON.stringify({
+          mode: 'api',
+          accountKey: 'synthetic-manager',
+          role: 'supervisor',
+          accessToken: token,
+        }),
+      ),
+    supervisor.access_token,
+  )
+  const staff = await management.newPage()
+  staff.on('pageerror', (e) => errors.push(e.message))
+  const familyHeaders = { Authorization: 'Bearer ' + auth.access_token }
+  const bindings = await (
+    await fetch(api + '/family/me/bindings', { headers: familyHeaders })
+  ).json()
+  const binding = bindings.find((row) => row.elder_name === '张阿姨')
+  const before = await (
+    await fetch(api + '/family/me/bindings/' + binding.id + '/timeline', {
+      headers: familyHeaders,
+    })
+  ).json()
+  const photo = before.items[0].photos[0]
+  await staff.goto(
+    base +
+      '/mobile/records/new?elder=' +
+      encodeURIComponent(binding.elder_id) +
+      '&attachment_id=' +
+      encodeURIComponent(photo.id),
+  )
+  await staff
+    .getByRole('button', { name: '停止向家属展示', exact: true })
+    .waitFor()
+  await staff.getByLabel('分享说明').fill('合成联调：暂停展示照片')
+  await staff
+    .getByRole('button', { name: '停止向家属展示', exact: true })
+    .click()
+  await staff
+    .getByRole('button', { name: '向家属展示这张照片', exact: true })
+    .waitFor()
+  const hidden = await (
+    await fetch(api + '/family/me/bindings/' + binding.id + '/timeline', {
+      headers: familyHeaders,
+    })
+  ).json()
+  assert.equal(hidden.items[0].photos.length, 0)
+  await staff.getByLabel('分享说明').fill('合成联调：复核后继续展示')
+  await staff
+    .getByRole('button', { name: '向家属展示这张照片', exact: true })
+    .click()
+  await staff
+    .getByRole('button', { name: '停止向家属展示', exact: true })
+    .waitFor()
+  const visible = await (
+    await fetch(api + '/family/me/bindings/' + binding.id + '/timeline', {
+      headers: familyHeaders,
+    })
+  ).json()
+  assert.equal(visible.items[0].photos.length, 1)
+  await staff
+    .locator('.photo-family-sharing')
+    .screenshot({ path: out + '/real-photo-sharing-390.png' })
+  await management.close()
+  console.log(
+    'PASS 主管界面真实操作：撤回照片展示→家属不可见→再次分享→家属可见',
+  )
+  assert.deepEqual(errors, [])
+  console.log(
+    'PASS 真实FastAPI联调：两位虚构老人、已发布近况、私有照片、模拟小结、留言保存刷新、切换隔离',
+  )
+  await writeFile(
+    out + '/real-backend-results.json',
+    JSON.stringify(
+      { passed: true, model: 'mock', fixture: 'synthetic', errors },
+      null,
+      2,
+    ),
+  )
+} finally {
+  await browser.close()
+}

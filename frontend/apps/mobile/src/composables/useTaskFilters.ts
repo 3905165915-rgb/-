@@ -45,11 +45,19 @@ export function useTaskFilters(
     filters.value = emptyTaskFilters()
     sync()
   }
-  const filtered = computed(() => filterTasks(rows(), filters.value, elders()))
+  const filtered = computed(() => {
+    const query = filters.value.q.trim().toLowerCase()
+    const people = new Map(elders().map(elder => [elder.id, elder.name + ' ' + elder.bedLabel]))
+    const tasks = rows().map(task => ({ ...task, dueAt: task.deadlineAt || task.dueAt, shift: task.shiftName || task.shift }))
+    return filterTasks(tasks, { ...filters.value, q: '' }, elders()).filter(task =>
+      !query || [task.id, task.title, task.elderId, people.get(task.elderId), task.bedSnapshot, task.assignee, task.shift, task.result]
+        .join(' ').toLowerCase().includes(query),
+    )
+  })
   const shifts = computed(() => [
     ...new Set(
       rows()
-        .map((task) => task.shift)
+        .map((task) => task.shiftName || task.shift)
         .filter(Boolean),
     ),
   ])

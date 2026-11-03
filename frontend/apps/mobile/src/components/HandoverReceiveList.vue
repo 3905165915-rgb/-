@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import {
+  formatBusinessTime,
   isKnownStatus,
   handoverDisplayStatusMeta,
   resolveStatus,
@@ -33,7 +34,7 @@ async function receive(item: HandoverItem, status: 'received' | 'clarifying') {
   error.value = ''
   message.value = ''
   try {
-    await gateway.receiveHandover(item.id, { status, note: note || undefined })
+    await gateway.receiveHandover(item.id, { status, note: note || undefined, expectedEpoch: item.demoEpoch })
     notes.value[item.id] = ''
     await refreshData()
     emit('reload')
@@ -92,7 +93,7 @@ async function receive(item: HandoverItem, status: 'received' | 'clarifying') {
       </p>
       <p class="muted">
         接收人：{{ item.receivedBy || item.receiverId || '未提供' }} ·
-        接收时间：{{ item.receivedAt || '未提供' }}
+        接收时间：{{ item.receivedAt ? formatBusinessTime(item.receivedAt, true) : '未提供' }}
       </p>
       <p v-if="item.note">
         备注：{{ item.note }}

@@ -1,4 +1,7 @@
 <script setup lang="ts">
+const serverWorkflow = ['api'].includes(import.meta.env.VITE_APP_MODE || 'api')
+import HandoverWorkspace from '../../../../../packages/shared/src/workflow/HandoverWorkspace.vue'
+import { compactReference } from '@hulao/shared'
 import { ref, watch } from 'vue'
 import {
   onBeforeRouteLeave,
@@ -11,10 +14,16 @@ import { useTasks, useHandover, mode, session } from '../../services/data'
 import HandoverEditor from '../../components/HandoverEditor.vue'
 import HandoverReceiveList from '../../components/HandoverReceiveList.vue'
 import FeedbackState from '../../components/FeedbackState.vue'
+import HandoverQuick from '../../components/HandoverQuick.vue'
+import { isFollowupTask, readSession } from '@hulao/shared'
 const route = useRoute()
 const router = useRouter()
 const shift = ref(
-  typeof route.query.shift === 'string' ? route.query.shift : '',
+  typeof route.query.shift === 'string'
+    ? route.query.shift
+    : mode === 'demo'
+      ? '晚班'
+      : '',
 )
 const inputShift = ref(shift.value)
 const tab = ref('send')
@@ -39,7 +48,8 @@ function chooseShift(name: string) {
 watch(
   () => route.query.shift,
   (value) => {
-    shift.value = typeof value === 'string' ? value : ''
+    shift.value =
+      typeof value === 'string' ? value : mode === 'demo' ? '晚班' : ''
     inputShift.value = shift.value
   },
 )
@@ -57,16 +67,19 @@ async function leave() {
     return false
   }
 }
-onBeforeRouteLeave(leave)
-onBeforeRouteUpdate(leave)
+onBeforeRouteLeave(() => (mode === 'api' ? true : leave()))
+onBeforeRouteUpdate(() => (mode === 'api' ? true : leave()))
 </script>
 <template>
-  <section class="handover-page editor-page">
+  <HandoverWorkspace v-if="serverWorkflow" mobile :quick-composer="['caregiver', 'nurse'].includes(readSession()?.role || '')">
+    <template #composer><HandoverQuick /></template>
+  </HandoverWorkspace>
+  <section v-else class="handover-page editor-page">
     <h1>交接班</h1>
     <van-field
       v-model="inputShift"
-      label="班次编号"
-      placeholder="请输入班次编号"
+      label="交接班次"
+      placeholder="请选择或输入班次"
     >
       <template #button>
         <van-button
@@ -78,14 +91,14 @@ onBeforeRouteUpdate(leave)
         </van-button>
       </template>
     </van-field>
-    <div
-      v-if="mode === 'demo'"
-      class="action-row"
-    >
+    <div v-if="mode === 'demo'" class="action-row">
       <van-button
         v-for="name in [
           ...new Set(
-            tasks.data.value?.map((task) => task.shift).filter(Boolean),
+            tasks.data.value
+              ?.filter(isFollowupTask)
+              .map((task) => task.shift)
+              .filter(Boolean),
           ),
         ]"
         :key="name"
@@ -99,38 +112,26 @@ onBeforeRouteUpdate(leave)
       :loading="tasks.isPending.value"
       :error="tasks.error.value"
       @retry="tasks.refetch()"
-    /><van-empty
-      v-if="!shift"
-      description="请选择或输入班次编号"
-    />
+    /><van-empty v-if="!shift" description="请选择或输入交接班次" />
     <template v-else>
       <p class="muted">
-        班次编号：{{ shift }}
+        交接班次：{{ mode === 'demo' ? shift : compactReference(shift) }}
       </p>
-      <van-tabs
-        v-model:active="tab"
-        :lazy-render="false"
-      >
-        <van-tab
-          title="交班"
-          name="send"
-        >
+      <van-tabs v-model:active="tab" :lazy-render="false">
+        <van-tab title="交班" name="send">
           <HandoverEditor
             ref="editorRef"
             :shift-id="shift"
-            :tasks="tasks.error.value ? [] : (tasks.data.value ?? [])"
+            :tasks="
+              tasks.error.value
+                ? []
+                : (tasks.data.value ?? []).filter(isFollowupTask)
+            "
             :source-writable="!tasks.isPending.value && !tasks.error.value"
-          />
-        </van-tab><van-tab
-          title="接班"
-          name="receive"
-        >
+          /> </van-tab
+        ><van-tab title="接班" name="receive">
           <div class="action-row">
-            <van-button
-              size="small"
-              icon="replay"
-              @click="handover.refetch()"
-            >
+            <van-button size="small" icon="replay" @click="handover.refetch()">
               刷新接班事项
             </van-button>
           </div>

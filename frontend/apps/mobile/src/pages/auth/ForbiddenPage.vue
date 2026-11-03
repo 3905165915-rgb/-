@@ -14,7 +14,7 @@ function logout() {
     <van-empty description="当前账号无权访问此页面">
       <div class="action-row">
         <van-button
-          v-if="auth.role && homeForRole(auth.role) !== '/403'"
+          v-if="auth.role"
           @click="router.replace(homeForRole(auth.role))"
         >
           返回首页

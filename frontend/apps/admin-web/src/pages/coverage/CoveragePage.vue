@@ -1,9 +1,6 @@
 <script setup lang="ts">
-import UnsupportedPreview from '../../components/UnsupportedPreview.vue'
+import CoverageWorkspace from '../../../../../packages/shared/src/workflow/CoverageWorkspace.vue'
 </script>
 <template>
-  <UnsupportedPreview
-    title="双向核对"
-    kind="coverage"
-  />
+  <CoverageWorkspace />
 </template>

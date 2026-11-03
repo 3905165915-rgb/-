@@ -11,7 +11,10 @@ import {
   type HandoverItem,
   type FamilyCase,
   type TimelineEvent,
+  isFollowupTask,
 } from '@hulao/shared'
+import { request } from '../../../../packages/shared/src/workflow/model'
+import { validateCareWorklist } from '../../../../packages/shared/src/workflow/care-worklist'
 
 export const mode: AppMode =
   import.meta.env.VITE_APP_MODE === 'demo' ? 'demo' : 'api'
@@ -73,14 +76,25 @@ export function useElders() {
       ]),
   })
 }
+export function useCareWorklist() {
+  return useQuery({
+    queryKey: computed(() =>
+      queryKey('care-worklist', session.value?.role ?? ''),
+    ),
+    enabled: computed(() => enabled.value && mode === 'api'),
+    queryFn: async () =>
+      validateCareWorklist(await request('/elders/worklist/me')),
+  })
+}
 export async function fetchTasks() {
-  return checkedList<Task>(await gateway.tasks(), [
+  const rows = checkedList<Task>(await gateway.tasks(), [
     'elderId',
     'title',
     'shift',
     'assignee',
     'status',
   ])
+  return rows.filter(isFollowupTask)
 }
 export function useTasks() {
   return useQuery({
@@ -111,8 +125,6 @@ export function useTimeline(itemId: () => string) {
         'label',
         'detail',
         'actor',
-        'happenedAt',
-        'enteredAt',
       ]),
   })
 }

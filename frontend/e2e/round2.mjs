@@ -48,8 +48,11 @@ async function test(name, run) {
 }
 async function login(target, app = 'mobile') {
   await target.goto(`${base}/${app}/login`)
-  if (app === 'mobile') await target.locator('select').selectOption('caregiver')
-  await target.getByRole('button', { name: '进入演示' }).click()
+  await target
+    .getByRole('button', {
+      name: app === 'mobile' ? /护理员/ : /护士 \/ 主管/,
+    })
+    .click()
 }
 async function noOverflow(target) {
   assert.equal(
@@ -139,7 +142,7 @@ try {
         (el) => el.value === 'A班刷新前最后输入',
       ),
     )
-    await page.getByRole('textbox', { name: '班次编号' }).fill('round2-B')
+    await page.getByRole('textbox', { name: '交接班次' }).fill('round2-B')
     await page.getByRole('button', { name: '载入', exact: true }).click()
     await page.waitForURL('**shift=round2-B')
     await note.fill('B班不同的内容')
@@ -175,14 +178,11 @@ try {
       async () =>
         (
           await (await import('/packages/shared/src/index.ts')).loadDemoState()
-        ).tasks.find(
-          (task) =>
-            !['completed', 'not_done', 'cancelled'].includes(task.status),
-        ).id,
+        ).tasks.find((task) => task.status === 'in_progress').id,
     )
     await page.goto(`${base}/mobile/tasks/${encodeURIComponent(taskId)}`)
     await page
-      .getByRole('textbox', { name: '完成结果' })
+      .getByRole('textbox', { name: '服务结果' })
       .fill('任务刷新前最后输入')
     await page.reload()
     await page.waitForFunction(() =>
@@ -240,7 +240,7 @@ try {
       { id: taskId, activeId },
     )
     await page
-      .getByRole('textbox', { name: '完成结果' })
+      .getByRole('textbox', { name: '服务结果' })
       .fill('本窗口需要另存的结果')
     await page.getByRole('button', { name: '保存本机', exact: true }).click()
     await page.getByText(/草稿保存冲突/).waitFor()
@@ -596,7 +596,7 @@ try {
     await page.getByRole('button', { name: '本机草稿', exact: true }).click()
     await page.locator('.draft-row').first().waitFor()
     await page.locator('.draft-popup select').first().selectOption('任务')
-    await page.locator('.draft-popup input[type=search]').fill('本窗口需要另存')
+    await page.getByRole('searchbox', {name:'搜索草稿内容或编号', exact:true}).fill('本窗口需要另存')
     await page
       .locator('.draft-popup')
       .getByText('本窗口需要另存的结果', { exact: true })

@@ -70,8 +70,19 @@ async function capture(page, name) {
 
 async function login(page, app, role) {
   await page.goto(`${base}/${app}/login`)
-  if (role) await page.locator('select').selectOption(role)
-  await page.getByRole('button', { name: '进入演示' }).click()
+  const labels = {
+    caregiver: '护理员',
+    supervisor: '护士 / 主管',
+    admin: '管理员',
+    family: '家属',
+  }
+  await page
+    .getByRole('button', {
+      name: new RegExp(
+        labels[role || (app === 'mobile' ? 'caregiver' : 'supervisor')],
+      ),
+    })
+    .click()
   await page
     .locator(app === 'mobile' ? '.mobile-header' : '.admin-sidebar')
     .waitFor()
@@ -159,8 +170,7 @@ try {
 
   await test('移动端填写页只保留一套底栏，固定操作可见', async () => {
     const taskPath = await mobile
-      .locator('.task-row')
-      .first()
+      .locator('.task-row[href$="/task-wang-listen"]')
       .getAttribute('href')
     assert.ok(taskPath)
     for (const width of [320, 430]) {
@@ -176,13 +186,22 @@ try {
             .getByRole('button', { name: '早班', exact: true })
             .click()
         await mobile.locator('.editor-footer').waitFor()
-        assert.equal(await mobile.locator('.van-tabbar').count(), 0)
+        const tabbar = mobile.locator('.van-tabbar')
+        assert.equal(await tabbar.count(), name === 'handover' ? 1 : 0)
         await noOverflow(mobile)
         const bounds = await mobile.locator('.editor-footer').boundingBox()
         assert.ok(
           bounds && bounds.x >= -1 && bounds.x + bounds.width <= width + 1,
         )
         assert.ok(bounds.y >= 0 && bounds.y + bounds.height <= 845)
+        if (name === 'handover') {
+          const navigationBounds = await tabbar.boundingBox()
+          assert.ok(
+            navigationBounds &&
+              bounds.y + bounds.height <= navigationBounds.y + 1,
+            JSON.stringify({ footer: bounds, navigation: navigationBounds }),
+          )
+        }
         await capture(mobile, `mobile-${name}-${width}`)
         if (name === 'handover' && width === 320) {
           await mobile.locator('.handover-source .van-checkbox').first().click()
@@ -236,9 +255,8 @@ try {
   })
 
   await test('降低透明度可开关并在刷新后恢复', async () => {
-    await mobile
-      .getByRole('button', { name: '账号与偏好', exact: true })
-      .click()
+    await mobile.getByRole('button', { name: '我的', exact: true }).click()
+    await mobile.waitForURL('**/mobile/account')
     const toggle = mobile.getByRole('switch', {
       name: '降低透明度',
       exact: true,
@@ -260,18 +278,26 @@ try {
       'true',
     )
     await mobile
-      .getByRole('button', { name: '账号与偏好', exact: true })
-      .click()
-    await mobile
       .getByRole('switch', { name: '降低透明度', exact: true })
       .click()
     assert.equal(
       await mobile.locator('html').getAttribute('data-reduce-transparency'),
       'false',
     )
+  })
+
+  await test('恢复日志入口可达且演示环境不读取正式日志', async () => {
+    await mobile.goto(`${base}/mobile/account`)
+    await mobile.getByRole('link', { name: '恢复日志' }).click()
     await mobile
-      .getByRole('button', { name: '关闭账号菜单', exact: true })
-      .click()
+      .getByRole('heading', { name: '恢复日志', exact: true })
+      .waitFor()
+    await mobile.getByText(/仅在正式 API 环境中读取/).waitFor()
+    await admin.goto(`${base}/admin/recovery`)
+    await admin
+      .getByRole('heading', { name: '本机恢复日志', exact: true })
+      .waitFor()
+    await admin.getByText(/仅在正式 API 环境中读取/).waitFor()
   })
 
   await test('管理端1280/1440px任务、档案、抽屉与表格', async () => {
@@ -282,7 +308,10 @@ try {
       await noOverflow(admin)
       await capture(admin, `admin-tasks-${width}`)
       await admin
-        .getByRole('button', { name: '处理任务', exact: true })
+        .getByRole('button', {
+          name: '询问并安排听戏活动：开始服务',
+          exact: true,
+        })
         .first()
         .click()
       await admin.getByRole('dialog').waitFor()

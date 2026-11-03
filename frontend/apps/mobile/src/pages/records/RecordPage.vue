@@ -1,9 +1,12 @@
 <script setup lang="ts">
+const serverWorkflow = ['api'].includes(import.meta.env.VITE_APP_MODE || 'api')
+import WorkflowPanel from '@hulao/shared/workflow'
+import ElderRecordEntry from '../../../../../packages/shared/src/workflow/ElderRecordEntry.vue'
 import { computed, onMounted, ref, watch } from 'vue'
 import { Save, Send } from 'lucide-vue-next'
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute } from 'vue-router'
 import { showConfirmDialog } from 'vant'
-import { loadDemoState } from '@hulao/shared'
+import { formatBusinessTime, loadDemoState } from '@hulao/shared'
 import {
   useElders,
   useTasks,
@@ -15,6 +18,17 @@ import { useRecordEditor } from '../../composables/useRecordEditor'
 import RecordReviewForm from '../../components/RecordReviewForm.vue'
 import FeedbackState from '../../components/FeedbackState.vue'
 const route = useRoute()
+const quickRecord = computed(
+  () =>
+    ![
+      'record_id',
+      'draft_id',
+      'draft',
+      'attachment_id',
+      'analysis_id',
+      'action',
+    ].some((key) => typeof route.query[key] === 'string'),
+)
 const elders = useElders()
 const tasks = useTasks()
 const {
@@ -69,10 +83,22 @@ function requireElder() {
   return false
 }
 onMounted(async () => {
+  if (serverWorkflow) return
   await initialize(
     typeof route.query.draft === 'string' ? route.query.draft : undefined,
+    typeof route.query.elder === 'string' ? route.query.elder : undefined,
   )
+  const elderFromRoute =
+    typeof route.query.elder === 'string' ? route.query.elder : ''
+  if (elderFromRoute && !editor.value.elderId) {
+    editor.value.elderId = elderFromRoute
+    changed(true)
+  }
   ready.value = true
+  if (!editor.value.elderId && elders.data.value?.length === 1) {
+    editor.value.elderId = elders.data.value[0].id
+    changed(true)
+  }
 })
 async function confirm() {
   if (!requireElder()) return
@@ -100,8 +126,8 @@ async function leave() {
     return false
   }
 }
-onBeforeRouteLeave(leave)
-onBeforeRouteUpdate(leave)
+onBeforeRouteLeave(() => (mode === 'api' ? true : leave()))
+onBeforeRouteUpdate(() => (mode === 'api' ? true : leave()))
 watch(
   () => route.query.draft,
   async (value) => {
@@ -113,6 +139,36 @@ watch(
       await initialize(value)
   },
 )
+watch(
+  () => route.query.elder,
+  async (value) => {
+    if (
+      ready.value &&
+      typeof value === 'string' &&
+      value !== editor.value.elderId
+    )
+      await initialize(undefined, value)
+  },
+)
+watch(
+  () => elders.data.value,
+  (rows) => {
+    if (ready.value && !editor.value.elderId && rows?.length === 1) {
+      editor.value.elderId = rows[0].id
+      changed(true)
+    }
+  },
+)
+async function switchElder(event: Event) {
+  const value = (event.target as HTMLSelectElement).value
+  if (busy.value || frozen.value || value === editor.value.elderId) return
+  const previous = editor.value.localId
+  await fresh()
+  if (editor.value.localId === previous) return
+  editor.value.elderId = value
+  manual.value = false
+  changed(true)
+}
 async function useExample() {
   if (busy.value || frozen.value) return
   const localId = editor.value.localId
@@ -135,6 +191,12 @@ async function useExample() {
 }
 async function newDraft() {
   await fresh()
+  const elderFromRoute =
+    typeof route.query.elder === 'string' ? route.query.elder : ''
+  if (elderFromRoute) {
+    editor.value.elderId = elderFromRoute
+    changed(true)
+  }
   manual.value = false
 }
 function retryQueries() {
@@ -154,7 +216,54 @@ async function restoreDraft() {
 }
 </script>
 <template>
-  <section class="record-page editor-page">
+  <section v-if="serverWorkflow">
+    <RouterLink
+      :to="{
+        path: '/safety',
+        query: {
+          report: '1',
+          elder: typeof route.query.elder === 'string' ? route.query.elder : '',
+        },
+      }"
+      class="secondary-link"
+      >照护安全与事件上报</RouterLink
+    >
+    <ElderRecordEntry
+      v-if="serverWorkflow && quickRecord"
+      :key="String(route.query.elder || route.query.elder_id || 'choose')"
+      :elder-id="
+        typeof route.query.elder === 'string'
+          ? route.query.elder
+          : typeof route.query.elder_id === 'string'
+            ? route.query.elder_id
+            : undefined
+      "
+      mobile
+    />
+    <WorkflowPanel
+      v-else
+      group="records"
+      title="记一条"
+      :context="{
+        ...route.query,
+        ...(typeof route.query.elder === 'string'
+          ? { elder_id: route.query.elder }
+          : {}),
+      }"
+      :initial-action="
+        typeof route.query.record_id === 'string'
+          ? '/records/{record_id}'
+          : typeof route.query.draft_id === 'string'
+            ? '/records/drafts/{draft_id}'
+            : '/records/context-extract'
+      "
+      :auto-read="
+        typeof route.query.record_id === 'string' ||
+        typeof route.query.draft_id === 'string'
+      "
+    />
+  </section>
+  <section v-else class="record-page editor-page">
     <div class="page-title-row">
       <h1>快速记录</h1>
       <van-tag
@@ -195,21 +304,21 @@ async function restoreDraft() {
       <summary>
         恢复本机草稿 <span class="muted">{{ drafts.length }} 项</span>
       </summary>
-      <label class="select-field">恢复草稿<select
-        v-model="restoreId"
-        :disabled="busy"
-      >
-        <option value="">请选择</option>
-        <option
-          v-for="draft in drafts"
-          :key="draft.localId"
-          :value="draft.localId"
-        >
-          {{ draft.recoveredFrom ? '其他窗口恢复 · ' : ''
-          }}{{ draft.text.slice(0, 20) || '空白草稿' }} ·
-          {{ phaseLabels[draft.phase] }} · {{ draft.updatedAt }}
-        </option>
-      </select></label><van-button
+      <label class="select-field"
+        >恢复草稿<select v-model="restoreId" :disabled="busy">
+          <option value="">请选择</option>
+          <option
+            v-for="draft in drafts"
+            :key="draft.localId"
+            :value="draft.localId"
+          >
+            {{ draft.recoveredFrom ? '其他窗口恢复 · ' : ''
+            }}{{ draft.text.slice(0, 20) || '空白草稿' }} ·
+            {{ phaseLabels[draft.phase] }} ·
+            {{ formatBusinessTime(draft.updatedAt) }}
+          </option>
+        </select></label
+      ><van-button
         size="small"
         :disabled="!restoreId || busy"
         @click="restoreDraft"
@@ -218,31 +327,45 @@ async function restoreDraft() {
       </van-button>
     </details>
     <template v-if="ready">
+      <RouterLink
+        v-if="editor.phase === 'submitted' && mode === 'demo'"
+        :to="{
+          path: '/tasks/new',
+          query: {
+            elder: editor.elderId,
+            source_record: editor.confirmedRecordId,
+          },
+        }"
+        class="record-link"
+        >核对并新建后续任务</RouterLink
+      >
       <div class="form-band">
         <h2>护理记录</h2>
-        <label class="select-field">老人<select
-          v-model="editor.elderId"
-          :disabled="frozen"
-          @change="changed(true)"
-        >
-          <option value="">请选择老人</option>
-          <option
-            v-if="
-              editor.elderId &&
-                !elders.data.value?.some((item) => item.id === editor.elderId)
-            "
+        <label class="select-field"
+          >老人<select
             :value="editor.elderId"
+            :disabled="frozen"
+            @change="switchElder"
           >
-            {{ editor.elderId }}（当前列表未找到）
-          </option>
-          <option
-            v-for="elder in elders.data.value"
-            :key="elder.id"
-            :value="elder.id"
-          >
-            {{ elder.name }} · {{ elder.bedLabel }}
-          </option>
-        </select></label>
+            <option value="">请选择老人</option>
+            <option
+              v-if="
+                editor.elderId &&
+                !elders.data.value?.some((item) => item.id === editor.elderId)
+              "
+              :value="editor.elderId"
+            >
+              当前草稿的老人不在授权列表，请重新核对
+            </option>
+            <option
+              v-for="elder in elders.data.value"
+              :key="elder.id"
+              :value="elder.id"
+            >
+              {{ elder.name }} · {{ elder.bedLabel }}
+            </option>
+          </select></label
+        >
         <van-field
           v-model="editor.text"
           label="原文"
@@ -254,31 +377,16 @@ async function restoreDraft() {
           placeholder="输入护理观察、待办或沟通内容"
           @update:model-value="changed(true)"
         />
-        <p
-          v-if="saveError"
-          class="error-text"
-          role="alert"
-        >
+        <p v-if="saveError" class="error-text" role="alert">
           {{ saveError }}
         </p>
-        <p
-          v-else-if="saved"
-          class="muted"
-          role="status"
-        >
-          已保存到本机
+        <p v-else-if="saved" class="success-text" role="status">
+          记录已保存到本机
         </p>
-        <p
-          v-if="error"
-          class="error-text"
-          role="alert"
-        >
+        <p v-if="error" class="error-text" role="alert">
           {{ error }}
         </p>
-        <p
-          v-if="notice"
-          role="status"
-        >
+        <p v-if="notice" role="status">
           {{ notice }}
         </p>
         <van-notice-bar
@@ -291,41 +399,39 @@ async function restoreDraft() {
             :disabled="busy || frozen"
             @click="useExample"
           >
-            使用演示原文
-          </van-button><van-button
+            使用演示原文 </van-button
+          ><van-button
             type="primary"
             :loading="busy && editor.phase === 'extracting'"
             :disabled="busy || frozen || !editor.text.trim() || !validElder"
             @click="extractDraft"
           >
-            提取AI草稿
-          </van-button><van-button
-            :disabled="busy || frozen"
-            @click="manual = true"
-          >
+            保存并查看整理结果 </van-button
+          ><van-button :disabled="busy || frozen" @click="manual = true">
             手工录入
           </van-button>
         </div>
         <template v-if="editor.ai">
-          <h2>AI原始结果</h2>
-          <p
-            v-if="stale"
-            class="error-text"
-          >
+          <h2>整理结果（待核对）</h2>
+          <p>已保存原文，当前整理结果仍需人工核对。</p>
+          <p v-if="stale" class="error-text">
             原文或老人已变更，旧结果不可确认。
           </p>
           <details class="evidence">
             <summary>提取时的原文证据</summary>
             <p>{{ editor.ai.sourceText }}</p>
-            <p>老人编号：{{ editor.ai.elderId }}</p>
+            <p>
+              老人：{{
+                elders.data.value?.find(
+                  (item) => item.id === editor.ai?.elderId,
+                )?.name || '当前老人'
+              }}
+            </p>
             <p>观察：{{ editor.ai.draft.fields.observation }}</p>
             <p>后续：{{ editor.ai.draft.fields.followUp }}</p>
             <p>联系对象：{{ editor.ai.draft.fields.contactTarget }}</p>
             <ul>
-              <li
-                v-for="item in editor.ai.draft.evidence"
-                :key="item"
-              >
+              <li v-for="item in editor.ai.draft.evidence" :key="item">
                 {{ item }}
               </li>
             </ul>
@@ -343,6 +449,7 @@ async function restoreDraft() {
           <RecordReviewForm
             v-model="editor.review"
             :local-assignment="!manual || mode === 'api'"
+            :server-mode="mode === 'api'"
             :disabled="frozen || busy"
             :tasks="
               tasks.data.value?.filter(
@@ -351,23 +458,14 @@ async function restoreDraft() {
             "
             @update:model-value="changed()"
           />
-          <p
-            v-if="!editor.review.observation.trim()"
-            class="muted"
-          >
+          <p v-if="!editor.review.observation.trim()" class="muted">
             请填写观察结果。
           </p>
-          <p
-            v-if="manual && mode === 'api'"
-            class="muted"
-          >
-            手工记录可保存本机；正式提交暂未接入。
+          <p v-if="manual && mode === 'api'" class="muted">
+            确认后提交服务端；后续安排每行生成一项待办。
           </p>
         </template>
-        <details
-          v-if="!frozen"
-          class="discard-draft"
-        >
+        <details v-if="!frozen" class="discard-draft">
           <summary>放弃本机草稿</summary>
           <van-field
             v-model="editor.discardReason"
@@ -394,39 +492,33 @@ async function restoreDraft() {
             savingLocal
               ? '正在保存到本机…'
               : saveError || (saved ? '已保存到本机' : '有未保存修改')
-          }}<span v-if="editor.phase === 'submitted'"> · 已提交</span><span v-if="editor.phase === 'uncertain'"> · 提交待核实</span>
+          }}<span v-if="editor.phase === 'submitted'"> · 已提交</span
+          ><span v-if="editor.phase === 'uncertain'"> · 提交待核实</span>
         </p>
         <div class="footer-actions">
           <van-button
             :disabled="busy || !ready || savingLocal"
             @click="persist"
           >
-            <Save
-              :size="17"
-              aria-hidden="true"
-            />保存本机
+            <Save :size="17" aria-hidden="true" />保存本机
           </van-button>
           <van-button
             type="primary"
             :loading="editor.phase === 'submitting'"
             :disabled="
               busy ||
-                !validElder ||
-                frozen ||
-                !(manual || editor.ai) ||
-                (manual
-                  ? mode === 'api' ||
-                    !editor.elderId ||
-                    !editor.text.trim() ||
-                    !editor.review.observation.trim()
-                  : !confirmable)
+              !validElder ||
+              frozen ||
+              !(manual || editor.ai) ||
+              (manual
+                ? !editor.elderId ||
+                  !editor.text.trim() ||
+                  !editor.review.observation.trim()
+                : !confirmable)
             "
             @click="confirm"
           >
-            <Send
-              :size="17"
-              aria-hidden="true"
-            />{{
+            <Send :size="17" aria-hidden="true" />{{
               manual && mode === 'demo' ? '提交演示记录' : '确认并提交'
             }}
           </van-button>
