@@ -41,7 +41,7 @@ const results = [], skipped = []
 function routesFor(app, data, role) {
   const elder = data.elders.find(row => row.current_admission_id) || data.elders[0]
   if (supplement) {
-    if (app === 'admin') return ['/demo']
+    if (app === 'admin') return role === 'admin' ? ['/demo'] : []
     const routes = ['/notifications/business/changes?read=1&action=%2Fchange-reviews']
     if (elder) routes.push('/notifications/business/memories?read=1&action=%2Fmemories&elder_id=' + encodeURIComponent(elder.id))
     if (['admin', 'supervisor'].includes(role)) routes.push('/notifications/business/family?read=1&action=%2Ffamily%2Fcases')
@@ -55,7 +55,9 @@ function routesFor(app, data, role) {
   if (task) baseRoutes.push(app === 'admin' ? '/tasks?task=' + encodeURIComponent(task.id) : '/tasks/' + encodeURIComponent(task.id))
   if (task) baseRoutes.push('/timeline/' + encodeURIComponent(task.id))
   if (incident) baseRoutes.push((app === 'admin' ? '/workflows/incidents' : '/safety') + '?incident_id=' + encodeURIComponent(incident.id) + '&read=1')
-  return baseRoutes
+  return role === 'supervisor' && app === 'admin'
+    ? baseRoutes.filter(route => !['/settings', '/demo', '/recovery', '/workflows/staff', '/workflows/memories'].includes(route))
+    : baseRoutes
 }
 async function inspect(page) {
   return page.evaluate(() => {

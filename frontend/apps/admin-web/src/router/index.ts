@@ -1,7 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { canAccess, clearSession, readSession, type Role } from '@hulao/shared'
 import { mode, session, queryClient } from '../services/data'
-import { homeForRole, internalRoles } from './access'
+import { homeForRole, internalRoles, supervisorHiddenPaths } from './access'
 
 const router = createRouter({
   history: createWebHistory(
@@ -27,11 +27,16 @@ const router = createRouter({
       meta: { requiresAuth: true },
       children: [
         { path: 'followups', component: () => import('../pages/workflows/FollowupsPage.vue'), meta: { roles: internalRoles } },
-        { path: 'settings', component: () => import('../pages/workflows/SettingsPage.vue'), meta: { roles: internalRoles } },
+        { path: 'settings', component: () => import('../pages/workflows/SettingsPage.vue'), meta: { roles: ['admin'] } },
         {
           path: 'workflows/:group',
           component: () => import('../pages/workflows/WorkflowsPage.vue'),
           meta: { roles: internalRoles },
+        },
+        {
+          path: 'recovery',
+          component: () => import('../pages/recovery/RecoveryPage.vue'),
+          meta: { roles: ['admin'] },
         },
         { path: '', redirect: () => homeForRole(readSession()?.role ?? null) },
         {
@@ -103,12 +108,7 @@ const router = createRouter({
         {
           path: 'demo',
           component: () => import('../pages/demo/DemoPage.vue'),
-          meta: { roles: internalRoles },
-        },
-        {
-          path: 'recovery',
-          component: () => import('../pages/recovery/RecoveryPage.vue'),
-          meta: { roles: internalRoles },
+          meta: { roles: ['admin'] },
         },
       ],
     },
@@ -141,6 +141,11 @@ router.beforeEach((to) => {
   if (to.path === '/login' && current) return homeForRole(current.role)
   if (to.path === '/403') return homeForRole(current?.role ?? null)
   const roles = to.meta.roles as readonly Role[] | undefined
+  if (
+    current?.role === 'supervisor' &&
+    supervisorHiddenPaths.has(to.path)
+  )
+    return '/403'
   if (roles && !canAccess(current?.role ?? null, roles)) return '/403'
 })
 window.addEventListener('hulao:unauthorized', () => {

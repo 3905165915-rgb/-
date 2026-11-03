@@ -258,7 +258,7 @@ onBeforeUnmount(() => {
     <header class="dashboard-header">
       <div>
         <h1>今日工作</h1>
-        <p>先处理风险和待办，再查看照护进展</p>
+        <p>{{ session?.role === 'supervisor' ? '照护主管：先处理风险和待办，再查看照护进展' : '机构管理：先处理风险和待办，再查看运营分析' }}</p>
       </div>
       <button
         type="button"

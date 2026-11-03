@@ -11,9 +11,9 @@ import { gateway, mode, session, queryClient } from '../services/data'
 
 export const roleLabels: Record<Role, string> = {
   admin: '管理员',
-  supervisor: '主管',
+  supervisor: '照护主管',
   caregiver: '护理员',
-  nurse: '护士',
+  nurse: '照护专员',
   family: '家属',
 }
 export const useAuthStore = defineStore('auth', () => {

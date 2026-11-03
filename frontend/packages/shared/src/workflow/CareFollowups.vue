@@ -55,10 +55,10 @@ onBeforeUnmount(()=>epoch++)
 <template>
   <section
     v-if="scope.active.value"
-    class="workspace-panel"
+    class="workspace-panel care-followups"
     aria-label="照护跟进"
   >
-    <header>
+    <header class="followups-header">
       <h3>照护跟进</h3><button
         type="button"
         :disabled="loading"
@@ -190,3 +190,14 @@ onBeforeUnmount(()=>epoch++)
     </RouterLink>
   </section>
 </template>
+<style scoped>
+.care-followups{background:rgba(255,255,255,.72)}
+.followups-header{display:flex;align-items:center;justify-content:space-between;gap:16px}.followups-header h3{margin:0}.followups-header p{margin:4px 0 0;color:#71817f;font-size:13px}
+.care-followups button,.care-followups a{display:inline-flex;align-items:center;justify-content:center;min-height:38px;border:1px solid #cfe0da;border-radius:10px;background:#fff;color:#237d6d;padding:7px 12px;font:inherit;font-size:13px;text-decoration:none;cursor:pointer;transition:all .18s ease}.care-followups button:hover,.care-followups a:hover{border-color:#56a998;background:#edf8f4;transform:translateY(-1px)}
+.followups-refresh{min-height:34px!important;background:#f3faf7!important}.followups-check{margin:16px 0 4px;background:linear-gradient(135deg,#2e927f,#4aa994)!important;border-color:transparent!important;color:#fff!important;box-shadow:0 5px 12px rgba(43,139,119,.18)}
+.followup-checks{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}.followup-checks>span{display:inline-flex;align-items:center;gap:7px;border-radius:999px;padding:6px 10px;font-size:12px}.check-ok{background:#eaf7ef;color:#27734c}.check-pending{background:#fff3df;color:#9b691d}.followup-checks button{min-height:25px;padding:2px 7px;border-radius:7px;font-size:11px}
+.followup-tabs{display:flex;gap:8px;margin:16px 0;border-bottom:1px solid #e3ece8;padding-bottom:8px}.followup-tabs button{background:transparent;border-color:transparent;color:#637571}.followup-tabs button.active{background:#e8f5f0;border-color:#b9ddd1;color:#177965;font-weight:700}.followup-tabs b{font-size:11px}
+.followup-item{margin:12px 0;padding:16px;border:1px solid #dce9e4;border-radius:14px;background:linear-gradient(135deg,rgba(255,255,255,.94),rgba(247,252,250,.9));box-shadow:0 5px 14px rgba(45,90,80,.06)}.followup-item-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}.followup-item h4{margin:5px 0 0;font-size:15px;color:#254d48}.followup-state{white-space:nowrap;border-radius:999px;padding:4px 8px;background:#fff3df;color:#9b691d;font-size:11px}.followup-owner{margin:8px 0;color:#71817f;font-size:12px}.followup-reason{color:#536966;font-size:13px}.followup-actions{display:flex;gap:8px;flex-wrap:wrap}.followup-detail{margin-top:14px;padding-top:12px;border-top:1px solid #e5efeb}.followup-detail :deep(.workspace-panel){margin:10px 0;padding:12px;border-radius:10px}.followup-detail details{margin-top:12px;color:#46625c}.followup-detail ol{padding-left:20px}.followup-detail li{margin:8px 0;font-size:13px}
+@media (max-width:600px){.followups-header{align-items:flex-start}.followup-item{padding:13px}.followup-tabs{overflow-x:auto}.followup-tabs button{white-space:nowrap}}
+@media (max-width:600px){.care-followups button,.care-followups a{min-height:44px!important}}
+</style>

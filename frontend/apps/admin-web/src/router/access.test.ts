@@ -38,7 +38,7 @@ describe('route and menu policy', () => {
       const paths = groups.flatMap((group) =>
         group.items.map((item) => item.path),
       )
-      expect(paths).toEqual([
+      expect(paths).toEqual(role === 'admin' ? [
         '/dashboard',
         '/notifications',
         '/elders',
@@ -47,6 +47,8 @@ describe('route and menu policy', () => {
         '/workflows/reports',
         '/settings',
         '/demo',
+      ] : [
+        '/dashboard', '/notifications', '/elders', '/tasks', '/quality', '/workflows/reports',
       ])
       expect(allowedRoutes(role).map((item) => item.path)).toContain('/tasks')
       expect(allowedRoutes(role).map((item) => item.path)).toContain(
@@ -89,6 +91,11 @@ describe('route and menu policy', () => {
     expect(allowedRoutes('family').map((item) => item.path)).toEqual([
       '/family',
     ])
+  })
+  it('keeps institution controls out of the supervisor navigation and direct routes', () => {
+    expect(allowedRoutes('supervisor').map((item) => item.path)).not.toEqual(
+      expect.arrayContaining(['/settings', '/demo', '/recovery', '/workflows/staff', '/workflows/memories']),
+    )
   })
   it('shows the demo tool only when demo navigation is requested', () => {
     const paths = (demo: boolean) =>

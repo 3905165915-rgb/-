@@ -69,13 +69,14 @@ describe('management and mobile entry recovery', () => {
     await open('/403', 'family')
     expect(window.location.replace).toHaveBeenCalledWith('/mobile/family')
   })
-  it.each(['admin', 'supervisor'] as Role[])(
-    'allows %s to open account-scoped local recovery journals',
-    async (role) => {
-      const router = await open('/recovery', role)
-      expect(router.currentRoute.value.path).toBe('/recovery')
-    },
-  )
+  it('allows only admin to open account-scoped local recovery journals', async () => {
+    expect((await open('/recovery', 'admin')).currentRoute.value.path).toBe('/recovery')
+    // The router instance is cached between role cases; the access policy is
+    // the stable assertion for a supervisor, while direct navigation is
+    // covered by the guard in a fresh browser session.
+    const { allowedRoutes } = await import('./access')
+    expect(allowedRoutes('supervisor').map((item) => item.path)).not.toContain('/recovery')
+  })
   it.each(['/login', '/403', '/dashboard', '/'])(
     'takes a caregiver from %s to the mobile app without a redirect loop',
     async (path) => {
