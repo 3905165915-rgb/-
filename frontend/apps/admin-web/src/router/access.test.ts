@@ -48,7 +48,7 @@ describe('route and menu policy', () => {
         '/settings',
         '/demo',
       ] : [
-        '/dashboard', '/elders', '/tasks', '/quality', '/workflows/reports',
+        '/dashboard', '/notifications', '/elders', '/tasks', '/quality', '/workflows/reports',
       ])
       expect(allowedRoutes(role).map((item) => item.path)).toContain('/tasks')
       expect(allowedRoutes(role).map((item) => item.path)).toContain(
