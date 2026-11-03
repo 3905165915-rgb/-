@@ -290,7 +290,7 @@ onBeforeUnmount(() => {
         </summary>
         <label class="tcc-scene"
           >服务场景
-          <select
+          <CareSelect
             :value="state.scene"
             aria-label="服务场景"
             @change="changeScene"
@@ -303,7 +303,7 @@ onBeforeUnmount(() => {
             >
               {{ label }}
             </option>
-          </select>
+          </CareSelect>
         </label>
         <p v-if="!state.scene" class="tcc-muted" role="status">
           尚未选择场景，未查询记忆。

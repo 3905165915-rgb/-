@@ -161,12 +161,12 @@ onBeforeUnmount(() => {
       <div class="memory-filters">
         <label>搜索内容或依据<input v-model="query" type="search" /></label
         ><label
-          >适用场景<select v-model="scene">
+          >适用场景<CareSelect v-model="scene">
             <option value="">全部场景</option>
             <option v-for="(label, key) in careScenes" :key="key" :value="key">
               {{ label }}
             </option>
-          </select></label
+          </CareSelect></label
         ><button
           type="button"
           @click="resetFilters"

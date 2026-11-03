@@ -81,12 +81,12 @@ watch(active, (value) => {
     <p>选择一次老人，写下本次观察后直接保存。</p>
     <div class="workspace-panel">
       <label
-        >老人<select v-model="selected" :disabled="loading || !!elderId">
+        >老人<CareSelect v-model="selected" :disabled="loading || !!elderId">
           <option value="">请选择老人</option>
           <option v-for="row in elders" :key="String(row.id)" :value="row.id">
             {{ row.name }} · {{ row.bed_label || '床位待核对' }}
           </option>
-        </select></label
+        </CareSelect></label
       >
       <p v-if="error" role="alert" class="workspace-error">
         {{ error }}

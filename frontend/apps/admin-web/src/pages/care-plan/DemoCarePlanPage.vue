@@ -4,6 +4,7 @@ import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vu
 import { useQuery } from '@tanstack/vue-query'
 import { formatBusinessTime, readSession } from '@hulao/shared'
 import WorkflowPanel from '@hulao/shared/workflow'
+import PlanGenerationPreview from '../../../../../packages/shared/src/workflow/PlanGenerationPreview.vue'
 import type { DemoPlan } from '../../../../../packages/shared/src/demo'
 import { loadDemoState, updateDemoState } from '../../../../../packages/shared/src/demo-store'
 import { confirmDemoPlan, DemoPlanStateChanged, type DemoPlanConfirmation, type DemoPlanReceipt } from '../../../../../packages/shared/src/demo-plan-actions'
@@ -30,6 +31,7 @@ const showAssessment = ref(false)
 const assessmentSummary = ref('')
 const assessmentKey = crypto.randomUUID()
 const confirmed = ref(false)
+const generationConfirmed = ref(false)
 const assessments = ref<Row[]>([])
 const plans = ref<Row[]>([])
 const shifts = ref<Row[]>([])
@@ -79,6 +81,7 @@ watch(elderId, () => {
   step.value = 0
   error.value = storageError.value = listError.value = ''
   confirmed.value = showAssessment.value = false
+  generationConfirmed.value = false
   assessmentId.value = sourcePlanId.value = ''
   draft.value = emptyDraft()
   demoItems.value = []
@@ -268,7 +271,11 @@ async function execute() {
           if (current?.accountKey !== actor.accountKey || current.mode !== actor.mode || current.accessToken !== actor.accessToken || !['admin', 'supervisor'].includes(current.role || ''))
             throw new Error('登录身份已变化，已停止后续步骤，请重新登录核实。')
           return request(path, 'post', payload, key)
-        }, persist)
+        }, persist, {
+          previewGeneration: (path, payload) => request(path, 'post', payload),
+          generationConfirmed: generationConfirmed.value,
+        })
+        generationConfirmed.value = false
         triggerRef(apiExecution)
       } else {
         if (!demoSubmission.value) {
@@ -312,63 +319,491 @@ onBeforeRouteLeave(() => { if (busy.value) return false; saveDraft(); return !st
 onBeforeRouteUpdate(() => { if (busy.value) return false; saveDraft(); return !storageError.value || window.confirm('计划输入未保存，仍然切换？') })
 </script>
 <template>
-  <section class="care-plan-page" @input="saveDraft" @change="saveDraft">
-    <div class="page-title-row"><div><h1>照护计划</h1><p class="muted">查看老人情况，核对安排，人工确认后生成待执行任务。</p></div></div>
-    <ol class="plan-steps" aria-label="照护计划办理步骤"><li v-for="(title, index) in ['查看老人情况', '核对事项、时间与责任人', '预览并人工确认']" :key="title" :aria-current="step === index ? 'step' : undefined" :class="{ current: step === index }"><span>{{ index + 1 }}</span>{{ title }}</li></ol>
-    <label class="plan-field">照护老人<select :value="elderId" :disabled="busy || frozen" @change="chooseElder"><option value="">请选择老人</option><option v-for="row in elders.data.value || []" :key="row.id" :value="row.id">{{ row.name }} · {{ row.bedLabel }}</option></select></label>
-    <p v-if="elders.isPending.value">正在读取老人档案…</p>
-    <p v-if="context && !elder" role="alert">未找到传入的老人，请重新选择照护对象。</p>
-    <p v-if="elders.error.value" role="alert">老人档案读取失败。<button type="button" @click="elders.refetch()">重新读取</button></p>
-    <p v-if="!management" role="status">请由主管或管理员办理计划审批与任务生成。</p>
-    <p v-if="error || storageError" class="plan-error" role="alert">{{ storageError || error }}</p>
-    <p v-if="listError" class="plan-error" role="alert">{{ listError }}<button type="button" :disabled="busy || loading" @click="reload">重新载入资料</button></p>
-    <p v-if="loading" role="status">正在读取评估与计划…</p>
+  <section
+    class="care-plan-page"
+    @input="saveDraft"
+    @change="saveDraft"
+  >
+    <div class="page-title-row">
+      <div>
+        <h1>照护计划</h1><p class="muted">
+          查看老人情况，核对安排，人工确认后生成待执行任务。
+        </p>
+      </div>
+    </div>
+    <ol
+      class="plan-steps"
+      aria-label="照护计划办理步骤"
+    >
+      <li
+        v-for="(title, index) in ['查看老人情况', '核对事项、时间与责任人', '预览并人工确认']"
+        :key="title"
+        :aria-current="step === index ? 'step' : undefined"
+        :class="{ current: step === index }"
+      >
+        <span>{{ index + 1 }}</span>{{ title }}
+      </li>
+    </ol>
+    <label class="plan-field">照护老人<CareSelect
+      :value="elderId"
+      :disabled="busy || frozen"
+      @change="chooseElder"
+    ><option value="">请选择老人</option><option
+      v-for="row in elders.data.value || []"
+      :key="row.id"
+      :value="row.id"
+    >{{ row.name }} · {{ row.bedLabel }}</option></CareSelect></label>
+    <p v-if="elders.isPending.value">
+      正在读取老人档案…
+    </p>
+    <p
+      v-if="context && !elder"
+      role="alert"
+    >
+      未找到传入的老人，请重新选择照护对象。
+    </p>
+    <p
+      v-if="elders.error.value"
+      role="alert"
+    >
+      老人档案读取失败。<button
+        type="button"
+        @click="elders.refetch()"
+      >
+        重新读取
+      </button>
+    </p>
+    <p
+      v-if="!management"
+      role="status"
+    >
+      请由主管或管理员办理计划审批与任务生成。
+    </p>
+    <p
+      v-if="error || storageError"
+      class="plan-error"
+      role="alert"
+    >
+      {{ storageError || error }}
+    </p>
+    <p
+      v-if="listError"
+      class="plan-error"
+      role="alert"
+    >
+      {{ listError }}<button
+        type="button"
+        :disabled="busy || loading"
+        @click="reload"
+      >
+        重新载入资料
+      </button>
+    </p>
+    <p
+      v-if="loading"
+      role="status"
+    >
+      正在读取评估与计划…
+    </p>
 
     <template v-if="elder">
-      <section class="plan-card" aria-label="老人照护背景">
+      <section
+        class="plan-card"
+        aria-label="老人照护背景"
+      >
         <h2>{{ elder.name }} <small>{{ elder.bedLabel }} · {{ elder.status }}</small></h2>
-        <p v-if="elder.notes">{{ elder.notes }}</p>
-        <dl class="plan-facts"><div><dt>年龄</dt><dd>{{ elder.age === undefined ? '未提供' : elder.age + '岁' }}</dd></div><div><dt>风险</dt><dd>{{ elder.risk || '待核实' }}</dd></div></dl>
-        <details v-if="elder.preferences"><summary>生活习惯与近期变化</summary><p v-for="(item, index) in [...elder.preferences.habits, ...elder.preferences.activities, ...elder.preferences.communication, ...elder.preferences.recentChanges, ...elder.preferences.attention]" :key="index">{{ item }}</p></details>
+        <p v-if="elder.notes">
+          {{ elder.notes }}
+        </p>
+        <dl class="plan-facts">
+          <div><dt>年龄</dt><dd>{{ elder.age === undefined ? '未提供' : elder.age + '岁' }}</dd></div><div><dt>风险</dt><dd>{{ elder.risk || '待核实' }}</dd></div>
+        </dl>
+        <details v-if="elder.preferences">
+          <summary>生活习惯与近期变化</summary><p
+            v-for="(item, index) in [...elder.preferences.habits, ...elder.preferences.activities, ...elder.preferences.communication, ...elder.preferences.recentChanges, ...elder.preferences.attention]"
+            :key="index"
+          >
+            {{ item }}
+          </p>
+        </details>
       </section>
 
-      <section v-if="step === 0" class="plan-card" aria-labelledby="plan-assessment-title">
-        <h2 id="plan-assessment-title">查看评估与既有安排</h2>
-        <label class="plan-field">采用评估<select v-model="assessmentId" :disabled="loading || frozen"><option value="">请选择有效评估</option><template v-if="mode === 'demo'"><option v-for="row in demoAssessments" :key="row.id" :value="row.id">{{ time(row.assessedAt) }} · {{ row.summary }}</option></template><template v-else><option v-for="row in effectiveAssessments" :key="String(row.id)" :value="String(row.id)">{{ time(row.assessed_at) }} · {{ row.care_level_label || '已确认评估' }} · {{ row.total_score ?? '评分未提供' }}</option></template></select></label>
-        <p v-if="!assessmentReady && !loading">当前老人缺少可用的已确认评估，请先办理评估。</p>
-        <button v-if="management" type="button" @click="showAssessment = !showAssessment">{{ showAssessment ? '收起评估办理' : '在本页办理／核对评估' }}</button>
-        <section v-if="showAssessment" class="assessment-entry"><h3>为{{ elder.name }}办理评估</h3><template v-if="mode === 'demo'"><label class="plan-field">人工评估摘要<textarea v-model="assessmentSummary" :disabled="busy" /></label><p>仅用于演示流程。请记录已知情况，未知评估题目须由专业人员核对。</p><button type="button" :disabled="busy || !assessmentSummary.trim()" @click="saveAssessment">保存演示评估并继续</button></template><WorkflowPanel v-else :key="elderId" group="assessments" :context="{ elder_id: elderId }" initial-action="/assessments" @changed="reload" /></section>
-        <template v-if="mode === 'demo'"><label v-if="demoPlans.length" class="plan-field">参考已有计划<select :value="sourcePlanId" @change="copyDemoPlan(($event.target as HTMLSelectElement).value)"><option value="">请选择参考计划</option><option v-for="(row, index) in demoPlans" :key="row.id" :value="row.id">计划{{ index + 1 }} · {{ row.items.length }}项 · {{ time(row.confirmedAt) }}</option></select></label><p v-if="sourcePlanId">确认时将保存本次核对的计划和待执行任务。</p></template>
-        <template v-else><p v-if="!plans.length && !loading">暂无既有照护计划。</p><details v-for="row in plans" :key="String(row.id)"><summary>{{ row.title || '既有计划' }} · {{ display(row.status) }}</summary><p>{{ row.goal }}</p><p>{{ row.starts_on }} 至 {{ row.ends_on }}</p></details></template>
-        <button class="plan-primary" type="button" :disabled="!assessmentReady || loading || !!listError || !management || !!storageError" @click="next">下一步：核对照护安排</button>
-      </section>
-
-      <section v-if="step === 1" class="plan-card" aria-labelledby="plan-items-title">
-        <h2 id="plan-items-title">核对事项、时间与责任人</h2><section v-if="mode === 'demo'" aria-label="已确认照护依据"><h3>已确认习惯与本次意愿</h3><p v-for="memory in planMemories" :key="memory.id">{{ memory.content }}<span v-if="memory.kind === 'temporary'">（临时意愿）</span></p><p v-if="!planMemories.length">暂无适用的已确认信息，安排前请询问本人。</p></section>
+      <section
+        v-if="step === 0"
+        class="plan-card"
+        aria-labelledby="plan-assessment-title"
+      >
+        <h2 id="plan-assessment-title">
+          查看评估与既有安排
+        </h2>
+        <label class="plan-field">采用评估<CareSelect
+          v-model="assessmentId"
+          :disabled="loading || frozen"
+        ><option value="">请选择有效评估</option><template v-if="mode === 'demo'"><option
+          v-for="row in demoAssessments"
+          :key="row.id"
+          :value="row.id"
+        >{{ time(row.assessedAt) }} · {{ row.summary }}</option></template><template v-else><option
+          v-for="row in effectiveAssessments"
+          :key="String(row.id)"
+          :value="String(row.id)"
+        >{{ time(row.assessed_at) }} · {{ row.care_level_label || '已确认评估' }} · {{ row.total_score ?? '评分未提供' }}</option></template></CareSelect></label>
+        <p v-if="!assessmentReady && !loading">
+          当前老人缺少可用的已确认评估，请先办理评估。
+        </p>
+        <button
+          v-if="management"
+          type="button"
+          @click="showAssessment = !showAssessment"
+        >
+          {{ showAssessment ? '收起评估办理' : '在本页办理／核对评估' }}
+        </button>
+        <section
+          v-if="showAssessment"
+          class="assessment-entry"
+        >
+          <h3>为{{ elder.name }}办理评估</h3><template v-if="mode === 'demo'">
+            <label class="plan-field">人工评估摘要<textarea
+              v-model="assessmentSummary"
+              :disabled="busy"
+            /></label><p>仅用于演示流程。请记录已知情况，未知评估题目须由专业人员核对。</p><button
+              type="button"
+              :disabled="busy || !assessmentSummary.trim()"
+              @click="saveAssessment"
+            >
+              保存演示评估并继续
+            </button>
+          </template><WorkflowPanel
+            v-else
+            :key="elderId"
+            group="assessments"
+            :context="{ elder_id: elderId }"
+            initial-action="/assessments"
+            @changed="reload"
+          />
+        </section>
         <template v-if="mode === 'demo'">
-          <article v-for="(item, index) in demoItems" :key="index" class="plan-item"><h3>照护事项{{ index + 1 }}</h3><label class="plan-field">事项<input v-model="item.title" maxlength="300" /></label><div class="plan-grid"><label class="plan-field">执行时间（北京时间）<input type="datetime-local" :value="localClock(item.executionAt)" @input="changeDemoTime(index, 'executionAt', $event)" /></label><label class="plan-field">截止时间（北京时间）<input type="datetime-local" :value="localClock(item.deadlineAt)" @input="changeDemoTime(index, 'deadlineAt', $event)" /></label><label class="plan-field">责任人<select v-model="item.assignee"><option value="">请选择责任人</option><option v-for="name in demoOwners" :key="name">{{ name }}</option></select></label><label class="plan-field">班次<select v-model="item.shiftName"><option value="">请选择班次</option><option v-for="name in demoShifts" :key="name">{{ name }}</option></select></label></div><button type="button" @click="demoItems.splice(index, 1); saveDraft()">移除此项</button></article>
-          <button type="button" @click="addDemoItem">增加照护事项</button>
+          <label
+            v-if="demoPlans.length"
+            class="plan-field"
+          >参考已有计划<CareSelect
+            :value="sourcePlanId"
+            @change="copyDemoPlan(($event.target as HTMLSelectElement).value)"
+          ><option value="">请选择参考计划</option><option
+            v-for="(row, index) in demoPlans"
+            :key="row.id"
+            :value="row.id"
+          >计划{{ index + 1 }} · {{ row.items.length }}项 · {{ time(row.confirmedAt) }}</option></CareSelect></label><p v-if="sourcePlanId">
+            确认时将保存本次核对的计划和待执行任务。
+          </p>
         </template>
         <template v-else>
-          <label class="plan-field">计划名称<input v-model="draft.title" maxlength="200" /></label><label class="plan-field">照护目标<textarea v-model="draft.goal" maxlength="2000" /></label>
-          <div class="plan-grid"><label class="plan-field">生效日期<input v-model="draft.startsOn" type="date" /></label><label class="plan-field">结束日期<input v-model="draft.endsOn" type="date" /></label></div>
-          <article v-for="(item, index) in draft.items" :key="item.key" class="plan-item"><h3>照护事项{{ index + 1 }}</h3><label class="plan-field">事项<input v-model="item.title" maxlength="300" /></label><label class="plan-field">服务要求<textarea v-model="item.instruction" maxlength="1500" /></label><div class="plan-grid"><label class="plan-field">服务场景<select v-model="item.scene"><option v-for="scene in ['bathing', 'dining', 'activity', 'communication', 'rest', 'other']" :key="scene" :value="scene">{{ display(scene) }}</option></select></label><label class="plan-field">执行窗口（分钟）<input v-model.number="item.window_minutes" type="number" min="1" max="240" /></label></div><div v-for="(_, timeIndex) in item.times" :key="timeIndex" class="plan-time"><label class="plan-field">每日执行时间（北京时间）<input v-model="item.times[timeIndex]" type="time" /></label><button v-if="item.times.length > 1" type="button" @click="item.times.splice(timeIndex, 1); saveDraft()">移除时段</button></div><button v-if="item.times.length < 6" type="button" @click="item.times.push(''); saveDraft()">增加时段</button><fieldset class="plan-weekdays"><legend>每周执行日</legend><label v-for="(day, dayIndex) in ['一', '二', '三', '四', '五', '六', '日']" :key="day"><input v-model="item.weekdays" type="checkbox" :value="dayIndex + 1" />周{{ day }}</label></fieldset><label class="plan-field">间隔天数<input v-model.number="item.every_n_days" type="number" min="1" max="30" /></label><label class="plan-field">执行前提（选填）<input v-model="item.condition" maxlength="1000" /></label><button type="button" @click="draft.items.splice(index, 1); saveDraft()">移除此项</button></article>
-          <button v-if="draft.items.length < 20" type="button" @click="addApiItem">增加照护事项</button>
-          <h3>本次任务生成范围</h3><p class="muted">本次为所选服务日生成任务，所有事项统一安排给一个班次内的责任人。其他日期需另行安排。</p><div class="plan-grid"><label class="plan-field">服务日期<input v-model="draft.serviceDate" type="date" /></label><label class="plan-field">执行班次<select v-model="draft.shiftId"><option value="">请选择开放班次</option><option v-for="row in shifts.filter(row => row.status === 'open')" :key="String(row.id)" :value="String(row.id)">{{ row.name }} · {{ time(row.start_at) }} 至 {{ time(row.end_at) }}</option></select></label><label class="plan-field">责任人<select v-model="draft.assignedTo"><option value="">请选择班次成员</option><option v-for="row in owners" :key="String(row.id)" :value="String(row.id)">{{ row.display_name }}</option></select></label></div><label class="plan-field">人工审批说明<textarea v-model="draft.reason" maxlength="2000" /></label>
+          <p v-if="!plans.length && !loading">
+            暂无既有照护计划。
+          </p><details
+            v-for="row in plans"
+            :key="String(row.id)"
+          >
+            <summary>{{ row.title || '既有计划' }} · {{ display(row.status) }}</summary><p>{{ row.goal }}</p><p>{{ row.starts_on }} 至 {{ row.ends_on }}</p>
+          </details>
         </template>
-        <div class="plan-actions"><button type="button" @click="step = 0">上一步</button><button class="plan-primary" type="button" @click="next">预览安排</button></div>
+        <button
+          class="plan-primary"
+          type="button"
+          :disabled="!assessmentReady || loading || !!listError || !management || !!storageError"
+          @click="next"
+        >
+          下一步：核对照护安排
+        </button>
       </section>
 
-      <section v-if="step === 2" class="plan-card" aria-labelledby="plan-preview-title">
-        <h2 id="plan-preview-title">预览并人工确认</h2>
-        <p v-if="mode === 'api'" class="muted">以下为本地排程预览，实际生成结果以服务器回执为准。当前沿用创建、审批、生成三个接口；一体化编排 API 尚未提供，此流程尚未与后端联调。</p>
-        <p v-else class="muted">演示安排保存在本机。确认后生成待执行任务，实际服务完成后仍须登记结果。</p>
-        <ul class="plan-preview"><template v-if="mode === 'demo'"><li v-for="(item, index) in previewDemoItems" :key="index"><h3>{{ item.title }}</h3><p>{{ time(item.executionAt) }} 执行 · {{ time(item.deadlineAt) }} 截止</p><p>{{ item.assignee }} · {{ item.shiftName }}</p></li></template><template v-else><li v-for="item in preview" :key="item.key"><h3>{{ item.title }}</h3><p>{{ item.instruction }}</p><p>{{ time(item.time) }} 执行 · {{ time(item.deadline) }} 截止</p><p>{{ previewOwner }} · {{ previewShift }}</p><p v-if="item.condition">执行前提：{{ item.condition }}</p></li></template></ul>
-        <ol v-if="apiExecution" class="plan-progress" aria-label="服务器办理进度"><li v-for="row in apiExecution.steps" :key="row.kind">{{ planStepLabels[row.kind] }}：{{ row.receipt !== undefined ? '已收到服务器回执' : row.pending ? '结果待核实，重试原请求' : '尚未办理' }}</li></ol>
-        <p v-if="complete" role="status" class="plan-success">{{ mode === 'demo' ? `计划已人工确认，${demoReceipt?.taskIds.length || 0}项待执行任务已保存。` : '三个接口均已返回回执，请到任务列表核对实际生成结果。' }}</p>
-        <template v-if="!complete"><p v-if="frozen">已保留原请求与已完成步骤；重试只续办未完成步骤。请勿另建同一计划。</p><label class="plan-confirm"><input v-model="confirmed" type="checkbox" :disabled="busy" />我已核对当前老人、评估依据、照护事项、执行时间及责任人，同意确认本次计划并生成待执行任务。</label></template>
-        <details v-if="apiExecution?.steps[2].receipt"><summary>查看任务生成原始回执</summary><pre>{{ JSON.stringify(apiExecution.steps[2].receipt, null, 2) }}</pre></details>
-        <div class="plan-actions"><button v-if="!frozen" type="button" @click="step = 1; confirmed = false">返回修改</button><button v-if="demoConflict" type="button" :disabled="busy" @click="reviewDemoAgain">重新载入并核对演示资料</button><button v-if="!complete && !demoConflict" class="plan-primary" type="button" :disabled="busy || !confirmed || !management || !!storageError" @click="execute">{{ busy ? '正在办理，请勿重复提交…' : frozen ? '仅重试未完成步骤' : '人工确认并生成任务' }}</button><button v-if="complete" class="plan-primary" type="button" @click="router.push({ path: '/tasks', query: { elder: elderId } })">查看该老人任务</button></div>
+      <section
+        v-if="step === 1"
+        class="plan-card"
+        aria-labelledby="plan-items-title"
+      >
+        <h2 id="plan-items-title">
+          核对事项、时间与责任人
+        </h2><section
+          v-if="mode === 'demo'"
+          aria-label="已确认照护依据"
+        >
+          <h3>已确认习惯与本次意愿</h3><p
+            v-for="memory in planMemories"
+            :key="memory.id"
+          >
+            {{ memory.content }}<span v-if="memory.kind === 'temporary'">（临时意愿）</span>
+          </p><p v-if="!planMemories.length">
+            暂无适用的已确认信息，安排前请询问本人。
+          </p>
+        </section>
+        <template v-if="mode === 'demo'">
+          <article
+            v-for="(item, index) in demoItems"
+            :key="index"
+            class="plan-item"
+          >
+            <h3>照护事项{{ index + 1 }}</h3><label class="plan-field">事项<input
+              v-model="item.title"
+              maxlength="300"
+            ></label><div class="plan-grid">
+              <label class="plan-field">执行时间（北京时间）<CareDateTime
+                type="datetime-local"
+                :value="localClock(item.executionAt)"
+                @input="changeDemoTime(index, 'executionAt', $event)" /></label><label class="plan-field">截止时间（北京时间）<CareDateTime
+                type="datetime-local"
+                :value="localClock(item.deadlineAt)"
+                @input="changeDemoTime(index, 'deadlineAt', $event)" /></label><label class="plan-field">责任人<CareSelect v-model="item.assignee"><option value="">请选择责任人</option><option
+                v-for="name in demoOwners"
+                :key="name"
+              >{{ name }}</option></CareSelect></label><label class="plan-field">班次<CareSelect v-model="item.shiftName"><option value="">请选择班次</option><option
+                v-for="name in demoShifts"
+                :key="name"
+              >{{ name }}</option></CareSelect></label>
+            </div><button
+              type="button"
+              @click="demoItems.splice(index, 1); saveDraft()"
+            >
+              移除此项
+            </button>
+          </article>
+          <button
+            type="button"
+            @click="addDemoItem"
+          >
+            增加照护事项
+          </button>
+        </template>
+        <template v-else>
+          <label class="plan-field">计划名称<input
+            v-model="draft.title"
+            maxlength="200"
+          ></label><label class="plan-field">照护目标<textarea
+            v-model="draft.goal"
+            maxlength="2000"
+          /></label>
+          <div class="plan-grid">
+            <label class="plan-field">生效日期<CareDateTime
+              v-model="draft.startsOn"
+              type="date" /></label><label class="plan-field">结束日期<CareDateTime
+              v-model="draft.endsOn"
+              type="date" /></label>
+          </div>
+          <article
+            v-for="(item, index) in draft.items"
+            :key="item.key"
+            class="plan-item"
+          >
+            <h3>照护事项{{ index + 1 }}</h3><label class="plan-field">事项<input
+              v-model="item.title"
+              maxlength="300"
+            ></label><label class="plan-field">服务要求<textarea
+              v-model="item.instruction"
+              maxlength="1500"
+            /></label><div class="plan-grid">
+              <label class="plan-field">服务场景<CareSelect v-model="item.scene"><option
+                v-for="scene in ['bathing', 'dining', 'activity', 'communication', 'rest', 'other']"
+                :key="scene"
+                :value="scene"
+              >{{ display(scene) }}</option></CareSelect></label><label class="plan-field">执行窗口（分钟）<input
+                v-model.number="item.window_minutes"
+                type="number"
+                min="1"
+                max="240"
+              ></label>
+            </div><div
+              v-for="(_, timeIndex) in item.times"
+              :key="timeIndex"
+              class="plan-time"
+            >
+              <label class="plan-field">每日执行时间（北京时间）<CareDateTime
+                v-model="item.times[timeIndex]"
+                type="time" /></label><button
+                v-if="item.times.length > 1"
+                type="button"
+                @click="item.times.splice(timeIndex, 1); saveDraft()"
+              >
+                移除时段
+              </button>
+            </div><button
+              v-if="item.times.length < 6"
+              type="button"
+              @click="item.times.push(''); saveDraft()"
+            >
+              增加时段
+            </button><fieldset class="plan-weekdays">
+              <legend>每周执行日</legend><label
+                v-for="(day, dayIndex) in ['一', '二', '三', '四', '五', '六', '日']"
+                :key="day"
+              ><input
+                v-model="item.weekdays"
+                type="checkbox"
+                :value="dayIndex + 1"
+              >周{{ day }}</label>
+            </fieldset><label class="plan-field">间隔天数<input
+              v-model.number="item.every_n_days"
+              type="number"
+              min="1"
+              max="30"
+            ></label><label class="plan-field">执行前提（选填）<input
+              v-model="item.condition"
+              maxlength="1000"
+            ></label><button
+              type="button"
+              @click="draft.items.splice(index, 1); saveDraft()"
+            >
+              移除此项
+            </button>
+          </article>
+          <button
+            v-if="draft.items.length < 20"
+            type="button"
+            @click="addApiItem"
+          >
+            增加照护事项
+          </button>
+          <h3>本次任务生成范围</h3><p class="muted">
+            本次为所选服务日生成任务，所有事项统一安排给一个班次内的责任人。其他日期需另行安排。
+          </p><div class="plan-grid">
+            <label class="plan-field">服务日期<CareDateTime
+              v-model="draft.serviceDate"
+              type="date" /></label><label class="plan-field">执行班次<CareSelect v-model="draft.shiftId"><option value="">请选择开放班次</option><option
+              v-for="row in shifts.filter(row => row.status === 'open')"
+              :key="String(row.id)"
+              :value="String(row.id)"
+            >{{ row.name }} · {{ time(row.start_at) }} 至 {{ time(row.end_at) }}</option></CareSelect></label><label class="plan-field">责任人<CareSelect v-model="draft.assignedTo"><option value="">请选择班次成员</option><option
+              v-for="row in owners"
+              :key="String(row.id)"
+              :value="String(row.id)"
+            >{{ row.display_name }}</option></CareSelect></label>
+          </div><label class="plan-field">人工审批说明<textarea
+            v-model="draft.reason"
+            maxlength="2000"
+          /></label>
+        </template>
+        <div class="plan-actions">
+          <button
+            type="button"
+            @click="step = 0"
+          >
+            上一步
+          </button><button
+            class="plan-primary"
+            type="button"
+            @click="next"
+          >
+            预览安排
+          </button>
+        </div>
+      </section>
+
+      <section
+        v-if="step === 2"
+        class="plan-card"
+        aria-labelledby="plan-preview-title"
+      >
+        <h2 id="plan-preview-title">
+          预览并人工确认
+        </h2>
+        <p
+          v-if="mode === 'api'"
+          class="muted"
+        >
+          先核对计划草稿并人工审批，随后显示服务器计算的任务预览，确认后生成本日任务。
+        </p>
+        <p
+          v-else
+          class="muted"
+        >
+          演示安排保存在本机。确认后生成待执行任务，实际服务完成后仍须登记结果。
+        </p>
+        <ul class="plan-preview">
+          <template v-if="mode === 'demo'">
+            <li
+              v-for="(item, index) in previewDemoItems"
+              :key="index"
+            >
+              <h3>{{ item.title }}</h3><p>{{ time(item.executionAt) }} 执行 · {{ time(item.deadlineAt) }} 截止</p><p>{{ item.assignee }} · {{ item.shiftName }}</p>
+            </li>
+          </template><template v-else>
+            <li
+              v-for="item in preview"
+              :key="item.key"
+            >
+              <h3>{{ item.title }}</h3><p>{{ item.instruction }}</p><p>{{ time(item.time) }} 执行 · {{ time(item.deadline) }} 截止</p><p>{{ previewOwner }} · {{ previewShift }}</p><p v-if="item.condition">
+                执行前提：{{ item.condition }}
+              </p>
+            </li>
+          </template>
+        </ul>
+        <ol
+          v-if="apiExecution"
+          class="plan-progress"
+          aria-label="服务器办理进度"
+        >
+          <li
+            v-for="row in apiExecution.steps"
+            :key="row.kind"
+          >
+            {{ planStepLabels[row.kind] }}：{{ row.receipt !== undefined ? '已收到服务器回执' : row.pending ? '结果待核实，重试原请求' : '尚未办理' }}
+          </li>
+        </ol>
+        <PlanGenerationPreview
+          v-if="apiExecution?.generationPreview && apiExecution.steps[2].receipt === undefined"
+          v-model:confirmed="generationConfirmed"
+          :value="apiExecution.generationPreview.value"
+          :busy="busy"
+        />
+        <p
+          v-if="complete"
+          role="status"
+          class="plan-success"
+        >
+          {{ mode === 'demo' ? `计划已人工确认，${demoReceipt?.taskIds.length || 0}项待执行任务已保存。` : '三个接口均已返回回执，请到任务列表核对实际生成结果。' }}
+        </p>
+        <template v-if="!complete">
+          <p v-if="frozen">
+            已保存办理进度，继续操作将接续尚未完成的步骤。
+          </p><label class="plan-confirm"><input
+            v-model="confirmed"
+            type="checkbox"
+            :disabled="busy"
+          >我已核对当前老人、评估依据、照护事项、执行时间及责任人，同意保存并审批本次计划。</label>
+        </template>
+        <details v-if="apiExecution?.steps[2].receipt">
+          <summary>查看任务生成原始回执</summary><pre>{{ JSON.stringify(apiExecution.steps[2].receipt, null, 2) }}</pre>
+        </details>
+        <div class="plan-actions">
+          <button
+            v-if="!frozen"
+            type="button"
+            @click="step = 1; confirmed = false"
+          >
+            返回修改
+          </button><button
+            v-if="demoConflict"
+            type="button"
+            :disabled="busy"
+            @click="reviewDemoAgain"
+          >
+            重新载入并核对演示资料
+          </button><button
+            v-if="!complete && !demoConflict"
+            class="plan-primary"
+            type="button"
+            :disabled="busy || !confirmed || !management || !!storageError || (!!apiExecution?.generationPreview && !apiExecution.steps[2].pending && !generationConfirmed)"
+            @click="execute"
+          >
+            {{ busy ? '正在办理，请勿重复提交…' : apiExecution?.generationPreview ? '确认生成本日任务' : frozen ? '接续未完成步骤' : mode === 'api' ? '保存并审批，读取服务器预览' : '人工确认并生成任务' }}
+          </button><button
+            v-if="complete"
+            class="plan-primary"
+            type="button"
+            @click="router.push({ path: '/tasks', query: { elder: elderId } })"
+          >
+            查看该老人任务
+          </button>
+        </div>
       </section>
     </template>
   </section>

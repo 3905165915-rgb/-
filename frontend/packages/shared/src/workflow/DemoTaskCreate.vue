@@ -56,11 +56,11 @@ onMounted(async () => {
   <section class="demo-task-create" aria-label="新建照护任务">
     <h2>新建照护任务</h2><p v-if="error" role="alert">{{ error }}</p><p v-if="message" role="status">{{ message }}</p>
     <form v-if="ready && !receipt" @submit.prevent="submit">
-      <fieldset :disabled="busy"><label>老人<select v-model="form.elderId" required @change="switchElder"><option value="">请选择</option><option v-for="elder in elders" :key="elder.id" :value="elder.id">{{ elder.name }} · {{ elder.bedLabel }}</option></select></label>
+      <fieldset :disabled="busy"><label>老人<CareSelect v-model="form.elderId" required @change="switchElder"><option value="">请选择</option><option v-for="elder in elders" :key="elder.id" :value="elder.id">{{ elder.name }} · {{ elder.bedLabel }}</option></CareSelect></label>
       <label>照护事项<input v-model="form.title" required maxlength="200" @input="changed" /></label>
-      <label>执行时间（北京时间）<input v-model="form.executionAt" type="datetime-local" required @input="changed" /></label><label>截止时间（北京时间）<input v-model="form.deadlineAt" type="datetime-local" required @input="changed" /></label>
-      <label>责任人<select v-model="form.assignee" required @change="changed"><option value="">请选择</option><option>小王</option><option>小李</option><option>小陈</option></select></label><label>班次<select v-model="form.shiftName" required @change="changed"><option value="">请选择</option><option>早班</option><option>午班</option><option>晚班</option></select></label>
-      <label>服务场景<select v-model="form.scene" @change="changed"><option value="other">其他</option><option value="activity">活动</option><option value="rest">休息</option><option value="dining">用餐</option><option value="communication">沟通</option></select></label>
+      <label>执行时间（北京时间）<CareDateTime v-model="form.executionAt" type="datetime-local" required @input="changed" /></label><label>截止时间（北京时间）<CareDateTime v-model="form.deadlineAt" type="datetime-local" required @input="changed" /></label>
+      <label>责任人<CareSelect v-model="form.assignee" required @change="changed"><option value="">请选择</option><option>小王</option><option>小李</option><option>小陈</option></CareSelect></label><label>班次<CareSelect v-model="form.shiftName" required @change="changed"><option value="">请选择</option><option>早班</option><option>午班</option><option>晚班</option></CareSelect></label>
+      <label>服务场景<CareSelect v-model="form.scene" @change="changed"><option value="other">其他</option><option value="activity">活动</option><option value="rest">休息</option><option value="dining">用餐</option><option value="communication">沟通</option></CareSelect></label>
       <label class="confirmation"><input v-model="form.confirmed" type="checkbox" @change="changed" />已核对老人、时间、责任人与班次</label><button type="submit" :disabled="!form.confirmed || busy">{{ busy ? '保存中…' : '确认新建任务' }}</button></fieldset>
     </form><RouterLink v-if="receipt" :to="detail">查看并办理任务</RouterLink>
   </section>

@@ -1468,7 +1468,7 @@ select {
 /* Match the desktop palette without placing photos behind working text. */
 .mobile-layout {
   background:
-    radial-gradient(ellipse at 90% 0%, #e8e2f7 0%, transparent 55%),
+    radial-gradient(ellipse at 90% 0%, #e7f0f4 0%, transparent 55%),
     radial-gradient(ellipse at 10% 95%, #e6f1eb 0%, transparent 50%),
     var(--hl-canvas);
   background-attachment: fixed;
@@ -1505,7 +1505,7 @@ select {
 .role-login {
   background:
     radial-gradient(ellipse at 5% 5%, #e0eee4, transparent 62%),
-    radial-gradient(ellipse at 95% 95%, #e5ddf4, transparent 60%), #f4f5f1;
+    radial-gradient(ellipse at 95% 95%, #e9f0f2, transparent 60%), #f4f5f1;
 }
 .role-login::before {
   display: none;

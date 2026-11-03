@@ -148,11 +148,11 @@ onBeforeUnmount(() => { clear(); window.removeEventListener('focus', changed); w
   <section class="assignment-panel" aria-labelledby="assignment-title">
     <header><div><h2 id="assignment-title">照护范围安排</h2><p>服务器按有效时间、开放班次和任务责任计算访问范围。</p></div><button type="button" :disabled="loadingStaff" @click="loadStaff">刷新员工目录</button></header>
     <form class="assignment-form" @submit.prevent="assign">
-      <label>老人<select v-model="elderId" aria-label="老人" :disabled="busy || !!createAttempt" required><option value="">选择老人</option><option v-for="elder in elders.data.value" :key="elder.id" :value="elder.id">{{ elder.name }} · {{ elder.bedLabel }}</option></select></label>
-      <label>执行人员<select v-model="caregiverId" aria-label="执行人员" required :disabled="loadingStaff || busy || !!createAttempt"><option value="">选择在职护理员或照护专员</option><option v-for="person in caregiverOptions" :key="String(person.id)" :value="String(person.id)">{{ person.display_name }}</option></select></label>
-      <label>安排类型<select v-model="kind" :disabled="busy || !!createAttempt"><option value="explicit_assignment">明确分配</option><option value="temporary_support">临时支援</option></select></label>
-      <label>开始时间<input v-model="startAt" type="datetime-local" :disabled="busy || !!createAttempt" required /></label>
-      <label>结束时间<input v-model="endAt" type="datetime-local" :disabled="busy || !!createAttempt" required /></label>
+      <label>老人<CareSelect v-model="elderId" aria-label="老人" :disabled="busy || !!createAttempt" required><option value="">选择老人</option><option v-for="elder in elders.data.value" :key="elder.id" :value="elder.id">{{ elder.name }} · {{ elder.bedLabel }}</option></CareSelect></label>
+      <label>执行人员<CareSelect v-model="caregiverId" aria-label="执行人员" required :disabled="loadingStaff || busy || !!createAttempt"><option value="">选择在职护理员或照护专员</option><option v-for="person in caregiverOptions" :key="String(person.id)" :value="String(person.id)">{{ person.display_name }}</option></CareSelect></label>
+      <label>安排类型<CareSelect v-model="kind" :disabled="busy || !!createAttempt"><option value="explicit_assignment">明确分配</option><option value="temporary_support">临时支援</option></CareSelect></label>
+      <label>开始时间<CareDateTime v-model="startAt" type="datetime-local" :disabled="busy || !!createAttempt" required /></label>
+      <label>结束时间<CareDateTime v-model="endAt" type="datetime-local" :disabled="busy || !!createAttempt" required /></label>
       <label class="reason-field">安排原因<input v-model="reason" :disabled="busy || !!createAttempt" maxlength="500" required /></label>
       <button type="submit" :disabled="busy || !!recoveryProblem || loadingStaff || !caregiverOptions.length">{{ busy ? '正在提交…' : createAttempt ? '使用同一请求编号重试' : '创建照护分配' }}</button>
     </form>

@@ -28,7 +28,7 @@ function update(key: string, value: unknown) {
       </p>
       <div class="wf-field">
         <label :for="id + '-reaction'">本人反应 *</label
-        ><select
+        ><CareSelect
           :id="id + '-reaction'"
           :value="feedback.reaction || ''"
           @change="
@@ -43,7 +43,7 @@ function update(key: string, value: unknown) {
           >
             {{ label }}
           </option>
-        </select>
+        </CareSelect>
       </div>
       <label class="wf-field"
         ><span>实际执行、观察事实或本人原话 *</span

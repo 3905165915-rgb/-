@@ -76,7 +76,7 @@ onBeforeUnmount(()=>{disposed=true})
     <button type="button" :disabled="busy||hasPending||!taskIds.length" @click="prepare">预览所选 {{taskIds.length}} 项</button>
     <template v-if="ready&&!hasPending">
       <ul><li v-for="task in preview" :key="String(task.id)">{{task.elder_name || '老人信息待核对'}} · {{task.title}} · {{task.assignee_name || '负责人未提供'}}</li></ul>
-      <label>接任人员<select v-model="assignee" :disabled="busy"><option value="">请选择</option><option v-for="person in staff.filter(row=>row.active!==false&&['caregiver','nurse'].includes(String(row.role)))" :key="String(person.id)" :value="person.id">{{person.display_name}}</option></select></label>
+      <label>接任人员<CareSelect v-model="assignee" :disabled="busy"><option value="">请选择</option><option v-for="person in staff.filter(row=>row.active!==false&&['caregiver','nurse'].includes(String(row.role)))" :key="String(person.id)" :value="person.id">{{person.display_name}}</option></CareSelect></label>
       <label>转交原因<textarea v-model="note" maxlength="2000" :disabled="busy" /></label>
     </template>
     <button type="button" :disabled="busy||(!hasPending&&!ready)" @click="submit">{{busy?'逐项确认中…':hasPending?'使用原请求核实未确认项目':'确认影响并逐项转交'}}</button>

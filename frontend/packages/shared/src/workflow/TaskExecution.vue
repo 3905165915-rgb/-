@@ -218,12 +218,12 @@ defineExpose({ canClose: () => preserve() && !busy.value })
             /></label
         ></template>
         <label v-if="notDone"
-          >未执行原因<select v-model="reason" @change="preserve">
+          >未执行原因<CareSelect v-model="reason" @change="preserve">
             <option value="">请选择</option>
             <option v-for="(label, key) in reasons" :key="key" :value="key">
               {{ label }}
             </option>
-          </select></label
+          </CareSelect></label
         >
         <button
           v-if="primary || (notDone && allowed.includes('not_done'))"

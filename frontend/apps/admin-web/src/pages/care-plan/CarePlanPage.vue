@@ -29,12 +29,12 @@ watch(
     <h1>照护安排</h1>
     <p>先了解本人情况，再核对服务、时间和负责人。</p>
     <label
-      >老人<select v-model="selected">
+      >老人<CareSelect v-model="selected">
         <option value="">请选择老人</option>
         <option v-for="elder in residents" :key="elder.id" :value="elder.id">
           {{ elder.name }} · {{ elder.bedLabel }}
         </option>
-      </select></label
+      </CareSelect></label
     >
     <CareArrangement v-if="selected" :key="selected" :elder-id="selected" />
     <details>

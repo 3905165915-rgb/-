@@ -30,7 +30,7 @@ export const navigation: NavigationItem[] = [
   },
   {
     path: '/notifications',
-    label: '照护跟进',
+    label: '待办',
     icon: 'bell',
     roles: internalRoles,
   },

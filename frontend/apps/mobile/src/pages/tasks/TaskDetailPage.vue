@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import WorkflowPanel from '@hulao/shared/workflow'
 const serverWorkflow = ['api'].includes(import.meta.env.VITE_APP_MODE || 'api')
 import TaskExecution from '../../../../../packages/shared/src/workflow/TaskExecution.vue'
 import TaskCareContext from '@hulao/shared/task-care-context'
@@ -271,14 +272,14 @@ async function saveAsNew() {
       >
         <h2>{{ taskPrimaryLabel(task) }}</h2>
         <label class="select-field"
-          >操作<select v-model="form.action" @change="changed">
+          >操作<CareSelect v-model="form.action" @change="changed">
             <option value="start" :disabled="!taskActionAllowed(task, 'start')">
               开始服务
             </option>
             <option value="complete">登记结果</option>
             <option value="not_done">未执行</option>
             <option value="transfer">转交</option>
-          </select></label
+          </CareSelect></label
         >
         <van-field
           v-if="form.action === 'complete'"
@@ -293,7 +294,7 @@ async function saveAsNew() {
           @update:model-value="changed"
         />
         <label v-if="form.action === 'not_done'" class="select-field"
-          >未执行原因<select v-model="form.reason" @change="changed">
+          >未执行原因<CareSelect v-model="form.reason" @change="changed">
             <option value="">请选择</option>
             <option
               v-for="reason in [
@@ -306,7 +307,7 @@ async function saveAsNew() {
             >
               {{ reason }}
             </option>
-          </select></label
+          </CareSelect></label
         >
         <van-field
           v-if="form.action === 'transfer'"

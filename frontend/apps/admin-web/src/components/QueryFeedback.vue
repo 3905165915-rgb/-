@@ -1,13 +1,16 @@
 <script setup lang="ts">
-import { errorMessage } from '../services/data'
+import { computed } from 'vue'
+import { toUiError } from '@hulao/api-client'
 import { CircleAlert, LoaderCircle, RefreshCw } from 'lucide-vue-next'
-defineProps<{
+const props = defineProps<{
   loading?: boolean
   error?: unknown
   empty?: boolean
   emptyText?: string
 }>()
 defineEmits<{ retry: [] }>()
+const failure = computed(() => toUiError(props.error))
+const fieldMessages = computed(() => [...new Set(Object.values(failure.value.fieldErrors || {}))])
 </script>
 <template>
   <div
@@ -32,12 +35,23 @@ defineEmits<{ retry: [] }>()
     />
     <div class="query-feedback-content">
       <strong>加载失败</strong>
-      <p>{{ errorMessage(error) }}</p>
-      <el-button @click="$emit('retry')">
+      <p>{{ failure.message }}</p>
+      <ul v-if="fieldMessages.length">
+        <li
+          v-for="message in fieldMessages"
+          :key="message"
+        >
+          {{ message }}
+        </li>
+      </ul>
+      <el-button
+        v-if="failure.canRetry || failure.status === 409"
+        @click="$emit('retry')"
+      >
         <RefreshCw
           :size="16"
           aria-hidden="true"
-        />重新加载
+        />{{ failure.status === 409 ? '读取最新资料' : '重新加载' }}
       </el-button>
     </div>
   </div>

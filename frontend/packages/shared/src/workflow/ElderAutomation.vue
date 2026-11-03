@@ -310,27 +310,27 @@ onBeforeUnmount(() => {
           暂无可选择的已批准计划；请先按机构流程完成评估与计划审批。
         </p>
         <label
-          >已批准计划<select v-model="plan" required>
+          >已批准计划<CareSelect v-model="plan" required>
             <option value="">请选择计划</option>
             <option v-for="row in plans" :key="String(row.id)" :value="row.id">
               {{ row.title || row.id }}
             </option>
-          </select></label
+          </CareSelect></label
         >
         <div class="workspace-form-grid">
           <label
-            >实际班次<select v-model="shift" required>
+            >实际班次<CareSelect v-model="shift" required>
               <option value="">请选择开放班次</option>
               <option
                 v-for="row in shifts"
                 :key="String(row.id)"
                 :value="row.id"
               >
-                {{ row.name || row.id }} · {{ workspaceDate(row.start_at) }}
+                {{ row.display_label || row.name || '班次' }}<template v-if="!row.display_label"> · {{ workspaceDate(row.start_at) }} 至 {{ workspaceDate(row.end_at) }}</template>
               </option>
-            </select></label
+            </CareSelect></label
           ><label
-            >实际责任人<select v-model="person" required>
+            >实际责任人<CareSelect v-model="person" required>
               <option value="">请选择成员</option>
               <option
                 v-for="row in people"
@@ -339,7 +339,7 @@ onBeforeUnmount(() => {
               >
                 {{ row.display_name }}
               </option>
-            </select></label
+            </CareSelect></label
           >
         </div>
         <label class="workspace-check"

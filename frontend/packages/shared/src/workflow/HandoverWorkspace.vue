@@ -53,7 +53,7 @@ onBeforeUnmount(()=>epoch++)
     <slot v-if="quickComposer" name="composer" />
     <button v-else type="button" @click="open(null,'/handovers')">创建交班草稿</button>
     <p v-if="loading" role="status">正在读取交接班…</p><p v-if="error" role="alert">{{error}}</p>
-    <div class="workspace-actions"><label>搜索交班内容<input v-model="search" type="search" /></label><label>班次<select v-model="shift"><option value="">全部班次</option><option v-for="entry in shifts" :key="String(entry.id)" :value="entry.id">{{entry.name}} · {{workspaceDate(entry.start_at)}}</option></select></label></div>
+    <div class="workspace-actions"><label>搜索交班内容<input v-model="search" type="search" /></label><label>班次<CareSelect v-model="shift"><option value="">全部班次</option><option v-for="entry in shifts" :key="String(entry.id)" :value="entry.id">{{entry.name}} · {{workspaceDate(entry.start_at)}}</option></CareSelect></label></div>
     <p v-if="!loading&&!error&&!shown.length">{{list.length?'没有匹配交班，请调整筛选。':'暂无交班记录，可创建交班草稿。'}}</p>
     <ul class="handover-history"><li v-for="entry in shown" :key="String(entry.id)"><button class="handover-card" type="button" @click="open(entry)"><span class="handover-route">{{shiftLabel(entry.source_shift_id)}} <b aria-hidden="true">→</b> {{shiftLabel(entry.target_shift_id)}}</span><span class="handover-meta"><span class="handover-status" :class="statusClass(entry.status)">{{states[String(entry.status)] || '状态待核实'}}</span><span>{{workspaceDate(entry.created_at)}}</span></span><span class="handover-open" aria-hidden="true">查看详情 <b>›</b></span></button></li></ul>
     <section v-if="selected" class="workspace-panel" aria-label="当前交班单">

@@ -68,8 +68,8 @@ onBeforeUnmount(() => epoch++)
   <section v-if="scope.active.value" class="workspace-panel" aria-label="双向核对工作区">
     <h1>双向核对</h1><p>同一老人、同一北京时间日期，同时查看计划结果和记录关联。当前服务尚未提供跨老人班次汇总。</p>
     <form class="workspace-actions" @submit.prevent="load">
-      <label>老人<select v-model="elderId" :disabled="locked" @change="selectScope"><option value="">请选择老人</option><option v-for="elder in elders" :key="String(elder.id)" :value="elder.id">{{elder.name}} · {{elder.bed_label || '床位未提供'}}</option></select></label>
-      <label>照护日期<input v-model="day" type="date" :disabled="locked" @change="selectScope" /></label>
+      <label>老人<CareSelect v-model="elderId" :disabled="locked" @change="selectScope"><option value="">请选择老人</option><option v-for="elder in elders" :key="String(elder.id)" :value="elder.id">{{elder.name}} · {{elder.bed_label || '床位未提供'}}</option></CareSelect></label>
+      <label>照护日期<CareDateTime v-model="day" type="date" :disabled="locked" @change="selectScope" /></label>
       <button type="submit" :disabled="locked || !elderId">{{loading?'读取中…':'刷新同一范围'}}</button>
     </form>
     <p v-if="directoryError" role="alert">{{directoryError}} <button type="button" @click="loadDirectory">重试老人目录</button></p>
@@ -85,7 +85,7 @@ onBeforeUnmount(() => epoch++)
         <ul><li v-for="task in rows(item.tasks)" :key="String(task.id)"><RouterLink :to="{path:'/tasks',query:{elder:elderId,task:String(task.id)}}">查看关联任务</RouterLink><p>{{task.result || '尚无完成结果'}}</p></li></ul>
         <button type="button" :disabled="locked" @click="review=item;note=''">人工核对这一项</button>
         <form v-if="review?.occurrence_key===item.occurrence_key" @submit.prevent="saveReview">
-          <label>核对结论<select v-model="decision" :disabled="locked"><option value="needs_followup">需要跟进</option><option value="not_applicable">本次不适用</option><option value="reopen_review">重新核对</option></select></label>
+          <label>核对结论<CareSelect v-model="decision" :disabled="locked"><option value="needs_followup">需要跟进</option><option value="not_applicable">本次不适用</option><option value="reopen_review">重新核对</option></CareSelect></label>
           <label>核对说明<textarea v-model="note" required :disabled="locked" /></label><button :disabled="locked || !note.trim()">保存核对</button>
         </form>
       </article>

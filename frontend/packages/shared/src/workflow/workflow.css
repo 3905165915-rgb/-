@@ -1,10 +1,10 @@
 .workflow-panel {
-  --wf-canvas: #f5f7f8;
-  --wf-surface: #fff;
-  --wf-ink: #20282e;
-  --wf-muted: #5f6b73;
-  --wf-border: #dce3e7;
-  --wf-brand: #1767cf;
+  --wf-canvas: var(--hl-canvas, #f7f8f3);
+  --wf-surface: var(--hl-surface, #fff);
+  --wf-ink: var(--hl-ink, #243c34);
+  --wf-muted: var(--hl-muted, #596b62);
+  --wf-border: var(--hl-border, #d9e3da);
+  --wf-brand: var(--hl-primary, #216c55);
   background: transparent;
   border: 0;
   border-radius: 0;
@@ -82,7 +82,7 @@
 }
 .workflow-panel .wf-menu-item.selected,
 .workflow-panel .wf-record-modes .selected {
-  background: #e8f1ff;
+  background: var(--hl-primary-soft, #eaf4ed);
   color: #1252a6;
   font-weight: 600;
 }
@@ -244,8 +244,8 @@
   color: #fff;
 }
 .wf-primary:not(:disabled):hover {
-  background: #1252a6;
-  border-color: #1252a6;
+  background: #19533f;
+  border-color: #19533f;
 }
 .workflow-panel :is(button, a, input, select, textarea, summary):focus-visible {
   outline: 2px solid var(--wf-brand);
@@ -333,6 +333,16 @@
 .wf-field textarea {
   resize: vertical;
 }
+.wf-field-error {
+  grid-column: 2;
+  color: var(--hl-danger, #ad363b);
+  font-size: 14px;
+  line-height: 1.6;
+}
+.wf-field:has([aria-invalid='true']) > span:first-child { color: var(--hl-danger, #ad363b); }
+.wf-field > .care-select,
+.wf-field > .care-datetime { padding-top: 0; }
+@media (max-width: 600px) { .wf-field-error { grid-column: 1 / -1; } }
 .wf-field b,
 .wf-error {
   color: #be3545;

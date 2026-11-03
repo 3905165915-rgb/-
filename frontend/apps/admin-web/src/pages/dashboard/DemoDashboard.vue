@@ -96,7 +96,7 @@ const sources: Record<string, string> = {
       @retry="demo.refetch()"
     />
     <label class="elder-picker">统计老人
-      <select
+      <CareSelect
         v-model="elderId"
         :disabled="!snapshot"
       >
@@ -113,7 +113,7 @@ const sources: Record<string, string> = {
         >
           {{ item.name }} · {{ item.bedLabel }}
         </option>
-      </select>
+      </CareSelect>
     </label>
     <p
       v-if="snapshot"

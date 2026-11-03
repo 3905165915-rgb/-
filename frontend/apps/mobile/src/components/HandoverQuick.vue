@@ -564,7 +564,7 @@ onBeforeUnmount(() => {
     <p v-if="notice" role="status">{{ notice }}</p>
     <div class="handover-shifts">
       <label
-        >交出班次<select
+        >交出班次<CareSelect
           v-model="sourceShiftId"
           :disabled="busy || analyzing || submitting || !!handover"
           @change="sourceChanged"
@@ -577,10 +577,10 @@ onBeforeUnmount(() => {
           >
             {{ row.name }} · {{ workspaceDate(row.start_at) }}
           </option>
-        </select></label
+        </CareSelect></label
       >
       <label
-        >接入班次<select
+        >接入班次<CareSelect
           v-model="targetShiftId"
           :disabled="busy || analyzing || submitting || !!handover"
         >
@@ -592,7 +592,7 @@ onBeforeUnmount(() => {
           >
             {{ row.name }} · {{ workspaceDate(row.start_at) }}
           </option>
-        </select></label
+        </CareSelect></label
       >
     </div>
     <p v-if="shiftIssue && !handover" role="status">{{ shiftIssue }}</p>
@@ -736,7 +736,7 @@ onBeforeUnmount(() => {
         >
         <p>{{ item.evidence_text }}</p>
         <label
-          >老人<select
+          >老人<CareSelect
             v-model="accepted[item.id].elder_id"
             :disabled="submitting"
           >
@@ -748,10 +748,10 @@ onBeforeUnmount(() => {
             >
               {{ elder.name }}
             </option>
-          </select></label
+          </CareSelect></label
         >
         <label
-          >接入班次<select
+          >接入班次<CareSelect
             v-model="accepted[item.id].shift_id"
             :disabled="submitting"
           >
@@ -763,10 +763,10 @@ onBeforeUnmount(() => {
             >
               {{ row.name }}
             </option>
-          </select></label
+          </CareSelect></label
         >
         <label
-          >责任人<select
+          >责任人<CareSelect
             v-model="accepted[item.id].assigned_to"
             :disabled="submitting"
           >
@@ -778,14 +778,13 @@ onBeforeUnmount(() => {
             >
               {{ user.display_name }}
             </option>
-          </select></label
+          </CareSelect></label
         >
         <label
-          >截止时间<input
+          >截止时间<CareDateTime
             v-model="accepted[item.id].due_at"
             type="datetime-local"
-            :disabled="submitting"
-        /></label>
+            :disabled="submitting" /></label>
         <label
           >完成标准<textarea
             v-model="accepted[item.id].completion_criteria"

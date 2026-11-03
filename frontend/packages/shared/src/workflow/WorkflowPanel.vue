@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { resultAction, incidentActions } from './result-actions'
+import { incidentTitle, workflowHint, workflowOperation, type WorkflowAction } from './workflow-presentation'
+import WorkflowNextStep from './WorkflowNextStep.vue'
+import PlanGenerationPreview from './PlanGenerationPreview.vue'
+import { generationSignature, validateGenerationPreview } from './plan-generation'
 import { clearSession, readSession } from '../session'
 import { onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router'
 import {
@@ -156,13 +160,30 @@ const incidentButtons = computed(() =>
     ? incidentActions(result.value as Row, allowed.value)
     : [],
 )
+const resultObject = computed(() => result.value && typeof result.value === 'object' && !Array.isArray(result.value) ? result.value as Row : null)
+async function goWorkflowAction(action: WorkflowAction) {
+  const op = workflowOperation(action, allowed.value)
+  if (!op || !resultObject.value || busy.value || phase.value === 'pending') return
+  if (props.group === 'incidents') {
+    await goIncidentAction(op)
+    return
+  }
+  remember(resultObject.value)
+  choose(op, false)
+  if (active.value?.id !== op.id) return
+  if (op.path.endsWith('/transition')) body.value.action = action.code
+  syncVersions()
+  persistForm()
+  if (op.method === 'get') await run()
+  else await focusBusinessForm()
+}
 
 async function focusBusinessForm() {
   await nextTick()
   businessForm.value?.scrollIntoView({ block: 'start', behavior: 'smooth' })
   businessForm.value
     ?.querySelector<HTMLElement>(
-      'select:not(:disabled), textarea:not(:disabled), input:not([type=hidden]):not(:disabled)',
+      '[role=combobox]:not(:disabled), select:not(:disabled), textarea:not(:disabled), input:not([type=hidden]):not(:disabled)',
     )
     ?.focus({ preventScroll: true })
 }
@@ -334,6 +355,25 @@ const noWritableShift = computed(
 const selected = ref<Row>({ ...props.context })
 const result = ref<unknown>(null)
 const error = ref('')
+const fieldErrors = ref<Record<string, string>>({})
+const conflictResource = ref<WorkflowRequestError['reloadResource']>(null)
+const conflictSnapshot = ref<Row | null>(null)
+const generationPreview = ref<{ signature: string; value: Row } | null>(null)
+const generationConfirmed = ref(false)
+async function reloadConflict() {
+  const resource = conflictResource.value
+  if (!resource?.path || busy.value) return
+  busy.value = true
+  try {
+    const value = await request(resource.path.replace(/^\/api\/v1/, ''))
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      conflictSnapshot.value = value as Row
+      await loadCatalogs()
+      message.value = '已读取服务器最新内容，原输入保留。核对差异后采用当前版本，再提交。'
+    }
+  } catch (failure) { error.value = (failure as Error).message }
+  finally { busy.value = false }
+}
 const message = ref('')
 const catalogErrors = ref<string[]>([])
 const busy = ref(false)
@@ -468,6 +508,7 @@ function beforeUnload(event: BeforeUnloadEvent) {
 function canLeave() {
   return (
     !busy.value &&
+    phase.value !== 'pending' &&
     !recording.value &&
     !recordingLocked.value &&
     !transcribing.value &&
@@ -476,7 +517,7 @@ function canLeave() {
 }
 onBeforeRouteLeave(canLeave)
 onBeforeRouteUpdate(canLeave)
-defineExpose({ canClose: canLeave })
+defineExpose({ canLeave, canClose: canLeave })
 const bodySchema = computed(() => {
   if (props.taskCreation)
     return active.value?.path === '/records/manual'
@@ -818,6 +859,9 @@ function syncVersions() {
 }
 function reset() {
   const op = active.value
+  fieldErrors.value = {}
+  generationPreview.value = null
+  generationConfirmed.value = false
   if (!op) return
   params.value = Object.fromEntries(
     op.parameters.map((p) => [
@@ -838,6 +882,7 @@ function reset() {
   confirm.value = false
   error.value = ''
   message.value = ''
+  fieldErrors.value = {}
 }
 function acceptCurrentVersions() {
   if (
@@ -1147,6 +1192,7 @@ async function run() {
   )
     return
   const op = active.value
+  fieldErrors.value = {}
   if (quickQualityScan.value && phase.value === 'succeeded') {
     phase.value = 'editing'
     pending.value = undefined
@@ -1233,6 +1279,22 @@ async function run() {
   } catch (failure) {
     error.value = (failure as Error).message
     return
+  }
+  if (op.method === 'post' && op.path === '/care-plans/{plan_id}/generate' && phase.value !== 'pending') {
+    const basis = generationSignature(path, payload)
+    if (generationPreview.value?.signature !== basis) {
+      busy.value = true
+      generationConfirmed.value = false
+      try {
+        const value = validateGenerationPreview(await request(path + '-preview', 'post', payload), path, payload as Row)
+        generationPreview.value = { signature: basis, value }
+        confirm.value = true
+        message.value = '已读取服务器排期预览，请核对后确认生成。'
+      } catch (failure) { error.value = (failure as Error).message }
+      finally { busy.value = false }
+      return
+    }
+    if (!generationConfirmed.value) { error.value = '请核对任务预览并勾选确认。'; return }
   }
   if (op.method !== 'get' && !confirm.value && !quickQualityScan.value) {
     confirm.value = true
@@ -1330,6 +1392,11 @@ async function run() {
       await loadRecordHistory(String(params.value.record_id || ''))
   } catch (failure) {
     error.value = (failure as Error).message
+    if (failure instanceof WorkflowRequestError) {
+      fieldErrors.value = failure.fieldErrors
+      conflictResource.value = failure.status === 409 ? failure.reloadResource : null
+      conflictSnapshot.value = null
+    }
     if (
       failure instanceof WorkflowRequestError &&
       ((failure.status >= 400 && failure.status < 500) ||
@@ -1379,6 +1446,11 @@ function choose(op: Operation, resumeSaved = true) {
       : null
   restoring = true
   activeId.value = op.id
+  fieldErrors.value = {}
+  conflictResource.value = null
+  conflictSnapshot.value = null
+  generationPreview.value = null
+  generationConfirmed.value = false
   phase.value = 'editing'
   pending.value = undefined
   saveIssue.value = ''
@@ -1823,17 +1895,7 @@ function initialOperationId() {
     allowed.value.find(
       (op) =>
         props.initialAction &&
-        (op.path === props.initialAction ||
-          (props.autoRead &&
-            op.path.split('/').length ===
-              props.initialAction.split('/').length &&
-            op.path
-              .split('/')
-              .every(
-                (part, i) =>
-                  /^\{[^}]+\}$/.test(part) ||
-                  part === props.initialAction.split('/')[i],
-              ))) &&
+        (op.path === props.initialAction || !!workflowOperation({ code: '', label: '', path: props.initialAction, method: op.method }, [op])) &&
         (props.initialMethod
           ? op.method === props.initialMethod
           : props.autoRead
@@ -1860,7 +1922,9 @@ onMounted(async () => {
 <template>
   <section class="workflow-panel">
     <header class="wf-header">
-      <h2 v-if="title">{{ title }}</h2>
+      <h2 v-if="title">
+        {{ title }}
+      </h2>
       <button
         v-if="serverMode"
         type="button"
@@ -1871,12 +1935,23 @@ onMounted(async () => {
         {{ loading ? '正在读取目录…' : '刷新可选数据' }}
       </button>
     </header>
-    <p v-if="!serverMode" class="wf-notice">
+    <p
+      v-if="!serverMode"
+      class="wf-notice"
+    >
       此业务需要服务器测试账号和已授权数据。当前为本机演示，不会发送业务请求或模拟提交成功。
     </p>
-    <p v-else-if="!allowed.length" class="wf-muted">当前身份没有此业务入口。</p>
+    <p
+      v-else-if="!allowed.length"
+      class="wf-muted"
+    >
+      当前身份没有此业务入口。
+    </p>
     <template v-else-if="active">
-      <div v-if="hasMenu" class="wf-mobile-menu-bar">
+      <div
+        v-if="hasMenu"
+        class="wf-mobile-menu-bar"
+      >
         <button
           type="button"
           class="wf-secondary"
@@ -1887,8 +1962,14 @@ onMounted(async () => {
         </button>
         <span>{{ activeAreaInfo?.title }}</span>
       </div>
-      <div class="wf-workspace" :class="{ 'wf-with-menu': hasMenu }">
-        <aside v-if="hasMenu" class="wf-desktop-menu">
+      <div
+        class="wf-workspace"
+        :class="{ 'wf-with-menu': hasMenu }"
+      >
+        <aside
+          v-if="hasMenu"
+          class="wf-desktop-menu"
+        >
           <WorkflowMenu
             :areas="areas"
             :active-area="activeArea"
@@ -1896,10 +1977,10 @@ onMounted(async () => {
             :records="group === 'records'"
             :disabled="
               busy ||
-              recording ||
-              recordingLocked ||
-              transcribing ||
-              phase === 'pending'
+                recording ||
+                recordingLocked ||
+                transcribing ||
+                phase === 'pending'
             "
             @choose="selectMenu"
           />
@@ -1912,8 +1993,7 @@ onMounted(async () => {
           @click="$event.target === menuDialog && menuDialog?.close()"
         >
           <header class="wf-menu-dialog-header">
-            <strong>功能菜单</strong
-            ><button
+            <strong>功能菜单</strong><button
               type="button"
               class="wf-secondary"
               autofocus
@@ -1930,19 +2010,25 @@ onMounted(async () => {
             :records="group === 'records'"
             :disabled="
               busy ||
-              recording ||
-              recordingLocked ||
-              transcribing ||
-              phase === 'pending'
+                recording ||
+                recordingLocked ||
+                transcribing ||
+                phase === 'pending'
             "
             @choose="selectMenu"
           />
         </dialog>
         <div class="wf-workspace-content">
-          <p v-if="activeAreaInfo?.description" class="wf-muted">
+          <p
+            v-if="activeAreaInfo?.description"
+            class="wf-muted"
+          >
             {{ activeAreaInfo.description }}
           </p>
-          <div v-if="recordDetail" class="wf-toolbar wf-context-actions">
+          <div
+            v-if="recordDetail"
+            class="wf-toolbar wf-context-actions"
+          >
             <button
               type="button"
               class="wf-secondary"
@@ -1970,7 +2056,10 @@ onMounted(async () => {
               查看原记录
             </button>
           </div>
-          <div v-if="draftDetail" class="wf-toolbar wf-context-actions">
+          <div
+            v-if="draftDetail"
+            class="wf-toolbar wf-context-actions"
+          >
             <button
               type="button"
               class="wf-secondary"
@@ -1982,7 +2071,7 @@ onMounted(async () => {
             <button
               v-if="
                 active.path === '/records/drafts/{draft_id}' &&
-                (result as Row)?.status === 'pending_review'
+                  (result as Row)?.status === 'pending_review'
               "
               type="button"
               class="wf-secondary"
@@ -1992,10 +2081,18 @@ onMounted(async () => {
               放弃草稿
             </button>
           </div>
-          <p v-if="catalogErrors.length" class="wf-error" role="alert">
+          <p
+            v-if="catalogErrors.length"
+            class="wf-error"
+            role="alert"
+          >
             部分目录读取失败：{{ catalogErrors.join('；') }}。可刷新重试。
           </p>
-          <p v-if="saveIssue && !readOnly" class="wf-error" role="alert">
+          <p
+            v-if="saveIssue && !readOnly"
+            class="wf-error"
+            role="alert"
+          >
             {{ saveIssue }}
             <button
               type="button"
@@ -2022,7 +2119,11 @@ onMounted(async () => {
               导出本窗口恢复日志
             </button>
           </p>
-          <p v-else-if="savedAt && !readOnly" class="wf-muted" role="status">
+          <p
+            v-else-if="savedAt && !readOnly"
+            class="wf-muted"
+            role="status"
+          >
             {{
               phase === 'pending'
                 ? '结果待核实，已保留原请求'
@@ -2032,7 +2133,11 @@ onMounted(async () => {
             }}
             · {{ new Date(savedAt).toLocaleString() }}
           </p>
-          <p v-if="phase === 'pending'" class="wf-notice" role="alert">
+          <p
+            v-if="phase === 'pending'"
+            class="wf-notice"
+            role="alert"
+          >
             本次写入结果待核实，不能修改内容或重新创建同一操作。
             <button
               type="button"
@@ -2082,22 +2187,20 @@ onMounted(async () => {
             <div
               v-if="
                 group === 'coverage' &&
-                active.path === '/insights/coverage/reviews' &&
-                coverageContext
+                  active.path === '/insights/coverage/reviews' &&
+                  coverageContext
               "
               class="wf-toolbar"
             >
               <strong>{{ coverageItemName }}</strong>
-              <span
-                >{{
-                  rowName(
-                    catalogs.elders?.find(
-                      (row) => row.id === coverageContext?.elder_id,
-                    ) || {},
-                  )
-                }}
-                · {{ coverageContext.service_date }}</span
-              >
+              <span>{{
+                rowName(
+                  catalogs.elders?.find(
+                    (row) => row.id === coverageContext?.elder_id,
+                  ) || {},
+                )
+              }}
+                · {{ coverageContext.service_date }}</span>
               <button
                 type="button"
                 class="wf-secondary"
@@ -2111,7 +2214,10 @@ onMounted(async () => {
                 }}
               </button>
             </div>
-            <p v-if="isAdmissionCreate(active)" class="wf-muted">
+            <p
+              v-if="isAdmissionCreate(active)"
+              class="wf-muted"
+            >
               新入住：先为老人建档，再选择待入住老人和空闲床位。已在院老人无需重复入住；没有历史入住单时才使用补登记。
               {{
                 fieldOptions.bed_id?.length === 0 && params.elder_id
@@ -2122,8 +2228,8 @@ onMounted(async () => {
             <p
               v-if="
                 group === 'incidents' &&
-                active.path === '/incidents' &&
-                active.method === 'post'
+                  active.path === '/incidents' &&
+                  active.method === 'post'
               "
               class="wf-notice wf-urgent-guidance"
               role="note"
@@ -2165,7 +2271,10 @@ onMounted(async () => {
                 直接填写
               </button>
             </div>
-            <p v-if="recordComposer" class="wf-muted">
+            <p
+              v-if="recordComposer"
+              class="wf-muted"
+            >
               {{
                 active.path === '/records/manual'
                   ? '直接保存人工填写的内容，无需调用模型。'
@@ -2175,7 +2284,7 @@ onMounted(async () => {
             <details
               v-if="
                 active.path === '/records/{draft_id}/confirm' &&
-                (reviewSource || pick('draft_id', params.draft_id))
+                  (reviewSource || pick('draft_id', params.draft_id))
               "
               class="wf-result-details"
             >
@@ -2184,7 +2293,10 @@ onMounted(async () => {
                 :value="reviewSource || pick('draft_id', params.draft_id)"
               />
             </details>
-            <p v-if="isQualityScan(active)" class="wf-muted">
+            <p
+              v-if="isQualityScan(active)"
+              class="wf-muted"
+            >
               选择交班单后自动采用其交出班次；更换班次会清除不匹配的交班单。历史已关闭班次也可检查。
             </p>
             <p
@@ -2207,15 +2319,20 @@ onMounted(async () => {
             >
               <WorkflowField
                 v-if="isAdmissionCreate(active) && bodySchema?.properties?.kind"
+                :field-errors="fieldErrors"
+                :option-scope="{ elder_id: String(body.elder_id || params.elder_id || ''), shift_id: String(body.shift_id || params.shift_id || '') }"
                 :schema="bodySchema.properties.kind"
                 field="kind"
                 :model-value="body.kind"
                 :catalogs="catalogs"
                 @update:model-value="setBody({ ...body, kind: $event })"
               />
-              <label v-if="taskSelectionEnabled" class="wf-field">
+              <label
+                v-if="taskSelectionEnabled"
+                class="wf-field"
+              >
                 <span>先选择老人<b> *</b></span>
-                <select
+                <CareSelect
                   :value="selectedTaskElder"
                   @change="
                     chooseTaskElder(($event.target as HTMLSelectElement).value)
@@ -2230,11 +2347,14 @@ onMounted(async () => {
                     {{ elder.name || elder.display_name || '老人'
                     }}{{ elder.bed_label ? ' · ' + elder.bed_label : '' }}
                   </option>
-                </select>
+                </CareSelect>
               </label>
               <WorkflowField
                 v-for="param in visibleParameters"
                 :key="param.name"
+                :field-errors="fieldErrors"
+                :option-scope="{ elder_id: String(body.elder_id || params.elder_id || ''), shift_id: String(body.shift_id || params.shift_id || '') }"
+                :path="param.in + '.' + param.name"
                 :schema="param.schema"
                 :field="param.name"
                 :required="param.required"
@@ -2245,9 +2365,11 @@ onMounted(async () => {
               />
               <WorkflowField
                 v-if="taskCreation && bodySchema?.properties?.elder_id"
+                :field-errors="fieldErrors"
+                :option-scope="{ elder_id: String(body.elder_id || params.elder_id || ''), shift_id: String(body.shift_id || params.shift_id || '') }"
                 :schema="bodySchema.properties.elder_id"
                 field="elder_id"
-                path="填写办理内容.elder_id"
+                path="body.elder_id"
                 :required="true"
                 :model-value="body.elder_id"
                 :catalogs="catalogs"
@@ -2261,6 +2383,9 @@ onMounted(async () => {
               />
               <WorkflowField
                 v-if="visibleBodySchema && (!taskCreation || !!body.elder_id)"
+                :field-errors="fieldErrors"
+                :option-scope="{ elder_id: String(body.elder_id || params.elder_id || ''), shift_id: String(body.shift_id || params.shift_id || '') }"
+                path="body"
                 :schema="visibleBodySchema"
                 field="填写办理内容"
                 :model-value="body"
@@ -2268,7 +2393,10 @@ onMounted(async () => {
                 :option-overrides="fieldOptions"
                 @update:model-value="setBody"
               />
-              <section v-if="taskSourcePreview" aria-label="所选来源记录">
+              <section
+                v-if="taskSourcePreview"
+                aria-label="所选来源记录"
+              >
                 <h4>来源记录当前内容 · 第{{ taskSourcePreview.revision }}版</h4>
                 <p class="wf-notice">
                   来源事实不等于本次安排已经执行；请据此人工核对任务内容、期限与执行前提。
@@ -2336,7 +2464,7 @@ onMounted(async () => {
             <div
               v-if="
                 active.method !== 'get' &&
-                ('text' in body || 'raw_text' in body)
+                  ('text' in body || 'raw_text' in body)
               "
               class="wf-toolbar wf-audio-actions"
             >
@@ -2354,8 +2482,8 @@ onMounted(async () => {
                       : transcribing || finishing
                         ? '云端转写中…'
                         : '开始录音'
-                }}</button
-              ><button
+                }}
+              </button><button
                 type="button"
                 class="wf-secondary"
                 :disabled="
@@ -2375,16 +2503,24 @@ onMounted(async () => {
                   busy || frozen || recording || recordingLocked || transcribing
                 "
                 @change="uploadAudio"
-              />
+              >
               <span
                 v-if="audioFileName"
                 class="wf-audio-file-name"
                 :title="audioFileName"
-                >{{ audioFileName }}</span
-              >
+              >{{ audioFileName }}</span>
               <span class="wf-muted">最多60秒，转写后可编辑，不自动保存。</span>
             </div>
-            <p v-if="confirm" class="wf-notice">
+            <PlanGenerationPreview
+              v-if="generationPreview && active.path === '/care-plans/{plan_id}/generate'"
+              v-model:confirmed="generationConfirmed"
+              :value="generationPreview.value"
+              :busy="busy"
+            />
+            <p
+              v-if="confirm"
+              class="wf-notice"
+            >
               {{
                 feedback.assisted
                   ? '确认后整理为待核对草稿，不会直接保存正式记录。'
@@ -2395,7 +2531,11 @@ onMounted(async () => {
                   : ''
               }}
             </p>
-            <p v-if="busy" class="wf-notice" role="status">
+            <p
+              v-if="busy"
+              class="wf-notice"
+              role="status"
+            >
               {{ feedback.waiting }}
             </p>
             <p
@@ -2411,12 +2551,12 @@ onMounted(async () => {
                 class="wf-primary"
                 :disabled="
                   busy ||
-                  loading ||
-                  (!readOnly && !!saveIssue) ||
-                  (phase === 'succeeded' && !quickQualityScan) ||
-                  (phase === 'pending' && !pending?.retryable) ||
-                  recording ||
-                  transcribing
+                    loading ||
+                    (!readOnly && !!saveIssue) ||
+                    (phase === 'succeeded' && !quickQualityScan) ||
+                    (phase === 'pending' && !pending?.retryable) ||
+                    recording ||
+                    transcribing
                 "
               >
                 {{
@@ -2435,26 +2575,26 @@ onMounted(async () => {
                           : quickQualityScan
                             ? '开始检查'
                             : active.method === 'get'
-                            ? '读取当前数据'
-                            : '核对并继续'
-                }}</button
-              ><button
+                              ? '读取当前数据'
+                              : '核对并继续'
+                }}
+              </button><button
                 v-if="confirm"
                 type="button"
                 class="wf-secondary"
                 :disabled="busy"
                 @click="confirm = false"
               >
-                返回修改</button
-              ><button
+                返回修改
+              </button><button
                 type="button"
                 class="wf-secondary"
                 :disabled="
                   busy ||
-                  phase === 'pending' ||
-                  (!readOnly && !!saveIssue) ||
-                  recording ||
-                  transcribing
+                    phase === 'pending' ||
+                    (!readOnly && !!saveIssue) ||
+                    recording ||
+                    transcribing
                 "
                 @click="freshForm"
               >
@@ -2462,11 +2602,67 @@ onMounted(async () => {
               </button>
             </div>
           </form>
-          <p v-if="error" class="wf-error" role="alert">{{ error }}</p>
-          <p v-if="message && !incidentDetail" class="wf-success" role="status">
+          <p
+            v-if="error"
+            class="wf-error"
+            role="alert"
+          >
+            {{ error }}
+          </p>
+          <section
+            v-if="conflictResource"
+            class="wf-notice"
+            aria-label="资料冲突核对"
+          >
+            <p>服务器资料已更新，当前填写内容已保留。读取最新内容后核对差异，再提交。</p>
+            <button
+              v-if="conflictResource.path"
+              type="button"
+              class="wf-secondary"
+              :disabled="busy"
+              @click="reloadConflict"
+            >
+              读取最新内容，保留当前输入
+            </button>
+            <details v-if="conflictSnapshot">
+              <summary>服务器最新内容</summary><WorkflowResult
+                :value="conflictSnapshot"
+                :catalogs="catalogs"
+              />
+            </details>
+            <button
+              v-if="conflictSnapshot"
+              type="button"
+              class="wf-secondary"
+              :disabled="busy"
+              @click="acceptCurrentVersions"
+            >
+              已核对差异，采用当前版本
+            </button>
+          </section>
+          <p
+            v-if="message && !incidentDetail"
+            class="wf-success"
+            role="status"
+          >
             {{ message }}
           </p>
-          <button v-if="quickQualityScan && modelUnavailable && phase === 'editing'" type="button" class="wf-secondary" :disabled="busy || loading" @click="body.include_ai = false; modelUnavailable = false; run()">模型未运行，仅重新检查规则</button>
+          <button
+            v-if="quickQualityScan && modelUnavailable && phase === 'editing'"
+            type="button"
+            class="wf-secondary"
+            :disabled="busy || loading"
+            @click="body.include_ai = false; modelUnavailable = false; run()"
+          >
+            模型未运行，仅重新检查规则
+          </button>
+          <WorkflowNextStep
+            v-if="resultObject"
+            :value="resultObject"
+            :catalogs="catalogs"
+            :busy="busy"
+            @action="goWorkflowAction"
+          />
           <section
             v-if="focused && result !== null && group !== 'incidents'"
             class="wf-results"
@@ -2480,9 +2676,12 @@ onMounted(async () => {
               }}
             </p>
           </section>
-          <section v-else-if="result !== null" class="wf-results">
+          <section
+            v-else-if="result !== null"
+            class="wf-results"
+          >
             <div
-              v-if="incidentButtons.length"
+              v-if="incidentButtons.length && !workflowHint(result)"
               class="wf-toolbar"
               aria-label="事件后续操作"
             >
@@ -2509,23 +2708,23 @@ onMounted(async () => {
               <button
                 v-if="
                   (result as Row)?.generation_kind &&
-                  (result as Row)?.status === 'pending_review'
+                    (result as Row)?.status === 'pending_review'
                 "
                 class="wf-primary"
                 type="button"
                 :disabled="busy"
                 @click="useDraft"
               >
-                核对并保存记录</button
-              ><button
+                核对并保存记录
+              </button><button
                 v-if="(result as Row)?.ai_summary"
                 class="wf-primary"
                 type="button"
                 :disabled="busy"
                 @click="useAISummary"
               >
-                核对摘要并准备交班</button
-              ><button
+                核对摘要并准备交班
+              </button><button
                 v-if="active.path.endsWith('/export')"
                 class="wf-secondary"
                 type="button"
@@ -2534,8 +2733,12 @@ onMounted(async () => {
                 下载证据链
               </button>
             </div>
-            <article v-if="incidentDetail" class="wf-incident-detail">
-              <h3>
+            <article
+              v-if="incidentDetail"
+              class="wf-incident-detail"
+            >
+              <h3>{{ incidentTitle(incidentDetail) }}</h3>
+              <p>
                 {{
                   rowName(
                     catalogs.elders?.find(
@@ -2543,15 +2746,17 @@ onMounted(async () => {
                     ) || {},
                   )
                 }}
-                · {{ display(incidentDetail.status, 'status') }}
-              </h3>
+                · {{ incidentDetail.state_label || display(incidentDetail.status, 'status') }}
+              </p>
               <p>
                 发生时间：{{
                   display(incidentDetail.occurred_at, 'occurred_at')
                 }}
               </p>
               <h4>现场情况</h4>
-              <p class="wf-incident-facts">{{ incidentDetail.description }}</p>
+              <p class="wf-incident-facts">
+                {{ incidentDetail.description }}
+              </p>
               <h4>已采取措施</h4>
               <p class="wf-incident-facts">
                 {{ incidentDetail.immediate_action }}
@@ -2565,7 +2770,10 @@ onMounted(async () => {
               </p>
               <details>
                 <summary>查看完整事件、证据与整改记录</summary>
-                <WorkflowResult :value="result" :catalogs="catalogs" />
+                <WorkflowResult
+                  :value="result"
+                  :catalogs="catalogs"
+                />
               </details>
             </article>
             <RecordResults
@@ -2590,7 +2798,11 @@ onMounted(async () => {
               <p class="wf-muted">
                 原记录及历次更正保留，可在这里核对变更依据。
               </p>
-              <p v-if="historyError" class="wf-error" role="alert">
+              <p
+                v-if="historyError"
+                class="wf-error"
+                role="alert"
+              >
                 {{ historyError
                 }}<button
                   type="button"
@@ -2601,7 +2813,10 @@ onMounted(async () => {
                   重试读取历史
                 </button>
               </p>
-              <WorkflowResult v-else :value="recordHistory" />
+              <WorkflowResult
+                v-else
+                :value="recordHistory"
+              />
             </details>
           </section>
         </div>

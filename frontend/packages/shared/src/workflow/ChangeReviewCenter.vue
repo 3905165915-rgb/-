@@ -256,7 +256,7 @@ onBeforeUnmount(() => {
     </header>
     <div class="change-filters">
       <label
-        >老人<select v-model="elderId">
+        >老人<CareSelect v-model="elderId">
           <option value="">全部老人</option>
           <option
             v-for="elder in elders"
@@ -265,7 +265,7 @@ onBeforeUnmount(() => {
           >
             {{ elder.name }}
           </option>
-        </select></label
+        </CareSelect></label
       >
       <div class="change-tabs" aria-label="变化分类">
         <button

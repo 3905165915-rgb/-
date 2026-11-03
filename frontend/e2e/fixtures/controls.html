@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" /><title>合成控件验收</title></head>
+<body><main id="app"></main><script type="module">
+import { createApp, h, ref } from 'vue'
+import { installCareControls } from '../../packages/shared/src/ui/controls'
+import CareSelect from '../../packages/shared/src/ui/CareSelect.vue'
+import CareDateTime from '../../packages/shared/src/ui/CareDateTime.vue'
+import '../../packages/shared/src/ui/theme.css'
+createApp({ setup() {
+  const selected = ref('S2'), date = ref('2026-11-03T08:30:15'), time = ref('13:20'), changed = ref(''), rows = ref([{ id: 'S1', label: '早班 · 11月3日 08:00–16:00' }, { id: 'S2', label: '晚班 · 11月3日 16:00–24:00' }])
+  const remote = ref('N0')
+  if (new URLSearchParams(location.search).has('remote')) sessionStorage.setItem('hulao:session:v2', JSON.stringify({ mode: 'api', accountKey: 'synthetic-admin', role: 'admin', accessToken: 'synthetic-token' }))
+  return () => h('section', { style: 'max-width:520px;margin:auto;padding:8px;display:grid;gap:14px' }, [
+    h('h1', '合成控件验收'),
+    h('label', ['班次', h(CareSelect, { modelValue: selected.value, 'onUpdate:modelValue': value => { selected.value = value }, onChange: event => { changed.value = event.target.value } }, { default: () => [h('option', { value: '' }, '请选择'), ...rows.value.map(row => h('option', { value: row.id }, row.label)), h('option', { value: 'closed', disabled: true }, '已关闭班次')] })]),
+    h('button', { type: 'button', onClick: () => { rows.value = [{ id: 'S3', label: '新增班次 · 11月4日 08:00–16:00' }, ...rows.value] } }, '更新名单'),
+    h('label', ['执行时间', h(CareDateTime, { modelValue: date.value, type: 'datetime-local', step: 1, 'onUpdate:modelValue': value => { date.value = value } })]),
+    h('label', ['每日时间', h(CareDateTime, { 'aria-label': '每日时间', modelValue: time.value, type: 'time', 'onUpdate:modelValue': value => { time.value = value } })]),
+    h('label', ['远程责任人', h(CareSelect, { 'aria-label': '远程责任人', modelValue: remote.value, optionKind: 'staff', scope: { shift_id: 'S1' }, 'onUpdate:modelValue': value => { remote.value = value } }, { default: () => [h('option', { value: '' }, '请选择'), h('option', { value: 'N0' }, '已有责任人 · 护士')] })]),
+    h('output', { 'data-selected': '' }, selected.value), h('output', { 'data-changed': '' }, changed.value), h('output', { 'data-date': '' }, date.value), h('output', { 'data-time': '' }, time.value),
+    h('output', { 'data-remote': '' }, remote.value),
+  ])
+} }).use(installCareControls).mount('#app')
+</script></body></html>

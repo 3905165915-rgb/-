@@ -54,7 +54,7 @@ function update(key: keyof RecordEditor['review'], value: string | number) {
       @update:model-value="update('dueAt', $event)"
     /> </van-cell-group
   ><label v-if="!serverMode" class="select-field"
-    >关联任务<select
+    >关联任务<CareSelect
       :value="modelValue.linkedTaskId"
       :disabled="disabled"
       @change="
@@ -65,7 +65,7 @@ function update(key: keyof RecordEditor['review'], value: string | number) {
       <option v-for="task in tasks" :key="task.id" :value="task.id">
         {{ task.title }}
       </option>
-    </select></label
+    </CareSelect></label
   >
   <p class="muted">
     {{

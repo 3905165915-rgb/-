@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import WorkflowPanel from '@hulao/shared/workflow'
 import TaskExecution from '../../../../packages/shared/src/workflow/TaskExecution.vue'
 import TaskCareContext from '@hulao/shared/task-care-context'
 import DemoServiceHints from '../../../../packages/shared/src/workflow/DemoServiceHints.vue'
